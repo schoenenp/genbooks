@@ -2,7 +2,7 @@ import { cmyk, PDFDocument, PDFName } from 'pdf-lib';
 import type { PDFForm, PDFPage } from 'pdf-lib';
 import { getHolidays, type DateItem } from '../book/functions';
 import type { ColorCode, ModuleId } from '@/app/_components/module-changer';
-import { colorToGrayscale } from './grayscaler';
+// import { colorToGrayscale } from './grayscaler';
 
 // --- Helper Functions & Interfaces (Unchanged) ---
 
@@ -372,7 +372,9 @@ class PDFProcessor {
     }
 
     if (isGrayscale) {
-      this.convertToGrayscale(plannerTemplate);
+       // TODO:::
+      // this.convertToGrayscale(plannerTemplate);
+      console.log("GRAYSCALING....")
     }
 
     const { start, end } = bookDetails.period;
@@ -439,7 +441,9 @@ class PDFProcessor {
   ): Promise<number> {
     const doc = await PDFDocument.load(moduleBytes);
     if (isGrayscale) {
-      this.convertToGrayscale(doc);
+      // TODO:::
+      // this.convertToGrayscale(doc);
+      console.log("GRAYSCALING....")
     }
 
     const totalPages = doc.getPageCount();
@@ -536,10 +540,10 @@ class PDFProcessor {
     }
   }
 
-  private convertToGrayscale(pdfDoc: PDFDocument): void {
-    const convertedModule = colorToGrayscale(pdfDoc);
-    return convertedModule;
-  }
+  // private convertToGrayscale(pdfDoc: PDFDocument): void {
+  //   const convertedModule = colorToGrayscale(pdfDoc);
+  //   return convertedModule;
+  // }
 
   private async generateResult(
     finalPdf: PDFDocument,
@@ -552,7 +556,7 @@ class PDFProcessor {
       : { useObjectStreams: true, addDefaultPage: false };
 
     const pdfBytes = await finalPdf.save(saveOptions);
-    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const pdfBlob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' });
     const pdfUrl = URL.createObjectURL(pdfBlob);
     this.cleanupTasks.push(() => URL.revokeObjectURL(pdfUrl));
 

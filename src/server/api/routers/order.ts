@@ -333,7 +333,7 @@ getByPublicId:publicProcedure
             latest: latestOrder ?? null
         }
   }),
-  cancelPending:protectedProcedure
+  cancelPending:publicProcedure
   .input(z.object({
     orderId: z.string()
   }))

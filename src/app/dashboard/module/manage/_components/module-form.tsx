@@ -315,7 +315,7 @@ function extractTagsFromFields(
   const pdfFileUrl = useMemo(() => {
     if (file.modifiedPdf) {
       // Create a blob URL from the modified PDF
-      const blob = new Blob([file.modifiedPdf], { type: 'application/pdf' });
+      const blob = new Blob([file.modifiedPdf as BlobPart], { type: 'application/pdf' });
       return URL.createObjectURL(blob);
     }
     return file.data instanceof File ? URL.createObjectURL(file.data) : file.src;

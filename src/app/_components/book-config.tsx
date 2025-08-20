@@ -443,10 +443,7 @@ async function handleSummaryView(){
     console.log("PDF PREVIEW RESULT: ", result)
 
     // Create preview URL
-    const blob = new Blob([result.pdfFile], { type: "application/pdf" })
-    // const preflightResult = await preflightDocument(blob)
-
-    // console.log("PREFLIGHT RESULT: ", preflightResult)
+    const blob = new Blob([result.pdfFile as BlobPart], { type: "application/pdf" })    // console.log("PREFLIGHT RESULT: ", preflightResult)
     const estimatedCost = calculatePrintCost({
       amount: orderAmount,
       bPages: result.details.bPages,
@@ -539,8 +536,7 @@ async function handleSummaryView(){
       console.log("PDF PREVIEW RESULT: ", result)
 
       // Create preview URL
-      const blob = new Blob([result.pdfFile], { type: "application/pdf" })
-      // const preflightResult = await preflightDocument(blob)
+      const blob = new Blob([result.pdfFile as BlobPart], { type: "application/pdf" })      // const preflightResult = await preflightDocument(blob)
 
       // console.log("PREFLIGHT RESULT: ", preflightResult)
       const estimatedCost = calculatePrintCost({

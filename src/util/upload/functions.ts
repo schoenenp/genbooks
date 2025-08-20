@@ -50,7 +50,7 @@ export interface FileItem {
       const fileType = getFileTypeFromBuffer(data)
 
       console.log("fileType made: ", fileType)
-      const preppedFile  = new File([data], name, {type: "application/pdf"})
+      const preppedFile  = new File([data as BlobPart], name, {type: "application/pdf"})
       console.log("PREPPED TYPE: ", preppedFile)
       console.log("PREPPED FILE: ", preppedFile.type)
       formData.append("file", preppedFile, name) ;
@@ -60,7 +60,7 @@ export interface FileItem {
       }
       files.forEach((file, index) => {
         formData.append("files", new File(
-          [file.data],
+          [file.data as BlobPart],
           file.name,
           {type: getFileTypeFromBuffer(file.data) ?? ""}
       ), `file-${index}`);
@@ -69,8 +69,8 @@ export interface FileItem {
   const fetchLink = `${UPLOAD_URL}${files.length > 1 ? "bulk" : "single"}`
   
     try {
-      console.log("WHERE UPLOAD?!: ", fetchLink)
-      console.log("WHAT UPLOAD?!: ", formData)
+      // console.log("WHERE UPLOAD?!: ", fetchLink)
+      // console.log("WHAT UPLOAD?!: ", formData)
 
       const response = await fetch(fetchLink, {
         method: "post",
@@ -82,7 +82,7 @@ export interface FileItem {
   
       if (!response.ok) {
         const errorText = await response.text();
-        console.log("Upload error body:", errorText);
+        // console.log("Upload error body:", errorText);
         throw new Error(`Upload failed: ${response.status} |/| ${response.statusText} ?>> ${errorText}`);
       }
   

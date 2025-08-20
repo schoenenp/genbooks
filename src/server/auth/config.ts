@@ -48,8 +48,8 @@ export const authConfig = {
       from: process.env.EMAIL_FROM,
     }), 
     GoogleProvider({
-      clientId: env.AUTH_GOOGLE_ID as string,
-      clientSecret: env.AUTH_GOOGLE_SECRET as string,
+      clientId: env.AUTH_GOOGLE_ID,
+      clientSecret: env.AUTH_GOOGLE_SECRET,
     }),
     // LinkedinProvider({
     //   clientId: env.AUTH_LINKEDIN_ID as string,
