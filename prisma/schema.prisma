@@ -1,0 +1,379 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "mysql"
+    // NOTE: When using mysql or sqlserver, uncomment the @db.Text annotations in model Account below 
+    // Further reading:
+    // https://next-auth.js.org/adapters/prisma#create-the-prisma-schema
+    // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
+    url      = env("DATABASE_URL")
+}
+
+model Book {
+    id          String  @id @default(cuid())
+
+    name        String?
+    bookTitle   String?
+    subTitle    String?
+
+    format      String @default("A5")
+    region      String?
+    planStart   DateTime @default(now())
+    planEnd     DateTime?
+
+    modules     BookModule[]
+    ordered     BookOrder[]
+
+    createdBy   User?   @relation(fields: [createdById], references: [id])
+    createdById String?
+    
+    copyFromId    String?
+    copyFromBook  Book?  @relation("BookCopy", fields: [copyFromId], references: [id], onDelete: SetNull)
+    copiedBooks   Book[] @relation("BookCopy")
+
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+    deletedAt   DateTime?
+}
+
+model BookModule {
+    id        String  @id @default(cuid())
+
+    idx       Int   @default(0)
+
+    colorCode  ModuleColors? 
+    locations  Location[]
+
+    bookId    String 
+    book      Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+    moduleId  String
+    module    Module @relation(fields: [moduleId], references: [id])
+
+    @@unique([bookId, moduleId])
+}
+
+model ModuleType {
+    id       String @id @default(cuid())
+
+    name     String
+
+    minPages Int    @default(0)
+    maxPages Int    @default(-1)
+
+    modules  Module[]
+
+    deletedAt   DateTime?
+
+    @@index([name])
+}
+
+model Module {
+    id          String @id @default(cuid())
+
+    name        String
+
+    typeId      String
+    type        ModuleType @relation(fields: [typeId], references: [id])
+    
+    part        BookPart @default(DEFAULT)
+
+    theme       String?
+        
+    books       BookModule[]
+    files       File[]
+    allowedTags Tag[]
+    
+    visible     Visibility @default(PRIVATE)
+
+    createdById String?
+    createdBy   User?   @relation(fields: [createdById], references: [id])
+    
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt    
+    deletedAt   DateTime?
+}
+
+model File {
+    id          String      @id @default(cuid())
+    name        String?
+    size        Int         @default(15) // 15MB
+    src         String
+    type        FileType    @default(PDF)
+    modules     Module[]
+
+    @@unique([id, name])
+}
+
+model Account {
+    id                       String  @id @default(cuid())
+    userId                   String
+    type                     String
+    provider                 String
+    providerAccountId        String
+    refresh_token            String? @db.Text
+    access_token             String? @db.Text
+    expires_at               Int?
+    token_type               String?
+    scope                    String?
+    id_token                 String? @db.Text
+    session_state            String?
+    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    refresh_token_expires_in Int?
+
+    @@unique([provider, providerAccountId])
+}
+
+model Session {
+    id           String   @id @default(cuid())
+    sessionToken String   @unique
+    userId       String
+    expires      DateTime
+    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+    id            String    @id @default(cuid())
+    name          String?
+    role          UserRole  @default(USER)
+    email         String?   @unique
+    emailVerified DateTime?
+    image         String?
+
+    accounts      Account[]
+    sessions      Session[]
+
+    books         Book[]
+    orders        Order[]
+    modules       Module[]
+
+
+    locations     Location[]
+}
+
+model Order {
+    id              Int       @id @default(autoincrement())
+    
+    userId          String?
+    user            User?         @relation(fields: [userId], references: [id]) 
+
+    orderKey         String?      @unique
+    status          OrderStatus  @default(PENDING)
+
+    bookOrder       BookOrder?
+
+    createdAt       DateTime     @default(now())
+    updatedAt       DateTime     @updatedAt
+    deletedAt       DateTime?    
+    canceledAt      DateTime?
+    shippingId  String?     @unique
+    shipping    Shipping?    @relation(fields: [shippingId], references: [id])
+}
+
+model Payment {
+    id String @id @default(cuid())
+    status     PaymentStatus @default(PENDING)
+
+    currency    String @default("EUR")
+    shippingCost Int @default(0)
+    price        Int @default(0)
+    total        Int @default(0)
+
+    shopId     String?
+    cancelKey   String? @db.Text
+
+    bookOrder   BookOrder? 
+
+    refundId    String?
+    refundedAt  DateTime?
+}
+
+model BookOrder {
+    id          String       @id @default(cuid())
+
+    quantity    Int
+
+    bookId      String
+    book        Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+    paymentId   String  @unique
+    payment     Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+    orderId     Int?    @unique
+    order       Order?  @relation(fields: [orderId], references: [id])
+}
+
+
+model Tooltip {
+    id          Int      @id @default(autoincrement())
+
+    title       String
+    tip         String   @db.Text
+    
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+    deletedAt   DateTime?    
+
+    @@index([title])
+}
+
+
+model VerificationToken {
+    identifier String
+    token      String   @unique
+    expires    DateTime
+
+    @@unique([identifier, token])
+}
+
+model Shipping {
+    id           String @id @default(cuid())
+    
+    title        String?
+    trackId      String?
+
+    status        DeliveryStatus @default(PENDING)
+    order         Order?
+
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+    deletedAt   DateTime? 
+
+    shippedAt    DateTime?
+    retouredAt   DateTime?
+}
+
+model Address {
+    id          String      @id @default(cuid())
+
+    street      String
+    streetNr    String
+    city        String
+    zip         String
+    state       String?
+    optional    String?
+
+    country     String   @default("DE")
+
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+    deletedAt   DateTime?
+
+    locations         Location[]
+}
+
+
+model Location {
+  id   String @id @default(cuid())
+
+  name String // "Headquarters", "Main Campus", "Warehouse B"
+  type LocationType @default(OTHER)
+
+  bookModules BookModule[]
+
+  addressId String
+  address   Address @relation(fields: [addressId], references: [id], onDelete: Cascade)
+
+  creatorId String
+  creator   User @relation(fields: [creatorId], references: [id])
+}
+
+model Tag {
+    id          Int @id @default(autoincrement())
+    type        TagType @default(DEFAULT)
+    name        String
+    desc        String?
+    output      String?
+
+    status      TagStatus @default(UNRELEASED)
+    allowedIn   Module[]
+
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+    deletedAt   DateTime? 
+}
+
+enum TagStatus {
+    RELEASED
+    BETA
+    UNRELEASED
+}
+
+enum TagType {
+    CONFIG
+    FUNCTION
+    DEFAULT
+}
+
+enum FileType {
+    PDF
+    IMAGE_PNG
+    IMAGE_JPEG
+}
+
+enum DeliveryStatus {
+    PENDING
+    PREPARING
+    SHIPPED
+    COMPLETED
+    RETOURING
+    RETOURED
+}
+
+enum OrderStatus {
+    PENDING
+    COMPLETED
+    SHIPPED
+    CANCELED
+    FAILED
+}
+
+enum UserRole {
+    ADMIN
+    STAFF
+    MODERATOR
+    USER
+}
+
+enum BookPart {
+    COVER
+    DEFAULT
+    PLANNER
+    BINDING
+    SETTINGS
+}
+
+enum ModuleColors {
+    GRAYSCALE 
+    COLOR
+}
+
+enum Visibility {
+    PUBLIC
+    SHARED
+    PRIVATE
+}
+
+
+
+
+enum LocationType {
+  ORGANIZATION
+  SCHOOL
+  WAREHOUSE
+  OTHER
+}
+
+
+enum PaymentStatus {
+    PENDING
+    SUCCEEDED
+    FAILED
+    CANCELLED
+    REFUNDED
+}
