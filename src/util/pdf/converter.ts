@@ -90,7 +90,7 @@ class PDFProcessor {
     modules: PDFModule[],
     colorMap: Map<ModuleId, ColorCode> = new Map<ModuleId, ColorCode>()
   ): Promise<{ fullPageCount: number; bPages: number; cPages: number }> {
-    console.log('Calculating full page counts for production estimate...');
+    // console.log('Calculating full page counts for production estimate...');
 
     const { coverModule, sortedModules } = this.validateAndSortModules(modules);
 
@@ -181,16 +181,16 @@ class PDFProcessor {
         this.configureCompression(finalPdf, compressionLevel);
       }
 
-      console.log(
-        `Processing ${sortedModules.length} content modules in ${
-          previewMode ? 'PREVIEW' : 'PRODUCTION'
-        } mode`
-      );
+      // console.log(
+      //   `Processing ${sortedModules.length} content modules in ${
+      //     previewMode ? 'PREVIEW' : 'PRODUCTION'
+      //   } mode`
+      // );
 
       await this.processCover(finalPdf, coverModule, bookDetails);
-      console.log(
-        `Cover processed. Current page count: ${finalPdf.getPageCount()}`
-      );
+      // console.log(
+      //   `Cover processed. Current page count: ${finalPdf.getPageCount()}`
+      // );
 
       let fullPageCount = 0;
       let bPages = 0;
@@ -206,9 +206,9 @@ class PDFProcessor {
       fullPageCount += 4; // Front and back cover pages
 
       for (const moduleItem of sortedModules) {
-        console.log(
-          `Processing module: ${moduleItem.type} (idx: ${moduleItem.idx})`
-        );
+        // console.log(
+        //   `Processing module: ${moduleItem.type} (idx: ${moduleItem.idx})`
+        // );
 
         const pagesAdded = await this.processModule(
           finalPdf,
@@ -226,18 +226,18 @@ class PDFProcessor {
           cPages += pagesAdded;
         }
 
-        console.log(
-          `Module ${
-            moduleItem.type
-          } added ${pagesAdded} pages. Total pages: ${finalPdf.getPageCount()}`
-        );
+        // console.log(
+        //   `Module ${
+        //     moduleItem.type
+        //   } added ${pagesAdded} pages. Total pages: ${finalPdf.getPageCount()}`
+        // );
       }
 
       // Add alignment pages and back cover
       const blankPagesAdded = await this.finalizeDocument(finalPdf, previewMode);
-      console.log(
-        `Document finalized. Final page count: ${finalPdf.getPageCount()}`
-      );
+      // console.log(
+      //   `Document finalized. Final page count: ${finalPdf.getPageCount()}`
+      // );
 
       // Add the blank pages to the counts
       fullPageCount += blankPagesAdded;
@@ -245,12 +245,12 @@ class PDFProcessor {
 
       if (addWatermark) {
         await this.addWatermark(finalPdf);
-        console.log('Watermark added to all pages');
+        // console.log('Watermark added to all pages');
       }
 
       if (addPageNumbers) {
         this.addPageNumbers(finalPdf, pageNumOptions);
-        console.log('Page numbers added');
+        // console.log('Page numbers added');
       }
 
       const result = await this.generateResult(
@@ -397,11 +397,11 @@ class PDFProcessor {
       ? Math.min(totalWeeks + 1, 4) // Limit to 4 weeks in preview
       : totalWeeks + 1;
 
-    console.log(
-      `Processing ${weeksToProcess} weeks for planner module (total weeks: ${
-        totalWeeks + 1
-      })`
-    );
+    // console.log(
+    //   `Processing ${weeksToProcess} weeks for planner module (total weeks: ${
+    //     totalWeeks + 1
+    //   })`
+    // );
 
     let pagesAdded = 0;
     for (let i = 0; i < weeksToProcess; i++) {
@@ -455,9 +455,9 @@ class PDFProcessor {
     const pages = await finalPdf.copyPages(doc, pageIndices);
     pages.forEach((page) => finalPdf.addPage(page));
 
-    console.log(
-      `Regular module: copied ${pages.length} of ${totalPages} pages`
-    );
+    // console.log(
+    //   `Regular module: copied ${pages.length} of ${totalPages} pages`
+    // );
     return pages.length;
   }
 
@@ -474,7 +474,7 @@ class PDFProcessor {
       if (remainder !== 0) {
         const pagesToAdd = 4 - remainder;
         pagesAdded = pagesToAdd;
-        console.log(`Adding ${pagesToAdd} blank pages for booklet printing.`);
+        // console.log(`Adding ${pagesToAdd} blank pages for booklet printing.`);
 
         const blankPageWidth = (210 / 25.4) * 72;
         const blankPageHeight = (297 / 25.4) * 72;
@@ -505,7 +505,7 @@ class PDFProcessor {
   ): void {
     const allPages = finalPdf.getPages();
     const contentPages = allPages.slice(2, -2);
-    console.log(`Adding page numbers to ${contentPages.length} content pages`);
+    // console.log(`Adding page numbers to ${contentPages.length} content pages`);
     contentPages.forEach((page, idx) => {
       const pageNumber = idx + 1;
       const position = pageNumber % 2 === 0 ? 'bottom-left' : 'bottom-right';
@@ -534,7 +534,7 @@ class PDFProcessor {
           opacity: 0.75,
         });
       }
-      console.log(`Watermark applied to ${pages.length} pages`);
+      // console.log(`Watermark applied to ${pages.length} pages`);
     } catch (error) {
       console.error('Failed to add watermark:', error);
     }
@@ -729,8 +729,7 @@ export async function processPdfModulesPreview(
       colorMap: options.colorMap,
     });
 
-    // 3. OVERRIDE the details of the preview result with the accurate counts.
-    //    This gives the user the correct price estimate while showing a fast preview.
+
     previewResult.details.fullPageCount = fullCounts.fullPageCount;
     previewResult.details.bPages = fullCounts.bPages;
     previewResult.details.cPages = fullCounts.cPages;
