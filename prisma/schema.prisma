@@ -1,275 +1,270 @@
 generator client {
-    provider = "prisma-client-js"
-    output   = "../node_modules/@prisma/client"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "mysql"
-    url      = env("DATABASE_URL")
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 model Book {
-    id          String  @id @default(cuid())
+  id String @id @default(cuid())
 
-    name        String?
-    bookTitle   String?
-    subTitle    String?
+  name      String?
+  bookTitle String?
+  subTitle  String?
 
-    format      String @default("A5")
-    region      String?
-    planStart   DateTime @default(now())
-    planEnd     DateTime?
+  format    String    @default("A5")
+  region    String?
+  planStart DateTime  @default(now())
+  planEnd   DateTime?
 
-    modules     BookModule[]
-    ordered     BookOrder[]
+  modules BookModule[]
+  ordered BookOrder[]
 
-    createdBy   User?   @relation(fields: [createdById], references: [id])
-    createdById String?
-    
-    copyFromId    String?
-    copyFromBook  Book?  @relation("BookCopy", fields: [copyFromId], references: [id], onDelete: SetNull)
-    copiedBooks   Book[] @relation("BookCopy")
+  createdBy   User?   @relation(fields: [createdById], references: [id])
+  createdById String?
 
-    isTemplate    Boolean @default(false)
-    isFeatured    Boolean @default(false)
-    description   String? @db.Text
+  copyFromId   String?
+  copyFromBook Book?   @relation("BookCopy", fields: [copyFromId], references: [id], onDelete: SetNull)
+  copiedBooks  Book[]  @relation("BookCopy")
 
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
-    deletedAt   DateTime?
+  isTemplate  Boolean @default(false)
+  isFeatured  Boolean @default(false)
+  description String? @db.Text
 
-    customDates CustomDate[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  customDates CustomDate[]
 }
 
 model BookModule {
-    id        String  @id @default(cuid())
+  id String @id @default(cuid())
 
-    idx       Int   @default(0)
+  idx Int @default(0)
 
-    colorCode  ModuleColors? 
-    locations  Location[]
+  colorCode ModuleColors?
+  locations Location[]
 
-    bookId    String 
-    book      Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
 
-    moduleId  String
-    module    Module @relation(fields: [moduleId], references: [id])
+  moduleId String
+  module   Module @relation(fields: [moduleId], references: [id])
 
-    @@unique([bookId, moduleId])
+  @@unique([bookId, moduleId])
 }
 
 model ModuleType {
-    id       String @id @default(cuid())
+  id String @id @default(cuid())
 
-    name     String
+  name String
 
-    minPages Int    @default(0)
-    maxPages Int    @default(-1)
+  minPages Int @default(0)
+  maxPages Int @default(-1)
 
-    modules  Module[]
+  modules Module[]
 
-    deletedAt   DateTime?
+  deletedAt DateTime?
 
-    @@index([name])
+  @@index([name])
 }
 
 model Module {
-    id          String @id @default(cuid())
+  id String @id @default(cuid())
 
-    name        String
+  name String
 
-    typeId      String
-    type        ModuleType @relation(fields: [typeId], references: [id])
-    
-    part        BookPart @default(DEFAULT)
+  typeId String
+  type   ModuleType @relation(fields: [typeId], references: [id])
 
-    theme       String?
-        
-    books       BookModule[]
-    files       File[]
-    allowedTags Tag[]
-    
-    visible     Visibility @default(PRIVATE)
+  part BookPart @default(DEFAULT)
 
-    createdById String?
-    createdBy   User?   @relation(fields: [createdById], references: [id])
-    
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt    
-    deletedAt   DateTime?
+  theme String?
+
+  books       BookModule[]
+  files       File[]
+  allowedTags Tag[]
+
+  visible Visibility @default(PRIVATE)
+
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 }
 
 model File {
-    id          String      @id @default(cuid())
-    name        String?
-    size        Int         @default(15)
-    src         String
-    type        FileType    @default(PDF)
-    modules     Module[]
+  id      String   @id @default(cuid())
+  name    String?
+  size    Int      @default(15)
+  src     String
+  type    FileType @default(PDF)
+  modules Module[]
 
-    @@unique([id, name])
+  @@unique([id, name])
 }
 
 model Account {
-    id                       String  @id @default(cuid())
-    userId                   String
-    type                     String
-    provider                 String
-    providerAccountId        String
-    refresh_token            String? @db.Text
-    access_token             String? @db.Text
-    expires_at               Int?
-    token_type               String?
-    scope                    String?
-    id_token                 String? @db.Text
-    session_state            String?
-    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-    refresh_token_expires_in Int?
+  id                       String  @id @default(cuid())
+  userId                   String
+  type                     String
+  provider                 String
+  providerAccountId        String
+  refresh_token            String? @db.Text
+  access_token             String? @db.Text
+  expires_at               Int?
+  token_type               String?
+  scope                    String?
+  id_token                 String? @db.Text
+  session_state            String?
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refresh_token_expires_in Int?
 
-    @@unique([provider, providerAccountId])
+  @@unique([provider, providerAccountId])
 }
 
 model Session {
-    id           String   @id @default(cuid())
-    sessionToken String   @unique
-    userId       String
-    expires      DateTime
-    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model User {
-    id            String    @id @default(cuid())
-    name          String?
-    role          UserRole  @default(USER)
-    email         String?   @unique
-    emailVerified DateTime?
-    image         String?
+  id            String    @id @default(cuid())
+  name          String?
+  role          UserRole  @default(USER)
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
 
-    accounts      Account[]
-    sessions      Session[]
+  accounts Account[]
+  sessions Session[]
 
-    books         Book[]
-    orders        Order[]
-    modules       Module[]
+  books   Book[]
+  orders  Order[]
+  modules Module[]
 
-
-    locations     Location[]
+  locations Location[]
 }
 
 model Order {
-    id              Int       @id @default(autoincrement())
-    
-    userId          String?
-    user            User?         @relation(fields: [userId], references: [id]) 
+  id Int @id @default(autoincrement())
 
-    orderKey         String?      @unique
-    status          OrderStatus  @default(PENDING)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
 
-    bookOrder       BookOrder?
+  orderKey String?     @unique
+  status   OrderStatus @default(PENDING)
 
-    createdAt       DateTime     @default(now())
-    updatedAt       DateTime     @updatedAt
-    deletedAt       DateTime?    
-    canceledAt      DateTime?
-    shippingId  String?     @unique
-    shipping    Shipping?    @relation(fields: [shippingId], references: [id])
+  bookOrder BookOrder?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+  canceledAt DateTime?
+  shippingId String?   @unique
+  shipping   Shipping? @relation(fields: [shippingId], references: [id])
 }
 
 model Payment {
-    id String @id @default(cuid())
-    status     PaymentStatus @default(PENDING)
+  id     String        @id @default(cuid())
+  status PaymentStatus @default(PENDING)
 
-    currency    String @default("EUR")
-    shippingCost Int @default(0)
-    price        Int @default(0)
-    total        Int @default(0)
+  currency     String @default("EUR")
+  shippingCost Int    @default(0)
+  price        Int    @default(0)
+  total        Int    @default(0)
 
-    shopId     String?
-    cancelKey   String? @db.Text
+  shopId    String?
+  cancelKey String? @db.Text
 
-    bookOrder   BookOrder? 
+  bookOrder BookOrder?
 
-    refundId    String?
-    refundedAt  DateTime?
+  refundId   String?
+  refundedAt DateTime?
 }
 
 model BookOrder {
-    id          String       @id @default(cuid())
+  id String @id @default(cuid())
 
-    quantity    Int
+  quantity Int
 
-    bookId      String
-    book        Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
 
-    paymentId   String  @unique
-    payment     Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  paymentId String  @unique
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
-    orderId     Int?    @unique
-    order       Order?  @relation(fields: [orderId], references: [id])
+  orderId Int?   @unique
+  order   Order? @relation(fields: [orderId], references: [id])
 }
-
 
 model Tooltip {
-    id          Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-    title       String
-    tip         String   @db.Text
-    
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
-    deletedAt   DateTime?    
+  title String
+  tip   String @db.Text
 
-    @@index([title])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([title])
 }
 
-
 model VerificationToken {
-    identifier String
-    token      String   @unique
-    expires    DateTime
+  identifier String
+  token      String   @unique
+  expires    DateTime
 
-    @@unique([identifier, token])
+  @@unique([identifier, token])
 }
 
 model Shipping {
-    id           String @id @default(cuid())
-    
-    title        String?
-    trackId      String?
+  id String @id @default(cuid())
 
-    status        DeliveryStatus @default(PENDING)
-    order         Order?
+  title   String?
+  trackId String?
 
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
-    deletedAt   DateTime? 
+  status DeliveryStatus @default(PENDING)
+  order  Order?
 
-    shippedAt    DateTime?
-    retouredAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  shippedAt  DateTime?
+  retouredAt DateTime?
 }
 
 model Address {
-    id          String      @id @default(cuid())
+  id String @id @default(cuid())
 
-    street      String
-    streetNr    String
-    city        String
-    zip         String
-    state       String?
-    optional    String?
+  street   String
+  streetNr String
+  city     String
+  zip      String
+  state    String?
+  optional String?
 
-    country     String   @default("DE")
+  country String @default("DE")
 
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
-    deletedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-    locations         Location[]
+  locations Location[]
 }
 
-
 model Location {
-  id   String @id @default(cuid())
+  id String @id @default(cuid())
 
   name String // "Headquarters", "Main Campus", "Warehouse B"
   type LocationType @default(OTHER)
@@ -280,86 +275,84 @@ model Location {
   address   Address @relation(fields: [addressId], references: [id], onDelete: Cascade)
 
   creatorId String
-  creator   User @relation(fields: [creatorId], references: [id])
+  creator   User   @relation(fields: [creatorId], references: [id])
 }
 
 model Tag {
-    id          Int @id @default(autoincrement())
-    type        TagType @default(DEFAULT)
-    name        String
-    desc        String?
-    output      String?
+  id     Int     @id @default(autoincrement())
+  type   TagType @default(DEFAULT)
+  name   String
+  desc   String?
+  output String?
 
-    status      TagStatus @default(UNRELEASED)
-    allowedIn   Module[]
+  status    TagStatus @default(UNRELEASED)
+  allowedIn Module[]
 
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
-    deletedAt   DateTime? 
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 }
 
 enum TagStatus {
-    RELEASED
-    BETA
-    UNRELEASED
+  RELEASED
+  BETA
+  UNRELEASED
 }
 
 enum TagType {
-    CONFIG
-    FUNCTION
-    DEFAULT
+  CONFIG
+  FUNCTION
+  DEFAULT
 }
 
 enum FileType {
-    PDF
-    IMAGE_PNG
-    IMAGE_JPEG
+  PDF
+  IMAGE_PNG
+  IMAGE_JPEG
 }
 
 enum DeliveryStatus {
-    PENDING
-    PREPARING
-    SHIPPED
-    COMPLETED
-    RETOURING
-    RETOURED
+  PENDING
+  PREPARING
+  SHIPPED
+  COMPLETED
+  RETOURING
+  RETOURED
 }
 
 enum OrderStatus {
-    PENDING
-    COMPLETED
-    SHIPPED
-    CANCELED
-    FAILED
+  PENDING
+  COMPLETED
+  SHIPPED
+  CANCELED
+  FAILED
 }
 
 enum UserRole {
-    ADMIN
-    STAFF
-    MODERATOR
-    USER
+  ADMIN
+  STAFF
+  MODERATOR
+  USER
 }
 
 enum BookPart {
-    COVER
-    DEFAULT
-    PLANNER
-    BINDING
-    SETTINGS
+  COVER
+  DEFAULT
+  PLANNER
+  BINDING
+  SETTINGS
 }
 
 enum ModuleColors {
-    GRAYSCALE 
-    COLOR
+  GRAYSCALE
+  COLOR
 }
 
 enum Visibility {
-    PUBLIC
-    SHARED
-    PRIVATE
+  PUBLIC
+  SHARED
+  PRIVATE
 }
-
-
 
 enum LocationType {
   ORGANIZATION
@@ -368,21 +361,20 @@ enum LocationType {
   OTHER
 }
 
-
 enum PaymentStatus {
-    PENDING
-    SUCCEEDED
-    FAILED
-    CANCELLED
-    REFUNDED
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
 }
 
 model CustomDate {
-    id        String   @id @default(cuid())
-    date      DateTime
-    name      String
-    bookId    String
-    book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  id     String   @id @default(cuid())
+  date   DateTime
+  name   String
+  bookId String
+  book   Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
 
-    @@index([bookId])
+  @@index([bookId])
 }
