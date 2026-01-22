@@ -199,4 +199,5 @@ class PlannerHandler extends BaseHandler {
   }
 }
 
-export default new PlannerHandler();
+const plannerHandler = new PlannerHandler();
+export default plannerHandler;

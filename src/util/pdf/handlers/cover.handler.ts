@@ -83,4 +83,5 @@ class CoverHandler extends BaseHandler {
   }
 }
 
-export default new CoverHandler();
+const coverHandler = new CoverHandler();
+export default coverHandler;

@@ -47,4 +47,5 @@ class DefaultHandler extends BaseHandler {
   }
 }
 
-export default new DefaultHandler();
+const defaultHandler = new DefaultHandler();
+export default defaultHandler;

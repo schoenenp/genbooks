@@ -1,4 +1,5 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
+import { PrismaClient } from "@prisma/client";
 import {
   type DefaultSession,
   type NextAuthConfig,
@@ -37,7 +38,7 @@ declare module "next-auth" {
  *
  * @see https://next-auth.js.org/configuration/options
  */
-const adapter = PrismaAdapter(db as any);
+const adapter = PrismaAdapter(db as never);
 
 export const authConfig = {
   pages: {

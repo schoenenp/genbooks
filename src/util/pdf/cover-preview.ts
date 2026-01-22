@@ -1,6 +1,6 @@
 import { PDFDocument } from "pdf-lib";
 
-const CDN_URL = process.env.NEXT_PUBLIC_CDN_SERVER_URL || "";
+const CDN_URL = process.env.NEXT_PUBLIC_CDN_SERVER_URL ?? "";
 
 interface CoverPreviewOptions {
   pdfUrl: string;

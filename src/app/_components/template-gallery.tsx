@@ -188,7 +188,6 @@ function TemplateCard({
 }
 
 export default function TemplateGallery() {
-  const router = useRouter();
   const { data: templates, isLoading } = api.book.getTemplates.useQuery();
 
   const scrollRef = useRef<HTMLDivElement>(null);
