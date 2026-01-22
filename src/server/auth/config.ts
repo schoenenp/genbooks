@@ -1,9 +1,12 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import { type DefaultSession, type NextAuthConfig } from "next-auth";
+import {
+  type DefaultSession,
+  type NextAuthConfig,
+  type Session,
+} from "next-auth";
 import NodemailerProvider from "next-auth/providers/nodemailer";
 import GoogleProvider from "next-auth/providers/google";
 // import LinkedinProvider from "next-auth/providers/linkedin";
-
 
 import { db } from "@/server/db";
 import { env } from "@/env";
@@ -34,7 +37,13 @@ declare module "next-auth" {
  *
  * @see https://next-auth.js.org/configuration/options
  */
+const adapter = PrismaAdapter(db as any);
+
 export const authConfig = {
+  pages: {
+    signIn: "/auth/signin",
+    signOut: "/auth/signout",
+  },
   providers: [
     NodemailerProvider({
       server: {
@@ -46,7 +55,7 @@ export const authConfig = {
         },
       },
       from: process.env.EMAIL_FROM,
-    }), 
+    }),
     GoogleProvider({
       clientId: env.AUTH_GOOGLE_ID,
       clientSecret: env.AUTH_GOOGLE_SECRET,
@@ -65,9 +74,15 @@ export const authConfig = {
      * @see https://next-auth.js.org/providers/github
      */
   ],
-  adapter: PrismaAdapter(db),
+  adapter,
   callbacks: {
-    session: ({ session, user }) => ({
+    session: ({
+      session,
+      user,
+    }: {
+      session: Session;
+      user: { id: string };
+    }) => ({
       ...session,
       user: {
         ...session.user,
@@ -75,4 +90,4 @@ export const authConfig = {
       },
     }),
   },
-} satisfies NextAuthConfig;
+} as NextAuthConfig;

@@ -5,6 +5,7 @@ import { moduleRouter } from "./routers/module";
 import { configRouter } from "./routers/config";
 import { typeRouter } from "./routers/type";
 import { orderRouter } from "./routers/order";
+import { userRouter } from "./routers/user";
 
 /**
  * This is the primary router for your server.
@@ -12,14 +13,14 @@ import { orderRouter } from "./routers/order";
  * All routers added in /api/routers should be manually added here.
  */
 
-
 export const appRouter = createTRPCRouter({
   module: moduleRouter,
   book: bookRouter,
   type: typeRouter,
   tip: tipRouter,
   order: orderRouter,
-  config: configRouter
+  config: configRouter,
+  user: userRouter,
 });
 
 // export type definition of API

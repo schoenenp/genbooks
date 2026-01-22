@@ -23,6 +23,7 @@ import {
   XIcon,
 } from "lucide-react";
 import Modal from "./modal";
+import LoginPromptModal from "./login-prompt-modal";
 import { useCallback, useMemo, useEffect, useState } from "react";
 import { api } from "@/trpc/react";
 import LoadingSpinner from "./loading-spinner";
@@ -52,6 +53,7 @@ import Login from "../config/_components/_user/login-form";
 import ModuleCarousel from "./module-carousel";
 import { useRouter } from "next/navigation";
 import ConfigInfoForm from "./config-info-form";
+import CustomDatesForm from "./custom-dates-form";
 import { calculatePrintCost } from "@/util/pdf/calculator";
 import ConfigOrderForm from "./config-payment-form";
 
@@ -90,8 +92,11 @@ function getCurrentSlice(
 }
 
 // Main component
-export default function BookConfig(props: { bookId?: string }) {
-  const { bookId } = props;
+export default function BookConfig(props: {
+  bookId?: string;
+  isLoggedIn?: boolean;
+}) {
+  const { bookId, isLoggedIn } = props;
   const router = useRouter();
 
   const {
@@ -186,7 +191,7 @@ export default function BookConfig(props: { bookId?: string }) {
   >(() => {
     const newMap = new Map();
     if (existingBook?.modules) {
-      for (const moduleItem of existingBook?.modules) {
+      for (const moduleItem of existingBook.modules) {
         newMap.set(
           moduleItem.moduleId,
           moduleItem.colorCode === "COLOR" ? 4 : 1,
@@ -437,6 +442,10 @@ export default function BookConfig(props: { bookId?: string }) {
           },
           code: existingBook?.region ?? "DE-SL",
           addHolidays: true,
+          customDates: (existingBook?.customDates ?? []).map((d) => ({
+            date: new Date(d.date).toISOString().split("T")[0]!,
+            name: d.name,
+          })),
         },
         pdfModules,
         {
@@ -529,6 +538,10 @@ export default function BookConfig(props: { bookId?: string }) {
           },
           code: existingBook?.region ?? "DE-SL",
           addHolidays: true,
+          customDates: (existingBook?.customDates ?? []).map((d) => ({
+            date: new Date(d.date).toISOString().split("T")[0]!,
+            name: d.name,
+          })),
         },
         pdfModules,
         {
@@ -624,6 +637,9 @@ export default function BookConfig(props: { bookId?: string }) {
   // Modal content
   const renderModalContent = () => {
     switch (modalId) {
+      case "login-prompt":
+        return null;
+
       case "info":
         return (
           <div className="text-info-950 bg-pirrot-blue-50 w-full max-w-xl rounded p-2">
@@ -656,6 +672,23 @@ export default function BookConfig(props: { bookId?: string }) {
                   : undefined
               }
             />
+          </div>
+        );
+
+      case "dates":
+        return (
+          <div className="text-info-950 bg-pirrot-blue-50 w-full max-w-xl rounded p-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-2xl font-bold">Eigene Termine</h3>
+              <button
+                type="button"
+                onClick={() => setModalId(undefined)}
+                className="bg-pirrot-red-200 text-pirrot-blue-50 rounded p-2"
+              >
+                <XIcon className="size-6" />
+              </button>
+            </div>
+            <CustomDatesForm bookId={bookId!} />
           </div>
         );
 
@@ -709,7 +742,7 @@ export default function BookConfig(props: { bookId?: string }) {
         }
 
         return (
-          <div className="text-info-950 bg-pirrot-blue-50 h-full w-full max-w-5xl overflow-y-auto rounded p-2 lg:h-auto">
+          <div className="text-info-950 bg-pirrot-blue-50 h-full w-full max-w-[95vw] overflow-y-auto rounded p-2 lg:h-auto">
             <div className="flex items-center justify-between pb-3">
               <h3 className="text-2xl font-bold">Übersicht</h3>
               <button
@@ -906,7 +939,7 @@ export default function BookConfig(props: { bookId?: string }) {
               {/* RIGHT: PDF Preview */}
               <div className="hidden flex-1 items-center justify-center p-1 lg:flex">
                 {previewFileURL ? (
-                  <div className="flex h-full max-h-[720px] w-full">
+                  <div className="flex h-full max-h-[85vh] w-full">
                     <iframe
                       src={previewFileURL}
                       title="PDF Preview"
@@ -936,7 +969,7 @@ export default function BookConfig(props: { bookId?: string }) {
 
       case "preview":
         return (
-          <div className="text-info-950 bg-pirrot-blue-50 w-full max-w-5xl rounded p-2">
+          <div className="text-info-950 bg-pirrot-blue-50 w-full max-w-[90vw] rounded p-2">
             <div className="flex items-center justify-between">
               <h3 className="text-2xl font-bold">Vorschau</h3>
               <button
@@ -947,7 +980,7 @@ export default function BookConfig(props: { bookId?: string }) {
                 <XIcon className="size-6" />
               </button>
             </div>
-            <div className="aspect-video w-full p-1">
+            <div className="h-[85vh] w-full p-1">
               {previewFileURL ? (
                 <iframe
                   src={previewFileURL}
@@ -1157,6 +1190,16 @@ export default function BookConfig(props: { bookId?: string }) {
                   <span className="hidden sm:block">Planerinfo</span>{" "}
                   <InfoIcon className="size-9" />
                 </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setModalId(isLoggedIn ? "dates" : "login-prompt")
+                  }
+                  className="flex items-center gap-4 text-3xl"
+                >
+                  <span className="hidden sm:block">Termine</span>{" "}
+                  <CalendarDays className="size-9" />
+                </button>
               </div>
 
               <hr className="w-full rounded-full border border-white/50" />
@@ -1285,8 +1328,7 @@ export default function BookConfig(props: { bookId?: string }) {
                 </div>
               </div>
 
-              {userModulesError &&
-                userModulesError.message === "UNAUTHORIZED" && <Login />}
+              {userModulesError?.message === "UNAUTHORIZED" && <Login />}
               {!userModulesError && !userModulesLoading && userModules && (
                 <UserModules
                   bookId={bookId ?? ""}
@@ -1541,6 +1583,11 @@ export default function BookConfig(props: { bookId?: string }) {
           </div>
         </div>
       </Modal>
+
+      <LoginPromptModal
+        show={modalId === "login-prompt"}
+        onClose={() => setModalId(undefined)}
+      />
     </>
   );
 }

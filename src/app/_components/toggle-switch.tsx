@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 interface ToggleSwitchProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
-  label: string;
+  label?: string;
 }
 
 export function ToggleSwitch({ checked, onChange, label }: ToggleSwitchProps) {
