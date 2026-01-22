@@ -13,7 +13,7 @@ export default async function SignOutPage({
   const { callbackUrl } = await searchParams;
 
   if (!session) {
-    redirect(callbackUrl || "/");
+    redirect(callbackUrl ?? "/");
   }
 
   return (
@@ -39,7 +39,7 @@ export default async function SignOutPage({
         <SignoutClient callbackUrl={callbackUrl} />
 
         <Link
-          href={callbackUrl || "/dashboard"}
+          href={callbackUrl ?? "/dashboard"}
           className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-gray-100 px-4 py-3 font-medium text-gray-700 transition-colors hover:bg-gray-200"
         >
           <ArrowLeft className="h-5 w-5" />

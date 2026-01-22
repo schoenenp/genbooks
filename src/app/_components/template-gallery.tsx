@@ -14,8 +14,6 @@ import {
   getCoverPdfUrl,
 } from "@/util/pdf/cover-preview";
 
-const CDN_URL = process.env.NEXT_PUBLIC_CDN_SERVER_URL || "";
-
 interface TemplatePreviewProps {
   template: {
     id: string;
@@ -82,10 +80,8 @@ function useCoverPreview(template: TemplatePreviewProps["template"]) {
 
 function TemplateCard({
   template,
-  index,
 }: {
   template: TemplatePreviewProps["template"];
-  index: number;
 }) {
   const router = useRouter();
   const { mutate: cloneTemplate, isPending: isCloning } =
@@ -103,7 +99,7 @@ function TemplateCard({
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            generatePreview();
+            void generatePreview();
           }
         });
       },
@@ -120,7 +116,7 @@ function TemplateCard({
 
   return (
     <div id={`template-${template.id}`} className="w-full min-w-0">
-      <div className="border-pirrot-blue-100 w-full flex h-full flex-col gap-4 rounded-xl border bg-white/50 p-4 shadow-sm transition-shadow hover:shadow-md">
+      <div className="border-pirrot-blue-100 flex h-full w-full flex-col gap-4 rounded-xl border bg-white/50 p-4 shadow-sm transition-shadow hover:shadow-md">
         <div className="bg-pirrot-blue-50 flex aspect-square min-h-52 items-center justify-center overflow-hidden rounded-lg p-4">
           <div className="origin-center scale-75">
             <BookPreview
@@ -194,12 +190,6 @@ function TemplateCard({
 export default function TemplateGallery() {
   const router = useRouter();
   const { data: templates, isLoading } = api.book.getTemplates.useQuery();
-  const { mutate: cloneTemplate, isPending: isCloning } =
-    api.book.cloneTemplate.useMutation({
-      onSuccess: (newBook) => {
-        router.push(`/config?bookId=${newBook.id}`);
-      },
-    });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -277,7 +267,6 @@ export default function TemplateGallery() {
             >
               <TemplateCard
                 template={template as TemplatePreviewProps["template"]}
-                index={index}
               />
             </div>
           ))}
@@ -297,10 +286,11 @@ export default function TemplateGallery() {
                   inline: "start",
                 });
               }}
-              className={`h-3 w-3 rounded-full transition-colors ${index === activeIndex
-                ? "bg-pirrot-blue-500"
-                : "bg-pirrot-blue-200 hover:bg-pirrot-blue-300"
-                }`}
+              className={`h-3 w-3 rounded-full transition-colors ${
+                index === activeIndex
+                  ? "bg-pirrot-blue-500"
+                  : "bg-pirrot-blue-200 hover:bg-pirrot-blue-300"
+              }`}
               aria-label={`Gehe zu Vorlage ${index + 1}`}
             />
           ))}

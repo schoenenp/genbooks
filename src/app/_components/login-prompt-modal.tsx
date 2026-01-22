@@ -26,11 +26,11 @@ export default function LoginPromptModal({
   }, []);
 
   const handleGoogleSignIn = () => {
-    signIn("google", { callbackUrl });
+    void signIn("google", { callbackUrl });
   };
 
   const handleEmailSignIn = () => {
-    signIn("nodemailer", { callbackUrl });
+    void signIn("nodemailer", { callbackUrl });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

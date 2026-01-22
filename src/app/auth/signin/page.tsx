@@ -10,8 +10,9 @@ import {
   XCircle,
   LoaderCircle,
 } from "lucide-react";
+import Link from "next/link";
 
-const ERROR_MESSAGES: { [key: string]: string } = {
+const ERROR_MESSAGES: Record<string, string> = {
   Configuration: "Konfigurationsfehler. Bitte kontaktieren Sie den Support.",
   AccessDenied: "Zugriff verweigert. Sie haben keine Berechtigung.",
   Verification: "Der Link ist abgelaufen oder wurde bereits verwendet.",
@@ -28,7 +29,7 @@ const ERROR_MESSAGES: { [key: string]: string } = {
 function SignInContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const callbackUrl = searchParams?.get("callbackUrl") || "/dashboard";
+  const callbackUrl = searchParams?.get("callbackUrl") ?? "/dashboard";
   const error = searchParams?.get("error");
 
   const [emailValue, setEmailValue] = useState("");
@@ -38,7 +39,7 @@ function SignInContent() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const getErrorMessage = useCallback((err: string): string => {
-    return (ERROR_MESSAGES[err] ?? ERROR_MESSAGES.Default) as string;
+    return (ERROR_MESSAGES[err] ?? ERROR_MESSAGES.Default)!;
   }, []);
 
   useEffect(() => {
@@ -49,7 +50,7 @@ function SignInContent() {
   }, [error, getErrorMessage]);
 
   const handleGoogleSignIn = () => {
-    signIn("google", { callbackUrl });
+    void signIn("google", { callbackUrl });
   };
 
   const handleEmailSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -185,13 +186,13 @@ function SignInContent() {
           )}
 
           <div className="mt-6 border-t border-gray-200 pt-6">
-            <a
+            <Link
               href="/"
               className="text-pirrot-blue-600 hover:text-pirrot-blue-800 flex items-center gap-2 font-medium"
             >
               <ArrowLeft className="h-4 w-4" />
               Zurück zur Startseite
-            </a>
+            </Link>
           </div>
         </div>
 
