@@ -17,6 +17,7 @@ import {
 interface TemplatePreviewProps {
   template: {
     id: string;
+    name: string | null;
     bookTitle: string | null;
     subTitle: string | null;
     planStart: Date;
@@ -134,7 +135,7 @@ function TemplateCard({
 
         <div className="flex flex-col gap-2">
           <h3 className="font-cairo text-pirrot-blue-950 text-xl font-bold">
-            {template.bookTitle ?? "Unbenannte Vorlage"}
+            {template.name ?? "Unbenannte Vorlage"}
           </h3>
           <div className="flex gap-2">
             {template.modules.length > 0 && (
@@ -285,11 +286,10 @@ export default function TemplateGallery() {
                   inline: "start",
                 });
               }}
-              className={`h-3 w-3 rounded-full transition-colors ${
-                index === activeIndex
+              className={`h-3 w-3 rounded-full transition-colors ${index === activeIndex
                   ? "bg-pirrot-blue-500"
                   : "bg-pirrot-blue-200 hover:bg-pirrot-blue-300"
-              }`}
+                }`}
               aria-label={`Gehe zu Vorlage ${index + 1}`}
             />
           ))}

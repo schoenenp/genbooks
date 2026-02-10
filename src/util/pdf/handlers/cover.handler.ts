@@ -1,6 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import { BaseHandler } from "./base.handler";
 import type { TagDefinition, TagContext, HandlerResult } from "../types";
+import { convertPdfToGrayscale } from "../grayscale";
 
 /**
  * Handler for "umschlag" (cover) modules.
@@ -61,13 +62,22 @@ class CoverHandler extends BaseHandler {
     this.fillTags(form, context);
     form.flatten();
 
+    let processedDoc = coverDoc;
+    if (context.isGrayscale) {
+      const grayscaleBytes = await convertPdfToGrayscale(
+        await coverDoc.save(),
+        { apiKey: context.grayscaleApiKey },
+      );
+      processedDoc = await PDFDocument.load(grayscaleBytes);
+    }
+
     // Add front cover pages (0, 1)
-    const frontPages = await context.finalPdf.copyPages(coverDoc, [0, 1]);
+    const frontPages = await context.finalPdf.copyPages(processedDoc, [0, 1]);
     frontPages.forEach((page) => context.finalPdf.addPage(page));
 
     // Create back cover document (pages 2, 3) to return for later use
     const backCoverDoc = await PDFDocument.create();
-    const backPages = await backCoverDoc.copyPages(coverDoc, [2, 3]);
+    const backPages = await backCoverDoc.copyPages(processedDoc, [2, 3]);
     backPages.forEach((page) => backCoverDoc.addPage(page));
 
     // Return front cover pages added (2) and back cover doc for finalization

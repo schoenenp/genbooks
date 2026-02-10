@@ -441,6 +441,7 @@ export default function BookConfig(props: {
             end: existingBook?.planEnd ?? undefined,
           },
           code: existingBook?.region ?? "DE-SL",
+          country: existingBook?.country ?? "DE",
           addHolidays: true,
           customDates: (existingBook?.customDates ?? []).map((d) => ({
             date: new Date(d.date).toISOString().split("T")[0]!,
@@ -537,6 +538,7 @@ export default function BookConfig(props: {
             end: existingBook?.planEnd ?? undefined,
           },
           code: existingBook?.region ?? "DE-SL",
+          country: existingBook?.country ?? "DE",
           addHolidays: true,
           customDates: (existingBook?.customDates ?? []).map((d) => ({
             date: new Date(d.date).toISOString().split("T")[0]!,
@@ -661,6 +663,7 @@ export default function BookConfig(props: {
                       id: existingBook.id,
                       name: existingBook.bookTitle,
                       sub: existingBook.subTitle,
+                      country: existingBook.country,
                       region: existingBook?.region,
                       period: {
                         start: existingBook.planStart

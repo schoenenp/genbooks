@@ -48,11 +48,13 @@ export interface ProcessingOptions {
   compressionLevel?: "low" | "medium" | "high";
   addWatermark?: boolean;
   colorMap?: Map<string, 1 | 4>;
+  grayscaleApiKey?: string;
 }
 
 export type BookDetails = {
   title: string;
   code?: string;
+  country?: string;
   addHolidays: boolean;
   period: {
     start?: Date;
@@ -90,6 +92,8 @@ export interface TagContext {
   previewMode: boolean;
   /** Whether this module should be grayscale */
   isGrayscale: boolean;
+  /** API key for grayscale conversion (server-side only) */
+  grayscaleApiKey?: string;
 
   // Planner-specific context (populated per week iteration)
   /** Current week index (0-based) */

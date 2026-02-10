@@ -13,6 +13,7 @@ export const bookRouter = createTRPCRouter({
         id: z.string().optional(),
         name: z.string().nullable(),
         sub: z.string().optional().nullable(),
+        country: z.string().nullable(),
         region: z.string().nullable(),
         period: z.object({
           start: z.string(),
@@ -24,7 +25,7 @@ export const bookRouter = createTRPCRouter({
       if (!ctx.session.user) {
         return;
       }
-      const { name, sub, period, region } = input;
+      const { name, sub, period, region, country } = input;
 
       const { start: planStart, end: planEnd } = period;
 
@@ -41,6 +42,7 @@ export const bookRouter = createTRPCRouter({
           planStart: start,
           planEnd: end,
           region,
+          country,
         },
       });
     }),
@@ -221,13 +223,14 @@ export const bookRouter = createTRPCRouter({
       z.object({
         name: z.string().min(1).optional(),
         sub: z.string().min(1).optional(),
+        country: z.string(),
         region: z.string(),
         planStart: z.string(),
         planEnd: z.string(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { name, sub, planStart, planEnd, region } = input;
+      const { name, sub, planStart, planEnd, region, country } = input;
       const start = new Date(planStart);
       const end = new Date(planEnd);
 
@@ -241,6 +244,7 @@ export const bookRouter = createTRPCRouter({
           planStart: start,
           planEnd: end,
           region,
+          country,
           createdById: ctx.session?.user ? ctx.session.user.id : undefined,
         },
       });
@@ -262,12 +266,11 @@ export const bookRouter = createTRPCRouter({
       });
     }),
   getTemplates: publicProcedure.query(async ({ ctx }) => {
-    /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment */
     return ctx.db.book.findMany({
       where: {
         isTemplate: true,
         deletedAt: null,
-      } as any,
+      },
       include: {
         modules: {
           include: {

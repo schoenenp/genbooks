@@ -19,10 +19,10 @@ model Book {
   planStart DateTime  @default(now())
   planEnd   DateTime?
 
-  modules BookModule[]
-  ordered BookOrder[]
-
-  createdBy   User?   @relation(fields: [createdById], references: [id])
+  modules     BookModule[]
+  ordered     BookOrder[]
+  country     String       @default("DE")
+  createdBy   User?        @relation(fields: [createdById], references: [id])
   createdById String?
 
   copyFromId   String?
@@ -37,6 +37,7 @@ model Book {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
+  clientRef   String?      @default("pirrot")
   customDates CustomDate[]
 }
 

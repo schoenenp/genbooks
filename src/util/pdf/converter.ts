@@ -110,6 +110,7 @@ class PDFProcessor {
       compressionLevel = "low",
       addWatermark: shouldAddWatermark = false,
       colorMap = new Map(),
+      grayscaleApiKey,
     } = options;
 
     try {
@@ -127,13 +128,16 @@ class PDFProcessor {
         configureCompression(finalPdf, compressionLevel);
       }
 
+      const isCoverGrayscale = colorMap.get(coverModule.id) === 1;
+
       // Create shared context object
       const context: TagContext = {
         bookDetails,
         moduleItem: coverModule,
         finalPdf,
         previewMode,
-        isGrayscale: false,
+        isGrayscale: isCoverGrayscale,
+        grayscaleApiKey,
       };
 
       // Process cover first and capture back cover doc
@@ -155,7 +159,6 @@ class PDFProcessor {
       let cPages = 0;
 
       // Cover pages are 4 pages total
-      const isCoverGrayscale = colorMap.get(coverModule.id) === 1;
       if (isCoverGrayscale) {
         bPages += 4;
       } else {
@@ -280,6 +283,7 @@ export async function processPdfModules(
     addPageNumbers?: boolean;
     addWatermark?: boolean;
     colorMap?: Map<ModuleId, ColorCode>;
+    grayscaleApiKey?: string;
   } = {},
 ): Promise<Result> {
   console.time("PDF Generation Time");
@@ -291,6 +295,7 @@ export async function processPdfModules(
       addPageNumbers: options.addPageNumbers ?? true,
       addWatermark: options.addWatermark ?? false,
       colorMap: options.colorMap,
+      grayscaleApiKey: options.grayscaleApiKey,
     });
   } finally {
     console.timeEnd("PDF Generation Time");
@@ -309,6 +314,7 @@ export async function processPdfModulesPreview(
     addPageNumbers?: boolean;
     addWatermark?: boolean;
     colorMap?: Map<ModuleId, ColorCode>;
+    grayscaleApiKey?: string;
   } = {},
 ): Promise<Result> {
   console.time("PDF Preview Generation Time");
@@ -332,6 +338,7 @@ export async function processPdfModulesPreview(
         addPageNumbers: options.addPageNumbers ?? true,
         addWatermark: options.addWatermark ?? true,
         colorMap: options.colorMap,
+        grayscaleApiKey: options.grayscaleApiKey,
       },
     );
 

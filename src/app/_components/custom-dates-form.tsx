@@ -1,44 +1,107 @@
 "use client";
 import { api } from "@/trpc/react";
 import { X, Plus } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import DatePicker from "react-datepicker";
+import { de } from "date-fns/locale";
+import { registerLocale } from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
+import { formatDisplayDate, parseDate } from "@/util/date";
+
+registerLocale("de", de);
 
 export default function CustomDatesForm(props: { bookId: string }) {
   const { bookId } = props;
+
   const utils = api.useUtils();
-  const { data: book } = api.book.getById.useQuery({ id: bookId });
+  const { data: book, isLoading } = api.book.getById.useQuery({ id: bookId });
 
   const saveDates = api.book.saveCustomDates.useMutation({
     onSuccess: async () => {
+      console.log("Custom dates saved successfully");
       await utils.book.getById.invalidate({ id: bookId });
+    },
+    onError: (error) => {
+      console.error("Failed to save custom dates:", error);
     },
   });
 
-  const [dates, setDates] = useState<{ date: string; name: string }[]>(
-    book?.customDates?.map((d) => ({
-      date: new Date(d.date).toISOString().split("T")[0] ?? "",
-      name: d.name,
-    })) ?? [],
+  const [dates, setDates] = useState<{ date: Date; name: string }[]>(
+    (() => {
+      const initial =
+        book?.customDates?.map((d) => ({
+          date: new Date(d.date),
+          name: d.name,
+        })) ?? [];
+      console.log("Initial custom dates:", initial);
+      return initial;
+    })(),
   );
 
-  const [newDate, setNewDate] = useState("");
+  const [newDate, setNewDate] = useState<Date | null>(null);
+  const [newDateInput, setNewDateInput] = useState("");
   const [newName, setNewName] = useState("");
+  const [dateError, setDateError] = useState("");
+
+  // Parse date input and update newDate
+  useEffect(() => {
+    if (typeof newDateInput !== "string") {
+      setNewDate(null);
+      setDateError("");
+      return;
+    }
+    if (newDateInput.trim() === "") {
+      setNewDate(null);
+      setDateError("");
+      return;
+    }
+    const parsed = parseDate(newDateInput);
+    if (parsed) {
+      setNewDate(parsed);
+      setDateError("");
+    } else {
+      setNewDate(null);
+      setDateError(
+        "Ungültiges Datum. Bitte verwenden Sie das Format DD.MM.YYYY.",
+      );
+    }
+  }, [newDateInput]);
 
   function addDate() {
-    if (!newDate || !newName) return;
+    if (!newDate || !newName) {
+      if (!newDate && newDateInput.trim() !== "") {
+        setDateError("Bitte geben Sie ein gültiges Datum ein.");
+      }
+      return;
+    }
     const updated = [...dates, { date: newDate, name: newName }];
     setDates(updated);
-    saveDates.mutate({ bookId, dates: updated });
-    setNewDate("");
+    saveDates.mutate({
+      bookId,
+      dates: updated.map((d) => ({
+        date: d.date.toISOString().split("T")[0]!,
+        name: d.name,
+      })),
+    });
+    setNewDate(null);
+    setNewDateInput("");
     setNewName("");
+    setDateError("");
   }
 
   function removeDate(index: number) {
     const updated = dates.filter((_, i) => i !== index);
     setDates(updated);
-    saveDates.mutate({ bookId, dates: updated });
+    saveDates.mutate({
+      bookId,
+      dates: updated.map((d) => ({
+        date: d.date.toISOString().split("T")[0]!,
+        name: d.name,
+      })),
+    });
   }
 
+  if (isLoading) return <div>Loading custom dates...</div>;
   if (!book) return null;
 
   return (
@@ -52,7 +115,9 @@ export default function CustomDatesForm(props: { bookId: string }) {
             className="border-pirrot-blue-100 flex items-center justify-between rounded border bg-white p-2"
           >
             <div>
-              <span className="mr-2 font-bold">{d.date}:</span>
+              <span className="mr-2 font-bold">
+                {formatDisplayDate(d.date)}:
+              </span>
               <span>{d.name}</span>
             </div>
             <button
@@ -67,11 +132,22 @@ export default function CustomDatesForm(props: { bookId: string }) {
       </div>
 
       <div className="mt-2 flex gap-2">
-        <input
-          type="date"
-          value={newDate}
-          onChange={(e) => setNewDate(e.target.value)}
-          className="rounded border p-1 text-sm"
+        <DatePicker
+          selected={newDate}
+          onChange={(date: Date | null) => {
+            setNewDate(date);
+            setNewDateInput(date ? formatDisplayDate(date) : "");
+            setDateError("");
+          }}
+          onChangeRaw={(e) => {
+            if (e) setNewDateInput((e.target as HTMLInputElement).value);
+          }}
+          value={newDateInput}
+          dateFormat="dd.MM.yyyy"
+          locale="de"
+          className={`rounded border p-1 text-sm ${
+            dateError ? "border-red-500" : "border-gray-300"
+          }`}
         />
         <input
           type="text"
@@ -89,6 +165,7 @@ export default function CustomDatesForm(props: { bookId: string }) {
           <Plus size={20} />
         </button>
       </div>
+      {dateError && <p className="mt-1 text-sm text-red-500">{dateError}</p>}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 import { BaseHandler } from "./base.handler";
 import type { TagDefinition, TagContext, HandlerResult } from "../types";
+import { convertPdfToGrayscale } from "../grayscale";
 
 /**
  * Default handler for modules without specific form field requirements.
@@ -25,14 +26,13 @@ class DefaultHandler extends BaseHandler {
     templateBytes: Uint8Array,
   ): Promise<HandlerResult> {
     const { finalPdf, previewMode, isGrayscale } = context;
+    const sourceBytes = isGrayscale
+      ? await convertPdfToGrayscale(templateBytes, {
+          apiKey: context.grayscaleApiKey,
+        })
+      : templateBytes;
 
-    const doc = await PDFDocument.load(templateBytes);
-
-    if (isGrayscale) {
-      // TODO: Implement grayscale conversion
-      // this.convertToGrayscale(doc);
-      console.log("GRAYSCALING....");
-    }
+    const doc = await PDFDocument.load(sourceBytes);
 
     const totalPages = doc.getPageCount();
     const pagesToCopy = previewMode

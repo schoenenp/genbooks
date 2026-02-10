@@ -1,17 +1,18 @@
 import { env } from "@/env";
 import { encryptPayload } from "@/util/crypto";
+import { formatDisplayDate } from "@/util/date";
 
 export const createOrderConfirmationEmail = async (
-    orderKey: string, 
-    customerName?: string
+  orderKey: string,
+  customerName?: string,
 ) => {
-    const orderDate = new Date().toLocaleDateString('de-DE');
+  const orderDate = formatDisplayDate(new Date());
 
-    const linkPayload = encryptPayload({ orderKey })
-    const orderViewLink = `${env.BASE_APP_URL}order/view?pl=${linkPayload}`
-    const year = new Date().getFullYear()
+  const linkPayload = encryptPayload({ orderKey });
+  const orderViewLink = `${env.BASE_APP_URL}order/view?pl=${linkPayload}`;
+  const year = new Date().getFullYear();
 
-    return `
+  return `
       <!DOCTYPE html>
       <html>
       <head>
@@ -33,11 +34,15 @@ export const createOrderConfirmationEmail = async (
   
               <!-- Main Content -->
               <div style="padding: 40px 30px;">
-                  ${customerName ? `
+                  ${
+                    customerName
+                      ? `
                   <p style="color: oklch(0.35 0.04 250); font-size: 18px; margin: 0 0 20px 0;">
                       Hallo ${customerName},
                   </p>
-                  ` : ''}
+                  `
+                      : ""
+                  }
                   
                   <p style="color: oklch(0.35 0.04 250); font-size: 16px; margin: 0 0 20px 0;">
                       Ihre Bestellung wurde erfolgreich erstellt und wird jetzt bearbeitet.
@@ -96,4 +101,4 @@ export const createOrderConfirmationEmail = async (
       </body>
       </html>
     `;
-  };
+};

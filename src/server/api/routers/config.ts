@@ -107,12 +107,14 @@ export const configRouter = createTRPCRouter({
               end: existingBook?.planEnd ?? undefined,
             },
             code: existingBook?.region ?? "DE-SL",
+            country: existingBook?.country ?? "DE",
             addHolidays: true,
           },
           pdfModules,
           {
             compressionLevel: "high",
             colorMap: moduleColorMap,
+            grayscaleApiKey: env.GHOST_GRAYSCALE_API_KEY,
           },
         );
       } catch (e) {

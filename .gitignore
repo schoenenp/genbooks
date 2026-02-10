@@ -13,6 +13,10 @@
 /prisma/db.sqlite-journal
 db.sqlite
 
+# AI prompts
+/prompts
+
+
 # next.js
 /.next/
 /out/

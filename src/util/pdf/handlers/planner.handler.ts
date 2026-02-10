@@ -4,6 +4,7 @@ import type { TagDefinition, TagContext, HandlerResult } from "../types";
 import { formatDate, generateWeekDates, getA4WithBleeding } from "../helpers";
 import { getHolidays, type DateItem } from "../../book/functions";
 import { normalizeDate } from "../helpers";
+import { convertPdfToGrayscale } from "../grayscale";
 
 /**
  * Handler for "wochenplaner" (weekly planner) modules.
@@ -49,10 +50,9 @@ class PlannerHandler extends BaseHandler {
   private formatDay(ctx: TagContext, dayIndex: number): string {
     const date = ctx.weekDates?.[dayIndex];
     if (!date) return "";
-    return date.toLocaleDateString("de-DE", {
-      day: "2-digit",
-      month: "2-digit",
-    });
+    const day = date.getDate().toString().padStart(2, "0");
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    return `${day}.${month}`;
   }
 
   /**
@@ -68,7 +68,8 @@ class PlannerHandler extends BaseHandler {
     context: TagContext,
     templateBytes: Uint8Array,
   ): Promise<HandlerResult> {
-    const { bookDetails, finalPdf, previewMode } = context;
+    const { bookDetails, finalPdf, previewMode, isGrayscale, grayscaleApiKey } =
+      context;
 
     // Validate template
     const templateDoc = await PDFDocument.load(templateBytes);
@@ -104,14 +105,15 @@ class PlannerHandler extends BaseHandler {
       ? Math.min(totalWeeks + 1, 4) // Limit to 4 weeks in preview
       : totalWeeks + 1;
 
-    let pagesAdded = 0;
+    const moduleDoc = await PDFDocument.create();
+    let workingPageCount = finalPdf.getPageCount();
 
     for (let weekIndex = 0; weekIndex < weeksToProcess; weekIndex++) {
       // Add alignment page if needed (planner spreads should start on odd pages)
-      if (finalPdf.getPageCount() % 2 === 0) {
+      if (workingPageCount % 2 === 0) {
         const { width, height } = getA4WithBleeding();
-        finalPdf.addPage([width, height]);
-        pagesAdded++;
+        moduleDoc.addPage([width, height]);
+        workingPageCount++;
       }
 
       // Load fresh template for this week
@@ -132,12 +134,27 @@ class PlannerHandler extends BaseHandler {
       form.flatten();
 
       // Copy pages to final PDF
-      const pages = await finalPdf.copyPages(weekDoc, weekDoc.getPageIndices());
-      pages.forEach((page) => finalPdf.addPage(page));
-      pagesAdded += pages.length;
+      const pages = await moduleDoc.copyPages(weekDoc, weekDoc.getPageIndices());
+      pages.forEach((page) => moduleDoc.addPage(page));
+      workingPageCount += pages.length;
     }
 
-    return { pagesAdded };
+    let outputDoc = moduleDoc;
+    if (isGrayscale) {
+      const grayscaleBytes = await convertPdfToGrayscale(
+        await moduleDoc.save(),
+        { apiKey: grayscaleApiKey },
+      );
+      outputDoc = await PDFDocument.load(grayscaleBytes);
+    }
+
+    const pages = await finalPdf.copyPages(
+      outputDoc,
+      outputDoc.getPageIndices(),
+    );
+    pages.forEach((page) => finalPdf.addPage(page));
+
+    return { pagesAdded: pages.length };
   }
 
   /**
@@ -153,6 +170,7 @@ class PlannerHandler extends BaseHandler {
     if (bookDetails.addHolidays) {
       holidays = await getHolidays({
         code: bookDetails.code,
+        country: bookDetails.country,
         start: startTime,
         end: endTime,
       });
