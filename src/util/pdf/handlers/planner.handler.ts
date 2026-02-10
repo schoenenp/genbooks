@@ -133,24 +133,28 @@ class PlannerHandler extends BaseHandler {
       this.fillTags(form, weekContext);
       form.flatten();
 
+      // Convert this week's pages to grayscale if needed (small payload per week)
+      let sourceDoc = weekDoc;
+      if (isGrayscale) {
+        const weekBytes = await weekDoc.save();
+        const grayscaleBytes = await convertPdfToGrayscale(weekBytes, {
+          apiKey: grayscaleApiKey,
+        });
+        sourceDoc = await PDFDocument.load(grayscaleBytes);
+      }
+
       // Copy pages to final PDF
-      const pages = await moduleDoc.copyPages(weekDoc, weekDoc.getPageIndices());
+      const pages = await moduleDoc.copyPages(
+        sourceDoc,
+        sourceDoc.getPageIndices(),
+      );
       pages.forEach((page) => moduleDoc.addPage(page));
       workingPageCount += pages.length;
     }
 
-    let outputDoc = moduleDoc;
-    if (isGrayscale) {
-      const grayscaleBytes = await convertPdfToGrayscale(
-        await moduleDoc.save(),
-        { apiKey: grayscaleApiKey },
-      );
-      outputDoc = await PDFDocument.load(grayscaleBytes);
-    }
-
     const pages = await finalPdf.copyPages(
-      outputDoc,
-      outputDoc.getPageIndices(),
+      moduleDoc,
+      moduleDoc.getPageIndices(),
     );
     pages.forEach((page) => finalPdf.addPage(page));
 
