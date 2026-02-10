@@ -9,6 +9,7 @@ interface CoverPreviewOptions {
   yearEnd?: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 async function loadPdfJs(): Promise<typeof import("pdfjs-dist")> {
   const pdfjs = await import("pdfjs-dist");
   if (!pdfjs.GlobalWorkerOptions.workerSrc) {

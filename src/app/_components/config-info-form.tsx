@@ -7,7 +7,7 @@ import DatePicker from "react-datepicker";
 import { de } from "date-fns/locale";
 import { registerLocale } from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { formatDisplayDate } from "@/util/date";
+
 
 registerLocale("de", de);
 
@@ -15,7 +15,7 @@ type ConfigInfoFormState = {
   id?: string;
   name: string | null;
   sub?: string | null;
-  country: string | null;
+  country: string;
   region: string | null;
   period: {
     start: Date;
@@ -48,7 +48,14 @@ export default function ConfigInfoForm({
               : undefined,
           },
         }
-      : ({} as ConfigInfoFormState),
+      : {
+          name: null,
+          country: "DE", // Default country
+          region: null,
+          period: {
+            start: new Date(),
+          },
+        },
   );
 
   const [formError, setFormError] = useState<string | undefined>();
@@ -244,7 +251,7 @@ export default function ConfigInfoForm({
                 ...prev,
                 period: {
                   start: prev.period.start,
-                  end: date || undefined,
+                  end: date ?? undefined,
                 },
               }));
             }}

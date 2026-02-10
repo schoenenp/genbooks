@@ -13,7 +13,7 @@ export const bookRouter = createTRPCRouter({
         id: z.string().optional(),
         name: z.string().nullable(),
         sub: z.string().optional().nullable(),
-        country: z.string().nullable(),
+        country: z.string(),
         region: z.string().nullable(),
         period: z.object({
           start: z.string(),
@@ -283,8 +283,8 @@ export const bookRouter = createTRPCRouter({
         },
       },
     });
-    /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment */
   }),
+
   cloneTemplate: publicProcedure
     .input(z.object({ templateId: z.string() }))
     .mutation(async ({ ctx, input }) => {

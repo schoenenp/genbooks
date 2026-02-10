@@ -111,7 +111,7 @@ export default function CustomDatesForm(props: { bookId: string }) {
       <div className="flex flex-col gap-2">
         {dates.map((d, i) => (
           <div
-            key={`${d.date}-${d.name}`}
+            key={`${d.date.toISOString()}-${d.name}`}
             className="border-pirrot-blue-100 flex items-center justify-between rounded border bg-white p-2"
           >
             <div>

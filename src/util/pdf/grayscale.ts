@@ -14,7 +14,7 @@ export async function convertPdfToGrayscale(
   options: GrayscaleOptions = {},
 ): Promise<Uint8Array> {
   const formData = new FormData();
-  const pdfBlob = new Blob([pdfBytes], { type: "application/pdf" });
+  const pdfBlob = new Blob([pdfBytes.slice().buffer], { type: "application/pdf" });
   formData.append("file", pdfBlob, "document.pdf");
 
   let response: Response;
