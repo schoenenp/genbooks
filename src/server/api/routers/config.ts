@@ -153,7 +153,7 @@ export const configRouter = createTRPCRouter({
         });
       }
 
-      const sessionUserId = ctx.session?.user.id;
+      const sessionUserId = ctx.session?.user?.id;
       if (
         !canAccessBookForSetupOrder({
           bookOwnerId: existingBook.createdById,
@@ -731,15 +731,16 @@ export const configRouter = createTRPCRouter({
         },
       });
 
+      const sessionUserId = ctx.session?.user?.id;
       const isUserConfig =
-        existingBook?.createdById !== null &&
-        existingBook?.createdById !== ctx.session?.user.id;
+        existingBook?.createdById != null &&
+        existingBook.createdById !== sessionUserId;
 
       if (isUserConfig) {
         return null;
       }
 
-      const userId = ctx.session?.user.id;
+      const userId = sessionUserId;
       const existingBookModuleIds = Array.from(
         new Set((existingBook?.modules ?? []).map((moduleItem) => moduleItem.moduleId)),
       );

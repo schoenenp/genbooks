@@ -45,6 +45,7 @@ const Login: React.FC<LoginProps> = ({
     e.preventDefault();
     setError('');
     setEmailError('');
+    setEmailSent(false);
 
     if (!email) {
       setEmailError('Email is required');
@@ -64,13 +65,13 @@ const Login: React.FC<LoginProps> = ({
         redirect: false
       });
 
-      if (result?.error) {
+      if (result?.error || !result?.ok) {
         setError('Login failed. Please try again.');
-        onLoginError?.(result.error);
+        onLoginError?.(result?.error ?? 'Email sign-in failed');
       } else {
         setError('');
         onLoginSuccess?.();
-        setEmailSent(true)
+        setEmailSent(true);
       }
     
     } catch (err) {

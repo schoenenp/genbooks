@@ -2,7 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { Mail, X } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -16,6 +16,7 @@ export default function LoginPromptModal({
   onClose,
 }: LoginPromptModalProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const callbackUrl = searchParams?.get("bookId")
     ? `/config?bookId=${searchParams.get("bookId")}`
@@ -30,7 +31,8 @@ export default function LoginPromptModal({
   };
 
   const handleEmailSignIn = () => {
-    void signIn("nodemailer", { callbackUrl });
+    router.push(`/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+    onClose();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

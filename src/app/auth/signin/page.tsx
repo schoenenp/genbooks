@@ -57,13 +57,30 @@ function SignInContent() {
     e.preventDefault();
     if (!emailValue) return;
 
+    setShowError(false);
+    setErrorMessage("");
     setIsLoading(true);
     try {
-      await signIn("nodemailer", {
+      const result = await signIn("nodemailer", {
         email: emailValue,
         callbackUrl,
         redirect: false,
       });
+
+      if (result?.error) {
+        setShowError(true);
+        setErrorMessage(getErrorMessage(result.error));
+        return;
+      }
+
+      if (!result?.ok) {
+        setShowError(true);
+        setErrorMessage(
+          "E-Mail konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
+        );
+        return;
+      }
+
       setEmailSent(true);
     } catch {
       setShowError(true);

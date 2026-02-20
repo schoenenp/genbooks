@@ -29,6 +29,7 @@ export const env = createEnv({
     SPONSOR_LINK_SECRET: z.string().optional(),
     EMAIL_SERVER_PASSWORD: z.string(),
     EMAIL_SERVER_HOST: z.string(),
+    EMAIL_SERVER_PORT: z.coerce.number().int().positive().default(465),
     EMAIL_FROM: z.string(),
     SHOP_EMAIL: z.string(),
     CANCEL_SECRET:z.string(),
@@ -75,6 +76,7 @@ export const env = createEnv({
 
     EMAIL_SERVER_PASSWORD: process.env.EMAIL_SERVER_PASSWORD,
     EMAIL_SERVER_HOST: process.env.EMAIL_SERVER_HOST,
+    EMAIL_SERVER_PORT: process.env.EMAIL_SERVER_PORT,
     UPLOAD_URL_LINK: process.env.UPLOAD_URL_LINK,
     UPLOAD_API_KEY: process.env.UPLOAD_API_KEY,
     GHOST_GRAYSCALE_API_KEY: process.env.GHOST_GRAYSCALE_API_KEY,

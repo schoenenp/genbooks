@@ -42,6 +42,8 @@ const trustHost =
   process.env.AUTH_TRUST_HOST === undefined
     ? true
     : process.env.AUTH_TRUST_HOST === "true";
+const smtpPort = env.EMAIL_SERVER_PORT;
+const smtpSecure = smtpPort === 465;
 
 export const authConfig = {
   trustHost,
@@ -53,13 +55,17 @@ export const authConfig = {
     NodemailerProvider({
       server: {
         host: env.EMAIL_SERVER_HOST,
-        port: 465,
+        port: smtpPort,
+        secure: smtpSecure,
+        connectionTimeout: 20_000,
+        greetingTimeout: 15_000,
+        socketTimeout: 30_000,
         auth: {
           user: env.EMAIL_SERVER_USER,
           pass: env.EMAIL_SERVER_PASSWORD,
         },
       },
-      from: process.env.EMAIL_FROM,
+      from: env.EMAIL_FROM,
     }),
     GoogleProvider({
       clientId: env.AUTH_GOOGLE_ID,
