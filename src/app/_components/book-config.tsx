@@ -14,6 +14,7 @@ import {
   EyeIcon,
   Filter,
   FilterIcon,
+  GiftIcon,
   InfoIcon,
   ListCollapse,
   LoaderCircle,
@@ -29,10 +30,7 @@ import { api } from "@/trpc/react";
 import LoadingSpinner from "./loading-spinner";
 import ModuleItem, { type ModulePickerItem } from "./module-item";
 import ModuleChanger, { type ColorCode, type ModuleId } from "./module-changer";
-import {
-  processPdfModules,
-  processPdfModulesPreview,
-} from "@/util/pdf/converter";
+import { processPdfModules, processPdfModulesPreview } from "@/util/pdf/converter";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
@@ -56,6 +54,7 @@ import ConfigInfoForm from "./config-info-form";
 import CustomDatesForm from "./custom-dates-form";
 import { calculatePrintCost } from "@/util/pdf/calculator";
 import ConfigOrderForm from "./config-payment-form";
+import { formatDateKeyUTC } from "@/util/date";
 
 export type ConfigBookPart = keyof ConfigModules;
 
@@ -95,8 +94,9 @@ function getCurrentSlice(
 export default function BookConfig(props: {
   bookId?: string;
   isLoggedIn?: boolean;
+  sponsorToken?: string;
 }) {
-  const { bookId, isLoggedIn } = props;
+  const { bookId, isLoggedIn, sponsorToken } = props;
   const router = useRouter();
 
   const {
@@ -200,6 +200,7 @@ export default function BookConfig(props: {
     }
     return newMap;
   });
+  const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
 
   // API mutations
   const utils = api.useUtils();
@@ -444,7 +445,7 @@ export default function BookConfig(props: {
           country: existingBook?.country ?? "DE",
           addHolidays: true,
           customDates: (existingBook?.customDates ?? []).map((d) => ({
-            date: new Date(d.date).toISOString().split("T")[0]!,
+            date: formatDateKeyUTC(new Date(d.date)),
             name: d.name,
           })),
         },
@@ -452,16 +453,15 @@ export default function BookConfig(props: {
         {
           addWatermark: true,
           compressionLevel: "high",
+          format: pickedFormat,
           colorMap: moduleColorMap,
         },
       );
 
-      console.log("PDF PREVIEW RESULT: ", result);
-
       // Create preview URL
       const blob = new Blob([result.pdfFile as BlobPart], {
         type: "application/pdf",
-      }); // console.log("PREFLIGHT RESULT: ", preflightResult)
+      });
       const estimatedCost = calculatePrintCost({
         amount: orderAmount,
         bPages: result.details.bPages,
@@ -504,29 +504,37 @@ export default function BookConfig(props: {
   }
 
   const handleRefreshPrice = async () => {
-    const coverModule = modules.find((m) => m.id === pickedModules.COVER[0]);
-    const pdfUrls = pickedModules.MODULES.map((moduleId, idx) => {
-      const moduleItem = modules.find((m) => m.id === moduleId);
-      return {
-        idx,
-        id: moduleId,
-        type: moduleItem?.type.toLowerCase() ?? "sonstige",
-        pdfUrl: moduleItem?.url ?? "notizen.pdf",
-      };
-    });
-
-    const pdfModules = [
-      ...pdfUrls,
-      {
-        id: coverModule?.id ?? "",
-        idx: 12345,
-        type: FILTER_TYPES.COVER,
-        pdfUrl: coverModule?.url ?? "",
-      },
-    ];
-
     try {
+      const coverModule = modules.find((m) => m.id === pickedModules.COVER[0]);
+      if (!coverModule?.url) {
+        throw new Error("Cover module not found");
+      }
+
+      const pdfUrls = pickedModules.MODULES.map((moduleId, idx) => {
+        const moduleItem = modules.find((m) => m.id === moduleId);
+        if (!moduleItem?.url) {
+          throw new Error(`Module not found: ${moduleId}`);
+        }
+        return {
+          idx,
+          id: moduleId,
+          type: moduleItem.type.toLowerCase(),
+          pdfUrl: moduleItem.url,
+        };
+      });
+
+      const pdfModules = [
+        ...pdfUrls,
+        {
+          id: coverModule.id,
+          idx: 12345,
+          type: FILTER_TYPES.COVER,
+          pdfUrl: coverModule.url,
+        },
+      ];
+
       setPreviewFileURL(undefined);
+      setIsRefreshingPreview(true);
       setIsMakingPreview(true);
       // setModalId("preview")
 
@@ -541,25 +549,22 @@ export default function BookConfig(props: {
           country: existingBook?.country ?? "DE",
           addHolidays: true,
           customDates: (existingBook?.customDates ?? []).map((d) => ({
-            date: new Date(d.date).toISOString().split("T")[0]!,
+            date: formatDateKeyUTC(new Date(d.date)),
             name: d.name,
           })),
         },
         pdfModules,
         {
           compressionLevel: "high",
+          format: pickedFormat,
           colorMap: moduleColorMap,
         },
       );
 
-      console.log("PDF PREVIEW RESULT: ", result);
-
       // Create preview URL
       const blob = new Blob([result.pdfFile as BlobPart], {
         type: "application/pdf",
-      }); // const preflightResult = await preflightDocument(blob)
-
-      // console.log("PREFLIGHT RESULT: ", preflightResult)
+      });
       const estimatedCost = calculatePrintCost({
         amount: orderAmount,
         bPages: result.details.bPages,
@@ -567,7 +572,6 @@ export default function BookConfig(props: {
         format: pickedFormat,
         prices,
       });
-      console.log("FULL_PAGE COUNT: ", result.details.fullPageCount);
       setPreviewPrice(estimatedCost);
       const url = URL.createObjectURL(blob);
       setPreviewFileURL(url);
@@ -578,9 +582,9 @@ export default function BookConfig(props: {
       const errorMessage = err instanceof Error ? err.message : String(err);
       const warning = handleWarningText(errorMessage);
       setConfigWarnings((prev) => [...prev, warning]);
-      setIsMakingPreview(false);
     } finally {
       setIsMakingPreview(false);
+      setIsRefreshingPreview(false);
     }
   };
   function handleWarningText(text: string): string {
@@ -593,6 +597,7 @@ export default function BookConfig(props: {
         warningText = configWarningTexts.planner;
         break;
       default:
+        warningText = text;
         break;
     }
     return warningText;
@@ -644,13 +649,13 @@ export default function BookConfig(props: {
 
       case "info":
         return (
-          <div className="text-info-950 bg-pirrot-blue-50 w-full max-w-xl rounded p-2">
+          <div className="content-card text-info-950 w-full max-w-xl p-3">
             <div className="flex items-center justify-between">
               <h3 className="text-2xl font-bold">Planerinfo</h3>
               <button
                 type="button"
                 onClick={() => setModalId(undefined)}
-                className="bg-pirrot-red-200 text-pirrot-blue-50 rounded p-2"
+                className="btn-soft rounded p-2"
               >
                 <XIcon className="size-6" />
               </button>
@@ -680,13 +685,13 @@ export default function BookConfig(props: {
 
       case "dates":
         return (
-          <div className="text-info-950 bg-pirrot-blue-50 w-full max-w-xl rounded p-2">
+          <div className="content-card text-info-950 w-full max-w-xl p-3">
             <div className="flex items-center justify-between">
               <h3 className="text-2xl font-bold">Eigene Termine</h3>
               <button
                 type="button"
                 onClick={() => setModalId(undefined)}
-                className="bg-pirrot-red-200 text-pirrot-blue-50 rounded p-2"
+                className="btn-soft rounded p-2"
               >
                 <XIcon className="size-6" />
               </button>
@@ -697,21 +702,21 @@ export default function BookConfig(props: {
 
       case "payment":
         return (
-          <div className="text-info-950 bg-pirrot-blue-50 h-full w-full max-w-5xl overflow-y-auto rounded p-2 lg:h-auto">
+          <div className="content-card text-info-950 h-full w-full max-w-5xl overflow-y-auto p-3 lg:h-auto">
             <div className="flex items-center justify-between pb-3">
               <h3 className="text-2xl font-bold">Zahlung</h3>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setModalId("summary")}
-                  className="bg-pirrot-red-200 text-pirrot-blue-50 flex gap-2 rounded p-2"
+                  className="btn-soft flex gap-2 rounded p-2"
                 >
                   <ArrowLeft className="size-6" /> Übersicht
                 </button>
                 <button
                   type="button"
                   onClick={() => setModalId(undefined)}
-                  className="bg-pirrot-red-200 text-pirrot-blue-50 rounded p-2"
+                  className="btn-soft rounded p-2"
                 >
                   <XIcon className="size-6" />
                 </button>
@@ -729,6 +734,7 @@ export default function BookConfig(props: {
                   bookId={bookId}
                   quantity={orderSummary.amount}
                   format={orderSummary.format}
+                  sponsorToken={sponsorToken}
                   onAbortForm={() => setModalId("summary")}
                 />
               )}
@@ -740,18 +746,17 @@ export default function BookConfig(props: {
           event.preventDefault();
           event.stopPropagation();
           handleSaveConfig(event);
-          console.log(orderSummary);
           setModalId("payment");
         }
 
         return (
-          <div className="text-info-950 bg-pirrot-blue-50 h-full w-full max-w-[95vw] overflow-y-auto rounded p-2 lg:h-auto">
+          <div className="content-card text-info-950 h-full w-full max-w-[95vw] overflow-y-auto p-3 lg:h-auto">
             <div className="flex items-center justify-between pb-3">
               <h3 className="text-2xl font-bold">Übersicht</h3>
               <button
                 type="button"
                 onClick={() => setModalId(undefined)}
-                className="bg-pirrot-red-200 text-pirrot-blue-50 rounded p-2"
+                className="btn-soft rounded p-2"
               >
                 <XIcon className="size-6" />
               </button>
@@ -765,7 +770,7 @@ export default function BookConfig(props: {
                   Bestellung. Wenn alle Angaben korrekt sind, können Sie im
                   nächsten Schritt die Zahlung abschließen.
                 </p>
-                <div className="bg-pirrot-blue-100/20 border-pirrot-blue-300/5 rounded border p-2">
+                <div className="field-shell p-2">
                   <ul className="space-y-1">
                     <li>
                       <b>Buchname:</b> {nameInput ?? "Unbenanntes Buch"}
@@ -833,12 +838,12 @@ export default function BookConfig(props: {
                           >
                             <span className="font-semibold">{mod.name}</span>
                             <span
-                              className={`text-xs first-letter:uppercase ${handleModuleDetailBG(mod.type)} rounded px-2 py-0.5`}
+                              className={`text-xs first-letter:uppercase ${handleModuleDetailBG(mod.type)} rounded-lg px-2 py-0.5`}
                             >
                               {mod.type}
                             </span>
                             {mod.theme && (
-                              <span className="bg-pirrot-blue-50 rounded px-2 py-0.5 text-xs first-letter:uppercase">
+                              <span className="field-shell rounded-lg px-2 py-0.5 text-xs first-letter:uppercase">
                                 {mod.theme}
                               </span>
                             )}
@@ -847,11 +852,11 @@ export default function BookConfig(props: {
                       )}
                     </ul>
                     <div className="flex flex-col gap-4">
-                      <div className="border-pirrot-blue-500/10 bg-pirrot-blue-300/20 flex aspect-square w-32 flex-col gap-4 rounded border p-1">
+                      <div className="field-shell flex aspect-square w-32 flex-col gap-4 p-2">
                         <div className="flex justify-between">
                           <BookImage />
                           <h3
-                            className={`bg-pirrot-blue-300/20 flex items-center justify-center rounded px-2 py-0.5 text-xs first-letter:uppercase`}
+                            className={`field-shell flex items-center justify-center rounded-lg px-2 py-0.5 text-xs first-letter:uppercase`}
                           >
                             Umschlag
                           </h3>
@@ -860,16 +865,16 @@ export default function BookConfig(props: {
                           <h5 className="text-sm font-semibold">
                             {orderSummary.pickedModuleDetails?.cover[0]?.name}
                           </h5>
-                          <h5 className="bg-pirrot-blue-50 rounded px-2 py-0.5 text-xs first-letter:uppercase">
+                          <h5 className="field-shell rounded-lg px-2 py-0.5 text-xs first-letter:uppercase">
                             {orderSummary.pickedModuleDetails?.cover[0]?.theme}
                           </h5>
                         </div>
                       </div>
-                      <div className="border-warning-500/10 bg-warning-300/20 flex aspect-square w-32 flex-col gap-2 rounded border p-1">
+                      <div className="field-shell flex aspect-square w-32 flex-col gap-2 p-2">
                         <div className="flex justify-between">
                           <ShellIcon />
                           <h3
-                            className={`bg-warning-300/20 flex items-center justify-center rounded px-2 py-0.5 text-xs first-letter:uppercase`}
+                            className={`field-shell flex items-center justify-center rounded-lg px-2 py-0.5 text-xs first-letter:uppercase`}
                           >
                             Bindung
                           </h3>
@@ -881,7 +886,7 @@ export default function BookConfig(props: {
                                 ?.name
                             }
                           </h5>
-                          <h5 className="bg-pirrot-blue-50 rounded px-2 py-0.5 text-xs first-letter:uppercase">
+                          <h5 className="field-shell rounded-lg px-2 py-0.5 text-xs first-letter:uppercase">
                             {
                               orderSummary.pickedModuleDetails?.settings[0]
                                 ?.theme
@@ -905,8 +910,8 @@ export default function BookConfig(props: {
                         }
                         className="mr-2"
                       />
-                      <label htmlFor="agb" className="font-cairo">
-                        Allgemeine Geschäftsbedingungen.
+                      <label htmlFor="agb" className="form-label">
+                        Allgemeine Geschäftsbedingungen
                       </label>
                     </div>
                     <div className="text-info-950 flex w-full items-center gap-2">
@@ -922,8 +927,8 @@ export default function BookConfig(props: {
                         }
                         className="mr-2"
                       />
-                      <label htmlFor="data" className="font-cairo">
-                        Datenschutzeinwilligung.
+                      <label htmlFor="data" className="form-label">
+                        Datenschutzeinwilligung
                       </label>
                     </div>
                     <div>
@@ -931,7 +936,7 @@ export default function BookConfig(props: {
                         type="button"
                         disabled={!acceptPoliciesValid}
                         onClick={handleFinishOrder}
-                        className="border-pirrot-blue-300/10 bg-pirrot-blue-100/20 flex gap-2 rounded border p-2 font-bold disabled:opacity-25"
+                        className="btn-solid flex gap-2 rounded p-2 font-bold disabled:opacity-25"
                       >
                         Abschließen
                       </button>
@@ -972,13 +977,13 @@ export default function BookConfig(props: {
 
       case "preview":
         return (
-          <div className="text-info-950 bg-pirrot-blue-50 w-full max-w-[90vw] rounded p-2">
+          <div className="content-card text-info-950 w-full max-w-[90vw] p-3">
             <div className="flex items-center justify-between">
               <h3 className="text-2xl font-bold">Vorschau</h3>
               <button
                 type="button"
                 onClick={() => setModalId(undefined)}
-                className="bg-pirrot-red-200 text-pirrot-blue-50 rounded p-2"
+                className="btn-soft rounded p-2"
               >
                 <XIcon className="size-6" />
               </button>
@@ -1010,26 +1015,26 @@ export default function BookConfig(props: {
 
       case "name":
         return (
-          <div className="text-info-950 bg-pirrot-blue-50 z-[69] w-full max-w-xl rounded p-2">
+          <div className="content-card text-info-950 z-[69] w-full max-w-xl p-3">
             <form onSubmit={handleNameSubmit}>
               <div className="flex flex-col gap-2">
-                <label className="font-bold">Projekt Name</label>
+                <label className="form-label">Projektname</label>
                 <div className="flex gap-2">
                   <input
-                    className="bg-pirrot-blue-950/10 w-full rounded p-2"
+                    className="field-shell w-full px-3 py-2.5"
                     onChange={(e) => setNameInput(e.target.value)}
                     value={nameInput ?? ""}
                   />
                   <button
                     type="submit"
-                    className="bg-pirrot-green-200 text-pirrot-blue-50 rounded p-2"
+                    className="btn-solid rounded p-2"
                   >
                     <CheckIcon className="size-6" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setModalId(undefined)}
-                    className="bg-pirrot-red-200 text-pirrot-blue-50 rounded p-2"
+                    className="btn-soft rounded p-2"
                   >
                     <XIcon className="size-6" />
                   </button>
@@ -1090,15 +1095,15 @@ export default function BookConfig(props: {
   return (
     <>
       <div
-        className={`${modalId !== undefined && "blur"} relative flex h-screen w-full flex-col justify-between overflow-hidden md:flex-row`}
+        className={`${modalId !== undefined && "blur"} relative z-10 flex h-screen w-full flex-col justify-between overflow-hidden md:flex-row`}
       >
         {/* LEFT SIDEBAR */}
         <div
-          className={`${isFilterOpen ? "sticky top-0 md:w-xs" : ""} bg-pirrot-blue-200 border-pirrot-blue-950/10 relative flex flex-col gap-2 overflow-y-auto border-b md:h-screen lg:border-r`}
+          className={`${isFilterOpen ? "sticky top-0 md:w-xs" : ""} border-pirrot-blue-950/10 relative flex flex-col gap-2 overflow-y-auto border-b bg-pirrot-blue-100/65 backdrop-blur-sm md:h-screen lg:border-r`}
         >
           <div className="p-2">
             <Filter
-              className="size-9 cursor-pointer"
+              className="btn-soft size-9 cursor-pointer p-2"
               onClick={() => setIsFilterOpen((prev) => !prev)}
             />
           </div>
@@ -1121,13 +1126,14 @@ export default function BookConfig(props: {
                 <h3 className="px-1">Aktive Filter:</h3>
                 <div className="flex w-full max-w-xl flex-wrap gap-1 p-1 lg:max-w-xs">
                   {filterValues.map((f, i) => (
-                    <span
+                    <button
+                      type="button"
                       key={i}
-                      className="bg-pirrot-blue-50 cursor-pointer truncate rounded-full border border-white/50 p-1 px-4 text-center text-sm first-letter:uppercase"
+                      className="field-shell cursor-pointer truncate rounded-full px-3 py-1.5 text-center text-sm first-letter:uppercase"
                       onClick={() => handleFilterValues(f)}
                     >
                       {f}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1135,13 +1141,14 @@ export default function BookConfig(props: {
                 <h3 className="px-1">Nach Kategorie:</h3>
                 <div className="flex w-full max-w-xl flex-wrap gap-1 p-1 lg:max-w-xs">
                   {existingTypes.map((t, i) => (
-                    <span
+                    <button
+                      type="button"
                       key={i}
-                      className="bg-pirrot-blue-50 cursor-pointer truncate rounded-full border border-white/50 p-1 px-4 text-center text-sm first-letter:uppercase"
+                      className="field-shell cursor-pointer truncate rounded-full px-3 py-1.5 text-center text-sm first-letter:uppercase"
                       onClick={() => handleFilterValues(t.name)}
                     >
                       {t.name}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1149,13 +1156,14 @@ export default function BookConfig(props: {
                 <h3 className="px-1">Themes:</h3>
                 <div className="flex flex-wrap gap-1 p-1">
                   {uniqueThemes.map((t, i) => (
-                    <span
+                    <button
+                      type="button"
                       key={i}
-                      className="bg-pirrot-blue-50 cursor-pointer truncate rounded-full border border-white/50 p-1 px-4 text-center text-sm first-letter:uppercase"
+                      className="field-shell cursor-pointer truncate rounded-full px-3 py-1.5 text-center text-sm first-letter:uppercase"
                       onClick={() => handleFilterValues(t ?? "")}
                     >
                       {t}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1164,13 +1172,36 @@ export default function BookConfig(props: {
         </div>
 
         {/* MAIN CONTENT */}
-        <div className="flex w-full max-w-screen-2xl flex-[5] flex-col gap-12 overflow-y-auto">
-          <div className="flex w-full flex-col gap-12 lg:p-4">
+        <div className="flex w-full max-w-screen-2xl flex-[5] flex-col gap-10 overflow-y-auto">
+          <div className="flex w-full flex-col gap-10 p-2 lg:p-4">
+            {/* SPONSORED TEMPLATE BANNER */}
+            {sponsorToken && (
+              <div className="bg-pirrot-green-100 border-pirrot-green-300 flex flex-col items-start justify-between gap-4 rounded-lg border p-4 sm:flex-row sm:items-center">
+                <div className="flex items-center gap-3">
+                  <div className="bg-pirrot-green-300 rounded-full p-2">
+                    <GiftIcon className="size-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-pirrot-green-600 text-lg font-bold">
+                      Gesponserte Vorlage
+                    </h3>
+                    <p className="text-pirrot-green-700 text-sm">
+                      {existingBook?.modules.length ?? 0} Module inklusive •
+                      Zusätzliche Module kosten Extra
+                    </p>
+                  </div>
+                </div>
+                <div className="text-pirrot-green-600 bg-pirrot-green-50 rounded-full px-3 py-1 text-sm">
+                  <span className="font-semibold">Kostenlos</span> inkludiert
+                </div>
+              </div>
+            )}
+
             {/* HEADER */}
-            <div className="bg-pirrot-blue-50 sticky top-0 z-[59] flex w-full flex-col justify-start gap-4 p-1 pb-2 lg:justify-between">
-              <div className="pb-3">
-                <Link
-                  href="/"
+              <div className="content-card sticky top-2 z-[59] flex w-full flex-col justify-start gap-4 p-3 pb-3 lg:justify-between">
+                <div className="pb-3">
+                  <Link
+                    href="/"
                   className="underline underline-offset-4 transition-all duration-300 hover:underline-offset-8"
                 >
                   ← Zurück zum Anfang
@@ -1210,7 +1241,7 @@ export default function BookConfig(props: {
               <div className="flex w-full justify-between gap-2 lg:gap-4">
                 <button
                   onClick={() => setIsFilterOpen((prev) => !prev)}
-                  className="bg-pirrot-blue-950/10 text-pirrot-blue-950 rounded p-2"
+                  className="btn-soft text-pirrot-blue-950 p-2"
                 >
                   <FilterIcon />
                 </button>
@@ -1228,7 +1259,7 @@ export default function BookConfig(props: {
 
                 <button
                   onClick={() => setIsBookInfoOpen((prev) => !prev)}
-                  className="bg-pirrot-blue-950/10 text-pirrot-blue-950 rounded p-2"
+                  className="btn-soft text-pirrot-blue-950 p-2"
                 >
                   <BookA />
                 </button>
@@ -1238,19 +1269,19 @@ export default function BookConfig(props: {
             {/* MODULE SELECTION */}
             <div className="flex flex-col gap-4">
               {/* HERO SECTION */}
-              <div className="relative size-full h-96 rounded">
+              <div className="content-card relative size-full h-72 overflow-hidden rounded lg:h-96">
                 <Image
                   className="size-full rounded object-cover"
-                  src="https://picsum.photos/seed/69420/1200/600"
+                  src="/assets/gen/pirgen_official.png"
                   fill
                   priority
                   alt="hero"
                 />
               </div>
-              <div className="flex items-center justify-between py-8">
+              <div className="flex items-center justify-between py-4 lg:py-8">
                 <div className="flex flex-col gap-2 p-1">
-                  <h3 className="text-2xl font-bold">Die neusten Module</h3>
-                  <p className="w-full max-w-xl">
+                  <h3 className="text-2xl font-bold lg:text-3xl">Die neuesten Module</h3>
+                  <p className="w-full max-w-2xl text-info-800">
                     Hallo! Willkommen bei unserem Buchkonfigurator. Hier können
                     Sie Ihr ganz persönliches Buch nach Ihren Wünschen
                     gestalten. Lassen Sie Ihrer Kreativität freien Lauf und
@@ -1268,7 +1299,7 @@ export default function BookConfig(props: {
               >
                 <Link
                   href="#custom"
-                  className={`border-pirrot-blue-50 group bg-pirrot-blue-950/5 relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded border shadow-xs select-none`}
+                  className="content-card group relative flex cursor-pointer flex-col items-center justify-center gap-2 select-none"
                 >
                   <CloudUpload className="size-9" />
                   <h3 className="font-bold">Modul hochladen</h3>
@@ -1310,13 +1341,13 @@ export default function BookConfig(props: {
 
             {/* CUSTOM MODULES */}
             <div className="scroll-m-40" id="custom"></div>
-            <div className="flex flex-col gap-4 py-8">
-              <div className="flex flex-col-reverse items-center justify-between py-8 lg:flex-row">
+            <div className="flex flex-col gap-4 py-6 lg:py-8">
+              <div className="flex flex-col-reverse items-center justify-between py-4 lg:flex-row lg:py-8">
                 <div className="flex flex-col gap-2 p-1">
-                  <h3 className="text-2xl font-bold text-purple-300">
+                  <h3 className="text-2xl font-bold text-pirrot-blue-700 lg:text-3xl">
                     Eigene Module
                   </h3>
-                  <p className="w-full max-w-xl">
+                  <p className="w-full max-w-2xl text-info-800">
                     {" "}
                     Ihre Ideen, Ihr Material, Ihr Buch. Der Bereich „Eigene
                     Module“ ist Ihre kreative Werkstatt. Verwandeln Sie Ihre
@@ -1327,7 +1358,7 @@ export default function BookConfig(props: {
                   </p>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <CloudUpload className="size-28 text-purple-300" />
+                  <CloudUpload className="size-28 text-pirrot-blue-700" />
                 </div>
               </div>
 
@@ -1361,12 +1392,12 @@ export default function BookConfig(props: {
 
             {/* POPULAR BINDINGS */}
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between py-8">
+              <div className="flex items-center justify-between py-4 lg:py-8">
                 <div className="flex flex-col gap-2 p-1">
-                  <h3 className="text-warning-300 text-2xl font-bold">
+                  <h3 className="text-warning-300 text-2xl font-bold lg:text-3xl">
                     Bindungen
                   </h3>
-                  <p className="w-full max-w-xl">
+                  <p className="w-full max-w-2xl text-info-800">
                     Hier können Sie die passende Bindung für Ihr Buch auswählen.
                     Die Wahl der Bindung ist entscheidend für die Langlebigkeit
                     und das Erscheinungsbild Ihres Werkes. Entscheiden Sie sich
@@ -1378,7 +1409,7 @@ export default function BookConfig(props: {
                 </div>
               </div>
               <div className="overflow-hidden">
-                <div className="grid grid-cols-2 gap-4 p-1">
+                <div className="grid grid-cols-1 gap-4 p-1 md:grid-cols-2">
                   {modules
                     .filter((m) => m.part === "BINDING")
                     .slice(0, 2)
@@ -1424,22 +1455,22 @@ export default function BookConfig(props: {
         </div>
         {/* RIGHT SIDEBAR */}
         <div
-          className={`${isBookInfoOpen ? "h-full lg:w-xs" : ""} bg-pirrot-blue-200 border-pirrot-blue-950/10 relative flex flex-col gap-2 overflow-y-auto border-t md:h-screen lg:border-l`}
+          className={`${isBookInfoOpen ? "h-full lg:w-xs" : ""} border-pirrot-blue-950/10 relative flex flex-col gap-2 overflow-y-auto border-t bg-pirrot-blue-100/65 backdrop-blur-sm md:h-screen lg:border-l`}
         >
           <div className="flex flex-col gap-2">
             <div className="p-2">
               <BookA
                 onClick={() => setIsBookInfoOpen((prev) => !prev)}
-                className="text-info-950 size-9 cursor-pointer"
+                className="btn-soft text-info-950 size-9 cursor-pointer p-2"
               />
             </div>
             {isBookInfoOpen && (
-              <div className="flex flex-col gap-2">
+              <div className="content-card mx-2 flex flex-col gap-2 p-2">
                 <div className="flex flex-col gap-2 p-1">
                   <h3 className="font-bold">Stückzahl</h3>
                   <div className="flex gap-2">
                     <input
-                      className="bg-pirrot-blue-950/10 w-full rounded p-2"
+                      className="field-shell w-full px-3 py-2.5"
                       type="number"
                       onChange={(e) => setOrderAmount(+e.target.value)}
                       value={orderAmount}
@@ -1455,7 +1486,7 @@ export default function BookConfig(props: {
                       onClick={(e) =>
                         setPickedFormat(e?.currentTarget.id as "DIN A5")
                       }
-                      className={`bg-pirrot-blue-50 flex-1 rounded border p-1 ${pickedFormat === "DIN A5" ? "border-pirrot-blue-700/50 border-2" : "border-white/50"}`}
+                      className={`btn-soft flex-1 p-1 ${pickedFormat === "DIN A5" ? "border-pirrot-blue-700/50 border-2" : ""}`}
                     >
                       DIN A5
                     </button>
@@ -1465,7 +1496,7 @@ export default function BookConfig(props: {
                       onClick={(e) =>
                         setPickedFormat(e?.currentTarget.id as "DIN A4")
                       }
-                      className={`bg-pirrot-blue-50 flex-1 rounded border p-1 ${pickedFormat === "DIN A4" ? "border-pirrot-blue-700/50 border-2" : "border-white/50"}`}
+                      className={`btn-soft flex-1 p-1 ${pickedFormat === "DIN A4" ? "border-pirrot-blue-700/50 border-2" : ""}`}
                     >
                       DIN A4
                     </button>
@@ -1474,7 +1505,7 @@ export default function BookConfig(props: {
               </div>
             )}
             {isBookInfoOpen && (
-              <div className="bg-pirrot-blue-50 flex flex-col gap-2 p-2">
+              <div className="content-card mx-2 flex flex-col gap-2 p-2">
                 <div className="flex justify-between">
                   <h3 className="font-bold">Kosten Übersicht</h3>
                   <motion.button
@@ -1493,7 +1524,7 @@ export default function BookConfig(props: {
                 </div>
 
                 <div
-                  className={`bg-pirrot-blue-950/5 ${isCostOpen ? "aspect-video" : "h-9"} rounded p-1 transition-transform duration-300`}
+                  className={`field-shell ${isCostOpen ? "aspect-video" : "h-9"} p-1 transition-transform duration-300`}
                 >
                   <div className="size-full overflow-y-auto transition-transform duration-300">
                     <h3>Seiten gesamt: {totalPagesCount}</h3>
@@ -1506,7 +1537,7 @@ export default function BookConfig(props: {
 
                 <div className="flex w-full justify-between">
                   <button
-                    className="bg-pirrot-blue-950/20 hover:bg-pirrot-blue-950/50 flex gap-2 p-2 px-6"
+                    className="btn-soft flex gap-2 px-4 py-2"
                     type="button"
                     disabled={isMakingPreview}
                     onClick={handleRefreshPrice}
@@ -1524,6 +1555,27 @@ export default function BookConfig(props: {
                     </button>
                   )}
                 </div>
+                {isRefreshingPreview && (
+                  <p className="text-info-800 text-sm">
+                    Vorschau wird erstellt...
+                  </p>
+                )}
+                {configWarnings.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-2">
+                    {configWarnings.map((w, i) => (
+                      <button
+                        key={i}
+                        id={`warning-${i}`}
+                        type="button"
+                        onClick={handleConfigWarning}
+                        className="border-pirrot-red-500/50 bg-pirrot-red-300/80 flex w-full gap-2 rounded border p-2 text-start text-sm"
+                      >
+                        <XIcon className="size-4 shrink-0" />
+                        <span>{w}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1543,11 +1595,11 @@ export default function BookConfig(props: {
           )}
 
           {isBookInfoOpen && (
-            <div className="border-info-950/5 sticky bottom-1 flex w-full gap-2 border-t p-1">
+            <div className="border-info-950/5 sticky bottom-1 flex w-full gap-2 border-t bg-pirrot-blue-100/85 p-1 backdrop-blur-sm">
               <button
                 disabled={isSavingConfig}
                 onClick={handleSaveConfig}
-                className="disabled:border-pirrot-blue-300 disabled:text-pirrot-blue-700 disabled:bg-pirrot-blue-100 bg-pirrot-green-100 border-pirrot-green-300 text-pirrot-green-700 flex gap-2 rounded border-2 p-2 font-bold disabled:opacity-25"
+                className="btn-soft flex flex-1 justify-center gap-2 p-2 font-bold disabled:opacity-25"
               >
                 {isSavingConfig ? <LoadingSpinner /> : "Speichern"}{" "}
                 <SaveIcon className="size-6" />
@@ -1555,7 +1607,7 @@ export default function BookConfig(props: {
               <button
                 onClick={handleSummaryView}
                 disabled={!isConfigComplete}
-                className="disabled:border-pirrot-blue-300 disabled:text-pirrot-blue-700 disabled:bg-pirrot-blue-100 bg-pirrot-green-100 border-pirrot-green-300 text-pirrot-green-700 flex gap-2 rounded border-2 p-2 font-bold disabled:opacity-25"
+                className="btn-solid flex flex-1 justify-center gap-2 p-2 font-bold disabled:opacity-25"
               >
                 Weiter <ArrowRight className="size-6" />
               </button>

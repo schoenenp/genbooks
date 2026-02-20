@@ -5,8 +5,27 @@ export const formatDisplayDate = (date: Date): string => {
   return `${day}-${month}-${year}`;
 };
 
+export const formatDateKeyLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+export const formatDateKeyUTC = (date: Date): string => {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+export const utcDateToLocalDate = (date: Date): Date =>
+  new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+
 export const parseDate = (dateString: string): Date | null => {
-  const parts = dateString.split("-");
+  const normalized = dateString.trim();
+  if (!normalized) return null;
+  const parts = normalized.split(/[./-]/);
   if (parts.length !== 3) return null;
   const dayStr = parts[0]!;
   const monthStr = parts[1]!;

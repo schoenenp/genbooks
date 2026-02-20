@@ -2,6 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import { BaseHandler } from "./base.handler";
 import type { TagDefinition, TagContext, HandlerResult } from "../types";
 import { convertPdfToGrayscale } from "../grayscale";
+import { convertPdfToPreviewGrayscale } from "../preview-grayscale";
 
 /**
  * Handler for "umschlag" (cover) modules.
@@ -64,10 +65,12 @@ class CoverHandler extends BaseHandler {
 
     let processedDoc = coverDoc;
     if (context.isGrayscale) {
-      const grayscaleBytes = await convertPdfToGrayscale(
-        await coverDoc.save(),
-        { apiKey: context.grayscaleApiKey },
-      );
+      const coverBytes = await coverDoc.save();
+      const grayscaleBytes = context.previewMode
+        ? await convertPdfToPreviewGrayscale(coverBytes)
+        : await convertPdfToGrayscale(coverBytes, {
+            apiKey: context.grayscaleApiKey,
+          });
       processedDoc = await PDFDocument.load(grayscaleBytes);
     }
 

@@ -8,6 +8,12 @@ export const env = createEnv({
    */
   server: {
     STRIPE_SECRET_KEY: z.string(),
+    STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    STRIPE_CONNECT_THIN_WEBHOOK_SECRET: z.string().optional(),
+    STRIPE_SUBSCRIPTION_WEBHOOK_SECRET: z.string().optional(),
+    STRIPE_CONNECT_SUBSCRIPTION_PRICE_ID: z.string().optional(),
+    STRIPE_CONNECT_APPLICATION_FEE_CENTS: z.string().optional(),
+    STRIPE_CONNECT_COUNTRY: z.string().optional(),
     AUTH_SECRET:
       process.env.NODE_ENV === "production"
         ? z.string()
@@ -20,6 +26,7 @@ export const env = createEnv({
     STRIPE_SUCCESS_URL: z.string().url(),
     STRIPE_CANCEL_URL: z.string().url(),
     BASE_APP_URL: z.string().url(),
+    SPONSOR_LINK_SECRET: z.string().optional(),
     EMAIL_SERVER_PASSWORD: z.string(),
     EMAIL_SERVER_HOST: z.string(),
     EMAIL_FROM: z.string(),
@@ -52,6 +59,16 @@ export const env = createEnv({
   runtimeEnv: {
     NEXT_PUBLIC_STRIPE_PUSHABLE_KEY:process.env.NEXT_PUBLIC_STRIPE_PUSHABLE_KEY,
     STRIPE_SECRET_KEY:process.env.STRIPE_SECRET_KEY,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+    STRIPE_CONNECT_THIN_WEBHOOK_SECRET:
+      process.env.STRIPE_CONNECT_THIN_WEBHOOK_SECRET,
+    STRIPE_SUBSCRIPTION_WEBHOOK_SECRET:
+      process.env.STRIPE_SUBSCRIPTION_WEBHOOK_SECRET,
+    STRIPE_CONNECT_SUBSCRIPTION_PRICE_ID:
+      process.env.STRIPE_CONNECT_SUBSCRIPTION_PRICE_ID,
+    STRIPE_CONNECT_APPLICATION_FEE_CENTS:
+      process.env.STRIPE_CONNECT_APPLICATION_FEE_CENTS,
+    STRIPE_CONNECT_COUNTRY: process.env.STRIPE_CONNECT_COUNTRY,
     AUTH_SECRET: process.env.AUTH_SECRET,
     EMAIL_SERVER_USER: process.env.EMAIL_SERVER_USER,
     NEXT_PUBLIC_CDN_SERVER_URL:process.env.NEXT_PUBLIC_CDN_SERVER_URL,
@@ -73,6 +90,7 @@ export const env = createEnv({
     STRIPE_SUCCESS_URL: process.env.STRIPE_SUCCESS_URL,
     STRIPE_CANCEL_URL: process.env.STRIPE_CANCEL_URL,
     BASE_APP_URL: process.env.BASE_APP_URL,
+    SPONSOR_LINK_SECRET: process.env.SPONSOR_LINK_SECRET,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

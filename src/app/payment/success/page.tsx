@@ -1,23 +1,27 @@
-
 import { HydrateClient } from "@/trpc/server";
 import Navigation from "@/app/_components/navigation";
-import Link from "next/link";
-import Countdown from "@/app/_components/countdown";
+import CheckoutSuccess from "./_components/checkout-success";
 
 export default async function Success({
   searchParams,
 }: {
-  searchParams: Promise<{ session_id: string }>
-}){ 
-
-  const {session_id} = await searchParams
+  searchParams: Promise<{
+    session_id?: string;
+    order_ref?: string;
+    flow?: string;
+  }>;
+}) {
+  const { session_id, order_ref, flow } = await searchParams;
   return (
     <HydrateClient>
-      <main className="flex min-h-screen flex-col items-center bg-gradient-to-b gap-12 from-pirrot-blue-50 to-pirrot-blue-200 text-info-900">
+      <main className="flex min-h-screen flex-col items-center gap-12 bg-gradient-to-b from-pirrot-blue-50 to-pirrot-blue-200 text-info-900">
         <Navigation />
-        <div className="size-full flex flex-col gap-2 justify-center items-center pt-12">
-        <h1 className="text-2xl uppercase font-bold text-pirrot-green-300">Geschafft!</h1>
-        <p className="w-full max-w-xl">Der Bezahlvorgang wurde abgeschlossen, ihre Bestellung wird bearbeitet. Sie werden in <Countdown session={session_id} redirect={"/dashboard?view=orders"} /> Sekunden zur <Link className="underline font-semibold" href="/dashboard?view=orders">{" Bestellübersicht "}</Link> oder zum Startbildschirm weitergeleitet. Eine E-Mail für die Bestellung sollte in Ihrem Postfach liegen.</p>
+        <div className="flex w-full justify-center px-4 pt-12">
+          <CheckoutSuccess
+            sessionId={session_id}
+            orderRef={order_ref}
+            flow={flow}
+          />
         </div>
       </main>
     </HydrateClient>

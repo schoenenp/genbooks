@@ -1,4 +1,5 @@
 import type { PDFDocument } from "pdf-lib";
+import { logger } from "@/util/logger";
 
 /**
  * Add a watermark image to all pages in the PDF
@@ -22,6 +23,6 @@ export async function addWatermark(pdfDoc: PDFDocument): Promise<void> {
       });
     }
   } catch (error) {
-    console.error("Failed to add watermark:", error);
+    logger.error("failed_to_add_pdf_watermark", { error });
   }
 }

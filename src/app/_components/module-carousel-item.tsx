@@ -41,27 +41,27 @@ export default function ModuleCarouselItem(props: ModuleItemProps){
 
     return <>
      <Modal selector="modal-hook" show={isPickingModule}>
-        <div  className="absolute top-0 left-0 size-full flex z-[69] bg-info-950/90 justify-center items-center">
-<div className="w-full text-pirrot-blue-950 font-bold p-4 max-w-xl rounded-xl bg-pirrot-blue-50 z-[69] pointer-events-none">
+        <div  className="absolute top-0 left-0 z-[69] flex size-full items-center justify-center bg-info-950/90">
+<div className="content-card pointer-events-none z-[69] w-full max-w-xl p-4 text-pirrot-blue-950 font-bold">
 <form onSubmit={handlePickedModule} className="w-full flex flex-col gap-1 pointer-events-auto">
     <div className="w-full flex justify-between items-center">
 <h3 className="text-xl">{name}</h3>
-<button onClick={()=> setIsPickingModule(false)} type="button"  className="p-2  bg-pirrot-red-400 rounded text-pirrot-blue-50">
+<button onClick={()=> setIsPickingModule(false)} type="button"  className="btn-soft p-2 text-pirrot-blue-900">
     <XIcon />
 </button>
     </div>
-<div className="w-full flex justify-center items-center h-full border-2 rounded">
+<div className="field-shell flex h-full w-full items-center justify-center rounded">
 <ModulePreview moduleId={id} />
 </div>
 <div>
-{props.isPicked ? <button className="w-full p-2  items-center justify-between bg-pirrot-red-100 text-center  rounded text-info-950 flex gap-2"><MinusIcon /> Abwählen </button> : <button  className="w-full p-2  items-center justify-between border-2 border-pirrot-blue-950  text-center  rounded text-info-950 flex gap-2"> <PlusIcon /> Auswählen</button>}
+{props.isPicked ? <button className="btn-soft flex w-full items-center justify-between gap-2 p-2"><MinusIcon /> Abwählen </button> : <button  className="btn-solid flex w-full items-center justify-between gap-2 p-2"> <PlusIcon /> Auswählen</button>}
 </div>
 </form>
 </div>
     </div>
     </Modal>
     <div onClick={() => setIsPickingModule(true)}  className={`select-none text-center relative flex flex-col gap-2 group cursor-pointer flex-[0_0_75%] sm:flex-[0_0_66%] xl:flex-[0_0_30%] min-w-0 pb-4 p-2 md:p-4 `}>
-        <div className={`flex border rounded shadow-xs flex-col gap-2 group cursor-pointer min-w-0 bg-pirrot-blue-50/80
+        <div className={`content-card flex min-w-0 flex-col gap-2
   ${props.isPicked
     ? "border-2 " + getBorderColor(type.toLocaleLowerCase())
     : "border-white/50"}

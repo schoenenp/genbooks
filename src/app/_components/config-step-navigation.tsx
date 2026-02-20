@@ -24,12 +24,12 @@ export default function ConfigStepNavigation({
               key={step.id}
               onClick={() => goToStep(step.id as StepId)}
               className={`
-                px-4 py-2 flex-1  rounded-lg text-info-950 transition-colors
+                px-4 py-2 flex-1 rounded-lg text-info-950 transition-colors
                 ${isCurrentStep 
-                  ? `border-2 ${isComplete? "bg-pirrot-green-200" : "bg-pirrot-blue-950/10" } border-info-950/20 ` 
+                  ? `border-2 ${isComplete? "bg-pirrot-green-200" : "field-shell" } border-info-950/20 ` 
                   : isComplete 
                     ? 'bg-pirrot-green-200 '
-                    : 'bg-pirrot-blue-950/10 '
+                    : 'field-shell '
                 }
               `}
             >

@@ -3,15 +3,23 @@ interface ToggleSwitchProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: string;
+  disabled?: boolean;
 }
 
-export function ToggleSwitch({ checked, onChange, label }: ToggleSwitchProps) {
+export function ToggleSwitch({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+}: ToggleSwitchProps) {
   return (
-    <div className="flex w-full flex-wrap justify-between p-1">
-      <h3>{label}</h3>
+    <div className="field-shell flex w-full flex-wrap items-center justify-between p-2">
+      <h3 className="text-sm font-semibold">{label}</h3>
       <motion.div
-        onClick={() => onChange(!checked)}
-        className={`flex w-10 cursor-pointer items-center rounded-full border border-white/50 ${checked ? "bg-pirrot-green-300" : "bg-pirrot-blue-50"}`}
+        onClick={() => {
+          if (!disabled) onChange(!checked);
+        }}
+        className={`flex w-10 items-center rounded-full border ${disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"} ${checked ? "border-pirrot-green-400 bg-pirrot-green-300" : "border-pirrot-blue-200 bg-pirrot-blue-50"}`}
         whileTap={{ scale: 0.95 }}
         transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >

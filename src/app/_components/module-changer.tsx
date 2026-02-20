@@ -118,8 +118,8 @@ export default function ModuleChanger(props:{
         return (
             <Reorder.Item key={item.id} value={item.id}>
                 <div className="py-0.5">
-                    <div className={`w-full cursor-grab p-2 rounded text-info-950 flex gap-2 items-center border  ${
-                        isPlannerItem ? 'bg-pirrot-blue-50 border-2 border-pirrot-green-300' : 'bg-pirrot-blue-50 border-white/50'
+                    <div className={`field-shell w-full cursor-grab p-2 rounded text-info-950 flex gap-2 items-center border  ${
+                        isPlannerItem ? 'border-2 border-pirrot-green-300 bg-pirrot-green-50/40' : ''
                     }`}>
                         <div className="size-12 flex justify-center items-center p-0.5">
                         {isPlannerItem ? <CalendarDays className="text-pirrot-green-300" /> : <GripVertical />}    
@@ -174,8 +174,8 @@ export default function ModuleChanger(props:{
 
         
         return (
-            <div className="py-0.5 my-1" key={item.id}>
-                <div className={`w-full p-2 bg-pirrot-blue-50 border-2 rounded
+            <div className="my-1 py-0.5" key={item.id}>
+                <div className={`field-shell w-full p-2 border-2 rounded
                     ${type === "COVER" && `
                     border-pirrot-blue-300 text-pirrot-blue-950`}
                     ${type === "SETTINGS" && `
@@ -207,15 +207,15 @@ export default function ModuleChanger(props:{
         )
     }
 
-    return <div className="flex flex-col gap-2">
+    return <div className="content-card flex flex-col gap-2 p-2">
         <div className="flex flex-col gap-2">
-            <h2>BUCH AUFBAU</h2>
+            <h2 className="text-sm font-black uppercase tracking-wide">Buchaufbau</h2>
             
             {/* COVER - Static (not reorderable) */}
             <div className="mb-2 flex flex-col gap-1">
                 <h3 className="text-sm font-semibold mb-1">Umschlag</h3>
                 {coverItem ? createStaticItem(coverItem, 'COVER') : (
-                    <div className="w-full p-4 bg-pirrot-blue-50/80 rounded my-1">
+                    <div className="field-shell my-1 w-full p-4">
                         Kein Umschlag ausgewählt.
                     </div>
                 )}
@@ -232,14 +232,14 @@ export default function ModuleChanger(props:{
                     <button 
                         type="button" 
                         onClick={() => setAllModuleColors(1)} 
-                        className={`flex-1 p-1 border rounded bg-pirrot-blue-50 ${contentIsColor !== null && !contentIsColor ? "border-pirrot-blue-700/50 border-2" : "border-white/50"}`}>S/W</button>
+                        className={`btn-soft flex-1 p-1 ${contentIsColor !== null && !contentIsColor ? "border-pirrot-blue-700/50 border-2" : ""}`}>S/W</button>
                     <button 
                         type="button" 
                         onClick={() => setAllModuleColors(4)}
-                        className={`flex-1 p-1 border rounded bg-pirrot-blue-50 ${contentIsColor !== null &&  contentIsColor ? "border-pirrot-blue-700/50 border-2" : "border-white/50"}`}>Farbe</button>
+                        className={`btn-soft flex-1 p-1 ${contentIsColor !== null &&  contentIsColor ? "border-pirrot-blue-700/50 border-2" : ""}`}>Farbe</button>
                 </div>
                 {orderedItems.length === 0 ? (
-                    <div className="w-full p-4 bg-pirrot-blue-50/80 rounded my-1">
+                    <div className="field-shell my-1 w-full p-4">
                         Keine Module oder Planer ausgewählt.
                     </div>
                 ) : (
@@ -258,7 +258,7 @@ export default function ModuleChanger(props:{
             <div className="mb-2">
                 <h3 className="text-sm font-semibold mb-1">Bindung</h3>
                 {bindingItem ? createStaticItem(bindingItem, 'SETTINGS') : (
-                    <div className="w-full p-4 bg-pirrot-blue-50/80 rounded my-1">
+                    <div className="field-shell my-1 w-full p-4">
                         Keine Bindung ausgewählt.
                     </div>
                 )}

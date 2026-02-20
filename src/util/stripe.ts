@@ -1,9 +1,13 @@
-import Stripe from 'stripe'
-import { env } from '@/env';
+import Stripe from "stripe";
+import { env } from "@/env";
 
-export const stripe = new Stripe(env.STRIPE_SECRET_KEY, {
-  apiVersion: '2025-08-27.basil',
-});
+// NOTE:
+// Use a Stripe Client instance for all Stripe requests.
+// Keep API version unset so the SDK default is used automatically.
+export const stripeClient = new Stripe(env.STRIPE_SECRET_KEY);
+
+// Backward-compatible alias for existing imports in the app.
+export const stripe = stripeClient;
 
 export function toStripeAddress(address: {
   streetNr: string;
@@ -24,4 +28,3 @@ export function toStripeAddress(address: {
     postal_code: zip
   }
 }
-

@@ -14,6 +14,7 @@ import { ZodError } from "zod";
 import { auth } from "@/server/auth";
 import { db } from "@/server/db";
 import { muid } from "@/util/book/functions";
+import { logger } from "@/util/logger";
 
 /**
  * 1. CONTEXT
@@ -49,12 +50,27 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
+    const rateLimitCause =
+      error.cause && typeof error.cause === "object"
+        ? (error.cause as { retryAfterSeconds?: unknown })
+        : undefined;
+    const retryAfterSeconds =
+      typeof rateLimitCause?.retryAfterSeconds === "number" &&
+      Number.isFinite(rateLimitCause.retryAfterSeconds) &&
+      rateLimitCause.retryAfterSeconds > 0
+        ? Math.ceil(rateLimitCause.retryAfterSeconds)
+        : null;
+
     return {
       ...shape,
       data: {
         ...shape.data,
         zodError:
           error.cause instanceof ZodError ? error.cause.flatten() : null,
+        rateLimit:
+          retryAfterSeconds !== null
+            ? { retryAfterSeconds }
+            : null,
       },
     };
   },
@@ -99,7 +115,7 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
   const result = await next();
 
   const end = Date.now();
-  console.log(`[TRPC] ${path} took ${end - start}ms to execute`);
+  logger.debug("trpc_request_timing", { path, durationMs: end - start });
 
   return result;
 });

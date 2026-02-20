@@ -68,7 +68,7 @@ export default function ModuleCarousel({
         </div>
       </div>
       
-      <div className={`overflow-hidden border rounded ${borderColor} ${bgColor} py-16`} ref={carouselRef}>
+      <div className={`content-card overflow-hidden ${borderColor} ${bgColor} py-12`} ref={carouselRef}>
         <div className="flex touch-pan-y touch-pinch-zoom">
           {filteredModules.map((m) => (
             <ModuleCarouselItem

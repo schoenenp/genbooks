@@ -6,7 +6,12 @@ import DatePicker from "react-datepicker";
 import { de } from "date-fns/locale";
 import { registerLocale } from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { formatDisplayDate, parseDate } from "@/util/date";
+import {
+  formatDateKeyLocal,
+  formatDisplayDate,
+  parseDate,
+  utcDateToLocalDate,
+} from "@/util/date";
 
 registerLocale("de", de);
 
@@ -18,30 +23,37 @@ export default function CustomDatesForm(props: { bookId: string }) {
 
   const saveDates = api.book.saveCustomDates.useMutation({
     onSuccess: async () => {
-      console.log("Custom dates saved successfully");
       await utils.book.getById.invalidate({ id: bookId });
+      await utils.config.init.invalidate({ bookId });
     },
-    onError: (error) => {
-      console.error("Failed to save custom dates:", error);
-    },
+    onError: () => undefined,
   });
 
-  const [dates, setDates] = useState<{ date: Date; name: string }[]>(
-    (() => {
-      const initial =
-        book?.customDates?.map((d) => ({
-          date: new Date(d.date),
-          name: d.name,
-        })) ?? [];
-      console.log("Initial custom dates:", initial);
-      return initial;
-    })(),
-  );
+  const [dates, setDates] = useState<{ date: Date; name: string }[]>([]);
 
   const [newDate, setNewDate] = useState<Date | null>(null);
   const [newDateInput, setNewDateInput] = useState("");
   const [newName, setNewName] = useState("");
   const [dateError, setDateError] = useState("");
+
+  const formatPickerDate = (date: Date) => formatDisplayDate(date).replaceAll("-", ".");
+
+  useEffect(() => {
+    if (!book) return;
+    const initial =
+      book.customDates?.map((d) => ({
+        // Persisted custom dates are UTC datetimes; convert to local calendar date
+        date: utcDateToLocalDate(new Date(d.date)),
+        name: d.name,
+      })) ?? [];
+    setDates(initial);
+  }, [book]);
+
+  const toPayload = (items: { date: Date; name: string }[]) =>
+    items.map((d) => ({
+      date: formatDateKeyLocal(d.date),
+      name: d.name,
+    }));
 
   // Parse date input and update newDate
   useEffect(() => {
@@ -62,7 +74,7 @@ export default function CustomDatesForm(props: { bookId: string }) {
     } else {
       setNewDate(null);
       setDateError(
-        "Ungültiges Datum. Bitte verwenden Sie das Format DD.MM.YYYY.",
+        "Ungültiges Datum. Bitte verwenden Sie DD.MM.YYYY oder DD-MM-YYYY.",
       );
     }
   }, [newDateInput]);
@@ -78,10 +90,7 @@ export default function CustomDatesForm(props: { bookId: string }) {
     setDates(updated);
     saveDates.mutate({
       bookId,
-      dates: updated.map((d) => ({
-        date: d.date.toISOString().split("T")[0]!,
-        name: d.name,
-      })),
+      dates: toPayload(updated),
     });
     setNewDate(null);
     setNewDateInput("");
@@ -94,25 +103,22 @@ export default function CustomDatesForm(props: { bookId: string }) {
     setDates(updated);
     saveDates.mutate({
       bookId,
-      dates: updated.map((d) => ({
-        date: d.date.toISOString().split("T")[0]!,
-        name: d.name,
-      })),
+      dates: toPayload(updated),
     });
   }
 
-  if (isLoading) return <div>Loading custom dates...</div>;
+  if (isLoading) return <div className="content-card p-4">Termine werden geladen...</div>;
   if (!book) return null;
 
   return (
-    <div className="border-pirrot-blue-200 bg-pirrot-blue-50/50 flex flex-col gap-4 rounded border p-4">
-      <h3 className="text-lg font-bold">Eigene Termine</h3>
+    <div className="content-card flex flex-col gap-4 p-4">
+      <h3 className="text-lg font-bold">Terminübersicht</h3>
 
       <div className="flex flex-col gap-2">
         {dates.map((d, i) => (
           <div
-            key={`${d.date.toISOString()}-${d.name}`}
-            className="border-pirrot-blue-100 flex items-center justify-between rounded border bg-white p-2"
+            key={`${formatDateKeyLocal(d.date)}-${d.name}-${i}`}
+            className="field-shell flex items-center justify-between p-2"
           >
             <div>
               <span className="mr-2 font-bold">
@@ -136,7 +142,7 @@ export default function CustomDatesForm(props: { bookId: string }) {
           selected={newDate}
           onChange={(date: Date | null) => {
             setNewDate(date);
-            setNewDateInput(date ? formatDisplayDate(date) : "");
+            setNewDateInput(date ? formatPickerDate(date) : "");
             setDateError("");
           }}
           onChangeRaw={(e) => {
@@ -145,21 +151,20 @@ export default function CustomDatesForm(props: { bookId: string }) {
           value={newDateInput}
           dateFormat="dd.MM.yyyy"
           locale="de"
-          className={`rounded border p-1 text-sm ${
-            dateError ? "border-red-500" : "border-gray-300"
-          }`}
+          className={`field-shell px-3 py-2.5 text-sm ${dateError ? "border-red-500" : "border-gray-300"
+            }`}
         />
         <input
           type="text"
           placeholder="Name (z.B. Wandertag)"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          className="flex-1 rounded border p-1 text-sm"
+          className="field-shell flex-1 px-3 py-2.5 text-sm"
         />
         <button
           type="button"
           onClick={addDate}
-          className="bg-pirrot-blue-500 hover:bg-pirrot-blue-600 rounded p-2 text-white disabled:opacity-50"
+          className="btn-solid px-3 py-2.5 disabled:opacity-50"
           disabled={!newDate || !newName || saveDates.isPending}
         >
           <Plus size={20} />

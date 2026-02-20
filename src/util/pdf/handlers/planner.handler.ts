@@ -5,6 +5,8 @@ import { formatDate, generateWeekDates, getA4WithBleeding } from "../helpers";
 import { getHolidays, type DateItem } from "../../book/functions";
 import { normalizeDate } from "../helpers";
 import { convertPdfToGrayscale } from "../grayscale";
+import { convertPdfToPreviewGrayscale } from "../preview-grayscale";
+import { estimatePlannerPageCount } from "./planner-page-count";
 
 /**
  * Handler for "wochenplaner" (weekly planner) modules.
@@ -133,28 +135,26 @@ class PlannerHandler extends BaseHandler {
       this.fillTags(form, weekContext);
       form.flatten();
 
-      // Convert this week's pages to grayscale if needed (small payload per week)
-      let sourceDoc = weekDoc;
-      if (isGrayscale) {
-        const weekBytes = await weekDoc.save();
-        const grayscaleBytes = await convertPdfToGrayscale(weekBytes, {
-          apiKey: grayscaleApiKey,
-        });
-        sourceDoc = await PDFDocument.load(grayscaleBytes);
-      }
-
       // Copy pages to final PDF
-      const pages = await moduleDoc.copyPages(
-        sourceDoc,
-        sourceDoc.getPageIndices(),
-      );
+      const pages = await moduleDoc.copyPages(weekDoc, weekDoc.getPageIndices());
       pages.forEach((page) => moduleDoc.addPage(page));
       workingPageCount += pages.length;
     }
 
+    let outputDoc = moduleDoc;
+    if (isGrayscale) {
+      const moduleBytes = await moduleDoc.save();
+      const grayscaleBytes = previewMode
+        ? await convertPdfToPreviewGrayscale(moduleBytes)
+        : await convertPdfToGrayscale(moduleBytes, {
+            apiKey: grayscaleApiKey,
+          });
+      outputDoc = await PDFDocument.load(grayscaleBytes);
+    }
+
     const pages = await finalPdf.copyPages(
-      moduleDoc,
-      moduleDoc.getPageIndices(),
+      outputDoc,
+      outputDoc.getPageIndices(),
     );
     pages.forEach((page) => finalPdf.addPage(page));
 
@@ -198,26 +198,12 @@ class PlannerHandler extends BaseHandler {
   }
 
   async calculatePageCount(context: TagContext): Promise<number> {
-    const { bookDetails } = context;
-
-    const currentDate = new Date();
-    const nextYearsDate = new Date(currentDate);
-    nextYearsDate.setFullYear(currentDate.getFullYear() + 1);
-
-    const startTime = bookDetails.period.start
-      ? new Date(bookDetails.period.start)
-      : new Date(currentDate);
-    startTime.setDate(startTime.getDate() - 7);
-
-    const endTime = bookDetails.period.end
-      ? new Date(bookDetails.period.end)
-      : new Date(nextYearsDate);
-
-    const diffTime = Math.abs(endTime.getTime() - startTime.getTime());
-    const totalWeeks = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
-
-    // Each week is 2 pages (ignoring alignment pages for this estimate)
-    return (totalWeeks + 1) * 2;
+    return estimatePlannerPageCount({
+      periodStart: context.bookDetails.period.start,
+      periodEnd: context.bookDetails.period.end,
+      previewMode: context.previewMode,
+      currentPageCount: context.currentPageCount ?? context.finalPdf.getPageCount(),
+    });
   }
 }
 

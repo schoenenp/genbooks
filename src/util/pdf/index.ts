@@ -22,6 +22,7 @@ export { processPdfModules, processPdfModulesPreview } from "./converter";
 // Types
 export type {
   BookDetails,
+  BookFormat,
   PDFModule,
   ProcessingOptions,
   Result,
@@ -43,6 +44,7 @@ export {
   generateWeekDates,
   fetchPdfBytes,
   getBlankPagePdfBytes,
+  getPageSizeWithBleed,
   getA4WithBleeding,
   PAGE_DIMENSIONS,
 } from "./helpers";

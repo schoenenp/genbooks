@@ -63,8 +63,8 @@ function useCoverPreview(template: TemplatePreviewProps["template"]) {
       if (generated) {
         setPreviewUrl(generated);
       }
-    } catch (error) {
-      console.warn("Failed to generate cover preview:", error);
+    } catch {
+      // Ignore thumbnail generation failure and fall back to existing image.
     } finally {
       setIsGenerating(false);
       setHasTried(true);
@@ -117,7 +117,7 @@ function TemplateCard({
 
   return (
     <div id={`template-${template.id}`} className="w-full min-w-0">
-      <div className="border-pirrot-blue-100 flex h-full w-full flex-col gap-4 rounded-xl border bg-white/50 p-4 shadow-sm transition-shadow hover:shadow-md">
+      <div className="content-card flex h-full w-full flex-col gap-4 p-4 transition-shadow hover:shadow-md">
         <div className="bg-pirrot-blue-50 flex aspect-square min-h-52 items-center justify-center overflow-hidden rounded-lg p-4">
           <div className="origin-center scale-75">
             <BookPreview
@@ -172,7 +172,7 @@ function TemplateCard({
           type="button"
           disabled={isCloning}
           onClick={() => cloneTemplate({ templateId: template.id })}
-          className="bg-pirrot-blue-500 hover:bg-pirrot-blue-600 mt-auto flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-bold text-white transition-colors disabled:opacity-50"
+          className="btn-solid mt-auto flex items-center justify-center gap-2 px-4 py-2 disabled:opacity-50"
         >
           {isCloning ? (
             <LoadingSpinner />
@@ -242,18 +242,18 @@ export default function TemplateGallery() {
   }
 
   return (
-    <section className="bg-pirrot-blue-50 flex w-full flex-col items-center gap-8 px-4 py-12">
+    <section className="section-shell flex w-full flex-col items-center gap-8 py-12">
       <div className="flex flex-col items-center gap-2 text-center">
-        <h2 className="font-cairo text-pirrot-blue-950 text-3xl font-black uppercase lg:text-5xl">
+        <h2 className="text-pirrot-blue-950 text-3xl font-black uppercase lg:text-5xl">
           Vorlagen
         </h2>
-        <p className="font-baloo text-info-900 max-w-xl text-lg">
+        <p className="text-info-800 max-w-xl text-lg">
           Starten Sie schneller mit unseren vorgefertigten Planern.
         </p>
       </div>
 
       <div
-        className="scrollbar-hide relative w-full max-w-7xl overflow-x-auto px-4 py-2"
+        className="content-card scrollbar-hide relative w-full overflow-x-auto px-4 py-5"
         ref={scrollRef}
       >
         <div className="flex touch-pan-y gap-4">
@@ -298,14 +298,14 @@ export default function TemplateGallery() {
           <button
             type="button"
             onClick={() => scroll("left")}
-            className="text-pirrot-blue-950 rounded-full bg-white/80 p-2 shadow-md hover:bg-white"
+            className="btn-soft text-pirrot-blue-950 rounded-full p-2"
           >
             <ChevronLeft size={24} />
           </button>
           <button
             type="button"
             onClick={() => scroll("right")}
-            className="text-pirrot-blue-950 rounded-full bg-white/80 p-2 shadow-md hover:bg-white"
+            className="btn-soft text-pirrot-blue-950 rounded-full p-2"
           >
             <ChevronRight size={24} />
           </button>

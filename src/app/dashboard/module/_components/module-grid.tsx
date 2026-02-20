@@ -1,10 +1,11 @@
 'use client'
 
-import { PlusIcon, TrashIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
+import { PlusIcon, TrashIcon, ChevronLeftIcon, ChevronRightIcon, Component } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { api } from "@/trpc/react"
 import { useState } from "react"
 import Modal from "@/app/_components/modal"
+import { DashboardEmptyState } from "../../_components/dashboard-states"
 
 export default function ModuleGrid(){
 
@@ -22,7 +23,6 @@ export default function ModuleGrid(){
     const util = api.useUtils()
     const deleteType = api.module.delete.useMutation({
         onSuccess:async () => {
-            console.log("deleted type successfully")
             await util.module.invalidate()
         }
     })
@@ -54,27 +54,40 @@ export default function ModuleGrid(){
         </Modal>
         <div className="w-full"></div>
         <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <div onClick={() => router.push("/dashboard/module/manage")} className="cursor-pointer w-full aspect-video flex justify-center items-center p-1 rounded bg-pirrot-blue-50 text-pirrot-blue-500">
+            <div onClick={() => router.push("/dashboard/module/manage")} className="content-card cursor-pointer w-full aspect-video flex justify-center items-center p-1 text-pirrot-blue-500 hover:text-pirrot-blue-700">
                 <PlusIcon className="size-8" />
             </div>
-            {currentItems.map(item => <div className="w-full rounded p-4 bg-pirrot-blue-100/50 border border-pirrot-blue-50 shadow-2xs cursor-pointer gap-4 aspect-video flex" key={item.id}>
+            {currentItems.map((item, index) => <div className="field-shell stagger-item w-full p-4 cursor-pointer gap-4 aspect-video flex" key={item.id} style={{ animationDelay: `${index * 55}ms` }}>
                 <div className="flex-1 flex flex-col gap-2">
   <h3 className="truncate text-xl font-bold uppercase max-w-40">{item.name}</h3>
                         <p className="uppercase text-sm font-light"><b className="font-bold">TYP:</b> {item.type}</p>
                     <div className="flex gap-2 mt-auto">
-                        <button onClick={() => router.push(`/dashboard/module/manage?moduleId=${item.id}`)} className="uppercase bg-pirrot-red-300 border border-pirrot-red-500/10 hover:bg-pirrot-red-400 transition duration-300 p-1 px-3 rounded">bearbeiten</button>
-                        <button id={item.id} type="button" onClick={handleDeleteType} className="uppercase bg-pirrot-red-300 border border-pirrot-red-500/10 hover:bg-pirrot-red-400 transition duration-300 p-1 px-3 rounded"><TrashIcon className="size-6" /></button>
+                        <button onClick={() => router.push(`/dashboard/module/manage?moduleId=${item.id}`)} className="btn-soft uppercase p-1 px-3 rounded text-xs">bearbeiten</button>
+                        <button id={item.id} type="button" onClick={handleDeleteType} className="btn-soft uppercase p-1 px-3 rounded text-xs"><TrashIcon className="size-6" /></button>
                     </div>
                 </div>
             </div>)}
         </div>
+
+        {items.length === 0 && (
+            <div className="mt-4">
+                <DashboardEmptyState
+                    icon={Component}
+                    title="Noch keine Module"
+                    description="Legen Sie Ihr erstes Modul an, um es später Planern zuzuweisen."
+                    actionHref="/dashboard/module/manage"
+                    actionLabel="Modul erstellen"
+                />
+            </div>
+        )}
         
         {/* Pagination Controls */}
+        {totalPages > 1 && (
         <div className="mt-6 flex justify-center items-center gap-4">
             <button 
                 onClick={handlePrevPage}
                 disabled={currentPage === 1}
-                className="flex items-center gap-2 px-4 py-2 rounded bg-pirrot-blue-950 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pirrot-blue-900 transition-colors"
+                className="btn-solid flex items-center gap-2 px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 <ChevronLeftIcon className="size-5" />
                 Previous
@@ -85,11 +98,12 @@ export default function ModuleGrid(){
             <button 
                 onClick={handleNextPage}
                 disabled={currentPage === totalPages}
-                className="flex items-center gap-2 px-4 py-2 rounded bg-pirrot-blue-950 text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pirrot-blue-900 transition-colors"
+                className="btn-solid flex items-center gap-2 px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 Next
                 <ChevronRightIcon className="size-5" />
             </button>
         </div>
+        )}
     </div>
 }

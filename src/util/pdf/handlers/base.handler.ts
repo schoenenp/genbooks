@@ -5,6 +5,7 @@ import type {
   TagContext,
   HandlerResult,
 } from "../types";
+import { logger } from "@/util/logger";
 
 /**
  * Abstract base class for module handlers.
@@ -37,9 +38,10 @@ export abstract class BaseHandler implements ModuleHandler {
       try {
         form.getTextField(tag.fieldName);
       } catch {
-        console.warn(
-          `Required field "${tag.fieldName}" not found in ${this.moduleType} module`,
-        );
+        logger.warn("required_pdf_field_missing", {
+          fieldName: tag.fieldName,
+          moduleType: this.moduleType,
+        });
         return false;
       }
     }

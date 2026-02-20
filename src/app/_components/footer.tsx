@@ -6,15 +6,15 @@ export default function Footer() {
     const currentYear = new Date().getFullYear()
     
     return (
-        <footer className="bg-gradient-to-b from-pirrot-blue-100/50 to-pirrot-blue-200/30 text-info-900 w-full border-t border-pirrot-blue-200/50">
-            <div className="max-w-screen-xl mx-auto px-4 py-12">
+        <footer className="section-shell w-full py-6">
+            <div className="content-card mx-auto px-4 py-12 text-info-900">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                     {/* Company Info */}
                     <div className="space-y-4">
-                        <h3 className="text-xl font-bold font-cairo text-pirrot-red-400">
+                        <h3 className="text-xl font-bold text-pirrot-red-500">
                             Digitaldruck Pirrot GmbH
                         </h3>
-                        <p className="text-info-700 font-baloo text-sm leading-relaxed">
+                        <p className="text-info-700 text-sm leading-relaxed">
                             Ihr Partner für individuelle Schulplaner und hochwertige Druckerzeugnisse. 
                             Wir gestalten mit Ihnen zusammen maßgeschneiderte Lösungen für den Schulalltag.
                         </p>
@@ -33,63 +33,63 @@ export default function Footer() {
 
                     {/* Quick Links */}
                     <div className="space-y-4">
-                        <h4 className="font-bold font-cairo text-lg text-info-950">Schnellzugriff</h4>
+                        <h4 className="text-lg font-bold text-info-950">Schnellzugriff</h4>
                         <ul className="space-y-2 text-sm">
                             <li>
-                                <Link href="/" className="text-info-700 hover:text-pirrot-red-400 transition-colors font-baloo">
+                                <Link href="/" className="text-info-700 hover:text-pirrot-red-500 transition-colors">
                                     Schulplaner Generator
                                 </Link>
                             </li>
                             <li>
-                                <Link href="/dashboard" className="text-info-700 hover:text-pirrot-red-400 transition-colors font-baloo">
+                                <Link href="/dashboard" className="text-info-700 hover:text-pirrot-red-500 transition-colors">
                                     Dashboard
                                 </Link>
                             </li>
                             <li>
-                                <Link href="/dashboard?view=orders" className="text-info-700 hover:text-pirrot-red-400 transition-colors font-baloo">
+                                <Link href="/dashboard?view=orders" className="text-info-700 hover:text-pirrot-red-500 transition-colors">
                                     Bestellung verfolgen
                                 </Link>
                             </li>
                             <li>
-                                <Link href="https://www.pirrot.de" className="text-info-700 hover:text-pirrot-red-400 transition-colors font-baloo">
+                                <a href="https://www.pirrot.de" target="_blank" rel="noreferrer" className="text-info-700 hover:text-pirrot-red-500 transition-colors">
                                     pirrot.de
-                                </Link>
+                                </a>
                             </li>
                         </ul>
                     </div>
 
                     {/* Services */}
                     <div className="space-y-4">
-                        <h4 className="font-bold font-cairo text-lg text-info-950">Unsere Services</h4>
+                        <h4 className="text-lg font-bold text-info-950">Unsere Services</h4>
                         <ul className="space-y-2 text-sm">
-                            <li className="text-info-700 font-baloo">Individuelle Schulplaner</li>
-                            <li className="text-info-700 font-baloo">Hausaufgabenhefte</li>
-                            <li className="text-info-700 font-baloo">Stundenpläne</li>
-                            <li className="text-info-700 font-baloo">Kalender & Terminplaner</li>
-                            <li className="text-info-700 font-baloo">Bürobedarf & Druck</li>
+                            <li className="text-info-700">Individuelle Schulplaner</li>
+                            <li className="text-info-700">Hausaufgabenhefte</li>
+                            <li className="text-info-700">Stundenpläne</li>
+                            <li className="text-info-700">Kalender & Terminplaner</li>
+                            <li className="text-info-700">Bürobedarf & Druck</li>
                         </ul>
                     </div>
 
                     {/* Contact Info */}
                     <div className="space-y-4">
-                        <h4 className="font-bold font-cairo text-lg text-info-950">Kontakt</h4>
+                        <h4 className="text-lg font-bold text-info-950">Kontakt</h4>
                         <div className="space-y-3 text-sm">
                             <div className="flex items-center space-x-3">
                                 <MapPin size={16} className="text-pirrot-red-400 flex-shrink-0" />
-                                <span className="text-info-700 font-baloo">
+                                <span className="text-info-700">
                                     Triererstraße 7<br />
                                     66125 Saarbrücken
                                 </span>
                             </div>
                             <div className="flex items-center space-x-3">
                                 <Phone size={16} className="text-pirrot-red-400 flex-shrink-0" />
-                                <a href="tel:+49689797530" className="text-info-700 hover:text-pirrot-red-400 transition-colors font-baloo">
+                                <a href="tel:+49689797530" className="text-info-700 hover:text-pirrot-red-500 transition-colors">
                                     +49 6897 97 53 0
                                 </a>
                             </div>
                             <div className="flex items-center space-x-3">
                                 <Mail size={16} className="text-pirrot-red-400 flex-shrink-0" />
-                                <a href="mailto:info@pirrot.de" className="text-info-700 hover:text-pirrot-red-400 transition-colors font-baloo">
+                                <a href="mailto:info@pirrot.de" className="text-info-700 hover:text-pirrot-red-500 transition-colors">
                                     info@pirrot.de
                                 </a>
                             </div>
@@ -100,22 +100,22 @@ export default function Footer() {
                 {/* Bottom Bar */}
                 <div className="border-t border-pirrot-blue-200/50 mt-8 pt-8">
                     <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-                        <div className="text-sm text-info-600 font-baloo">
+                        <div className="text-sm text-info-600">
                             © {currentYear} Digitaldruck Pirrot GmbH. Alle Rechte vorbehalten.
                         </div>
                         <div className="flex space-x-6 text-sm">
-                            <Link href="https://secure.pirrot.de/datenschutz" className="text-info-600 hover:text-pirrot-red-400 transition-colors font-baloo">
+                            <a href="https://secure.pirrot.de/datenschutz" target="_blank" rel="noreferrer" className="text-info-600 hover:text-pirrot-red-500 transition-colors">
                                 Impressum
-                            </Link>
-                            <Link href="https://secure.pirrot.de/datenschutz" className="text-info-600 hover:text-pirrot-red-400 transition-colors font-baloo">
+                            </a>
+                            <a href="https://secure.pirrot.de/datenschutz" target="_blank" rel="noreferrer" className="text-info-600 hover:text-pirrot-red-500 transition-colors">
                                 Datenschutz
-                            </Link>
-                            <Link href="https://secure.pirrot.de/datenschutz" className="text-info-600 hover:text-pirrot-red-400 transition-colors font-baloo">
+                            </a>
+                            <a href="https://secure.pirrot.de/datenschutz" target="_blank" rel="noreferrer" className="text-info-600 hover:text-pirrot-red-500 transition-colors">
                                 AGB
-                            </Link>
-                            <Link href="https://secure.pirrot.de/datenschutz" className="text-info-600 hover:text-pirrot-red-400 transition-colors font-baloo">
+                            </a>
+                            <a href="https://secure.pirrot.de/datenschutz" target="_blank" rel="noreferrer" className="text-info-600 hover:text-pirrot-red-500 transition-colors">
                                 Widerrufsrecht
-                            </Link>
+                            </a>
                         </div>
                     </div>
                 </div>

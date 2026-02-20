@@ -80,7 +80,6 @@ function Tag({ id, name, output, onClick, variant = 'available' }: TagProps) {
     file: File,
     availableTags: TagItem[],
   ) {
-    console.log("PROCESS AVAILABLE TAGS", availableTags)
     if (file.type !== "application/pdf") {
       return { file, fields: [], modifiedPdf: undefined };
     }
@@ -91,8 +90,7 @@ function Tag({ id, name, output, onClick, variant = 'available' }: TagProps) {
         );
 
       return { file, fields, modifiedPdf };
-    } catch (error) {
-      console.error("Error processing PDF file:", error);
+    } catch {
       return { file, fields: [], modifiedPdf: undefined };
     }
   }
@@ -233,8 +231,6 @@ function extractTagsFromFields(
     fieldNames: TagItem[], 
     availableTags: TagItem[]
 ): TagItem[] {
-    console.log("fieldnames", fieldNames)
-    console.log("available:", availableTags)
     const foundTags = fieldNames
       .map(fieldName => availableTags.find(tag => tag.name === fieldName.name))
       .filter((tag): tag is TagItem => tag !== undefined);
@@ -338,7 +334,7 @@ function extractTagsFromFields(
 
   return (
     <div className="flex h-full w-full flex-col gap-4 xl:flex-row">
-      <div className="flex-1 rounded bg-pirrot-blue-50 p-4">
+      <div className="content-card flex-1 p-4">
         <h3 className="text-4xl uppercase text-pirrot-blue-800">manage</h3>
         <div className="w-full text-pirrot-blue-800">
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -346,7 +342,7 @@ function extractTagsFromFields(
             <div className="w-full flex flex-col gap-1">
               <label>Name</label>
               <input
-                className="rounded-sm bg-pirrot-blue-100 p-2 text-opacity-80"
+                className="field-shell p-2 text-opacity-80"
                 onChange={(e) => setName(e.target.value)}
                 value={name}
               />
@@ -357,7 +353,7 @@ function extractTagsFromFields(
                 <input
                   id="types"
                   autoComplete="off"
-                  className="rounded-sm bg-pirrot-blue-100 p-2 text-opacity-80 text-info-950"
+                  className="field-shell p-2 text-info-950 text-opacity-80"
                   onBlur={() => setTimeout(() => setIsTypePickerOpen(false), 200)}
                   onFocus={() => setIsTypePickerOpen(true)}
                   onChange={(e) => setType(e.target.value)}
@@ -365,7 +361,7 @@ function extractTagsFromFields(
                 />
                 <div className="relative w-full">
                   {isTypePickerOpen && (
-                    <div className="absolute top-0 z-40 flex w-full max-h-44 flex-col gap-1 overflow-y-auto bg-pirrot-blue-50">
+                    <div className="content-card absolute top-0 z-40 flex max-h-44 w-full flex-col gap-1 overflow-y-auto p-1">
                       {typesPickable
                         .filter((t) =>
                           t.name.toLowerCase().includes(type.toLowerCase()),
@@ -379,7 +375,7 @@ function extractTagsFromFields(
                               setType(t.name);
                               setIsTypePickerOpen(false);
                             }}
-                            className="flex w-full justify-between bg-pirrot-blue-950/30 p-2 text-info-950"
+                            className="field-shell flex w-full justify-between p-2 text-info-950"
                           >
                             {t.name}
                             <span className="flex items-center justify-center gap-2">
@@ -396,10 +392,10 @@ function extractTagsFromFields(
 
             {/* File Uploads & Tag Displays */}
             <div className="grid h-full w-full grid-cols-1 gap-2 md:grid-cols-2">
-              <div className="aspect-video rounded bg-pirrot-blue-500/10 p-0.5">
+              <div className="field-shell aspect-video p-0.5">
                 {file.data ? (
                   <div
-                    className="group relative flex size-full cursor-pointer flex-col items-center justify-center rounded-sm border-2 border-solid border-pirrot-blue-800 bg-pirrot-blue-500/20 text-pirrot-blue-800 transition duration-500 hover:border-pirrot-blue-50/20"
+                    className="group relative flex size-full cursor-pointer flex-col items-center justify-center rounded-sm border-2 border-solid border-pirrot-blue-800 bg-pirrot-blue-500/20 text-pirrot-blue-800 transition duration-500 hover:border-pirrot-blue-100"
                     onClick={handleResetFile}
                   >
                     <span className="absolute top-2 right-2 hidden text-pirrot-red-400 transition duration-500 group-hover:block">
@@ -417,10 +413,10 @@ function extractTagsFromFields(
                   />
                 )}
               </div>
-              <div className="flex aspect-video flex-col rounded bg-pirrot-blue-500/10 p-0.5">
+              <div className="field-shell flex aspect-video flex-col p-0.5">
                 <div className="flex h-full flex-col justify-between p-1">
                   <h2 className="text-sm font-medium uppercase">Erkannte Tags</h2>
-                  <div className="flex max-h-44 w-full flex-col gap-1 overflow-y-auto bg-pirrot-blue-400/20 p-1">
+                  <div className="field-shell flex max-h-44 w-full flex-col gap-1 overflow-y-auto p-1">
                   {allowedTags.map((tag) => (
   <Tag
     key={tag.id}
@@ -438,18 +434,18 @@ function extractTagsFromFields(
             <div className="flex w-full gap-2">
               <Link
                 href="/dashboard?view=module"
-                className="flex w-full items-center justify-center border-2 border-pirrot-blue-800 p-4 text-center text-pirrot-blue-800"
+                className="btn-soft flex w-full items-center justify-center p-4 text-center"
               >
                 Abbruch
               </Link>
-              <button type="submit" className="w-full bg-pirrot-blue-100 p-4">
+              <button type="submit" className="btn-solid w-full p-4">
                 {moduleId ? "Updaten" : "Speichern"}
               </button>
             </div>
           </form>
         </div>
       </div>
-      <div className="flex h-screen flex-1 flex-col items-center justify-center text-pirrot-blue-50">
+      <div className="content-card flex h-screen flex-1 flex-col items-center justify-center overflow-hidden p-1">
         {pdfFileUrl && <iframe src={pdfFileUrl + "#view=fit"} className="size-full" />}
       </div>
     </div>

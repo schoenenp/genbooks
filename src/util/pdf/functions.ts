@@ -1,6 +1,7 @@
 import type { BookPart } from "@prisma/client";
 import { PDFDocument } from "pdf-lib";
 import type { TagItem } from "@/app/dashboard/module/manage/_components/module-form";
+import { logger } from "@/util/logger";
 
 export const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -30,8 +31,6 @@ export const fileToBase64 = (file: File): Promise<string> => {
   
     for (const field of fields) {
       const fieldName = field.getName();
-        console.log("FOUND FIELD: ", fieldName)
-        console.log("ALL TAGS: ", allowedTags)
       // Find the matching tag
       const existingTag = allowedTags.find(
         tag => tag.name.toLowerCase() === fieldName.toLowerCase()
@@ -39,10 +38,10 @@ export const fileToBase64 = (file: File): Promise<string> => {
       // Fill the form field if output exists
       if (existingTag) {
         formFields.push(existingTag);
-          try {
+            try {
               fileForm.getTextField(fieldName).setText(existingTag?.output ?? "BSP_TEXT");
             } catch (error) {
-                console.warn(`Could not set text for field ${fieldName}:`, error);
+                logger.warn("pdf_form_text_set_failed", { fieldName, error });
             } finally{
          
             }
@@ -66,7 +65,6 @@ export async function validatePDFUpload(
   try {
     const bookPart = part.toLocaleUpperCase()
     const tempDoc = await PDFDocument.load(file);
-    console.log("BOOKPART: ", bookPart)
     switch (bookPart) {
       case "COVER":
         if (tempDoc.getPageCount() !== 4) {
@@ -91,7 +89,7 @@ export async function validatePDFUpload(
 
     return { valid: true };
   } catch (error) {
-    console.error("Failed to process PDF file", error);
+    logger.error("failed_to_process_pdf_upload", { error });
     return { valid: false, message: "Failed to process PDF file" };
   }
 }
@@ -108,7 +106,7 @@ export const urlToFile = async (url: string, fileName: string) => {
         const file = new File([blob], name, { type: mimeType });
         return file;
       } catch (error) {
-        console.error('Error creating File from URL:', error);
+        logger.error("file_from_url_creation_failed", { url, error });
         return null;
       }
   };

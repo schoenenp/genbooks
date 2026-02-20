@@ -12,19 +12,22 @@ export default function ModulePreview(props:{moduleId: string}){
     if(!moduleData.data && moduleData.isLoading){
         return <LoadingSpinner />
     } 
-    
-    const previewImage  = moduleData.data
-    === "/default.png" 
-    || moduleData.data?.startsWith("https://")
-    ? moduleData.data 
-    : `https://cdn.pirrot.de${moduleData.data}` 
-    
-        return <div className="relative size-full h-[420px]">
-        <Image 
-            className={"object-cover"} alt="preview"
+
+    const rawPreview = moduleData.data
+    const previewImage =
+        typeof rawPreview === "string" && rawPreview.length > 0
+            ? rawPreview === "/default.png" || rawPreview.startsWith("https://")
+                ? rawPreview
+                : `https://cdn.pirrot.de${rawPreview}`
+            : "/default.png"
+
+    return <div className="relative size-full h-[420px]">
+        <Image
+            className={"object-cover"}
+            alt="preview"
             fill
+            sizes="(max-width: 768px) 100vw, 720px"
             src={previewImage}
         />
-        </div>
-    
+    </div>
 }

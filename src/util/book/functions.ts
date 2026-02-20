@@ -1,6 +1,7 @@
 import type { BookPart } from "@prisma/client";
 import { FILTER_TYPES } from "@/app/_components/book-config";
 import type { ConfigBookPart } from "@/app/_components/book-config";
+import { logger } from "@/util/logger";
 const currentDate = new Date();
 const nextYearDate = new Date(currentDate);
 nextYearDate.setFullYear(currentDate.getFullYear() + 1);
@@ -134,7 +135,11 @@ export async function getHolidays(input: {
       holidaysData.push(holidayItem);
     }
   } catch (err) {
-    console.error("Failed to fetch holidays:", err);
+    logger.warn("failed_to_fetch_public_holidays", {
+      countryCode,
+      subdivisionCode,
+      error: err,
+    });
     return [];
   }
 
@@ -164,7 +169,11 @@ export async function getHolidays(input: {
       holidaysData.push(endItem);
     }
   } catch (err) {
-    console.error("Failed to fetch school holidays:", err);
+    logger.warn("failed_to_fetch_school_holidays", {
+      countryCode,
+      subdivisionCode,
+      error: err,
+    });
     return [];
   }
 

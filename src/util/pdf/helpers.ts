@@ -1,4 +1,6 @@
 import { PDFDocument } from "pdf-lib";
+import type { BookFormat } from "./types";
+import { logger } from "@/util/logger";
 
 /**
  * Format a Date object to YYYY-MM-DD string
@@ -47,19 +49,25 @@ export function generateWeekDates(startDate: Date, weekIndex: number): Date[] {
  */
 export async function fetchPdfBytes(url: string): Promise<Uint8Array> {
   if (!url || url === "notizen.pdf" || url.trim() === "") {
-    console.warn(`Invalid PDF URL: ${url}, returning blank page`);
+    logger.warn("invalid_pdf_url_fallback_blank_page", { url });
     return getBlankPagePdfBytes();
   }
 
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      console.warn(`Failed to fetch PDF: ${url}, returning blank page`);
+      logger.warn("pdf_fetch_failed_fallback_blank_page", {
+        url,
+        status: response.status,
+      });
       return getBlankPagePdfBytes();
     }
     return new Uint8Array(await response.arrayBuffer());
   } catch (error) {
-    console.warn(`Error fetching PDF: ${url}, returning blank page`, error);
+    logger.warn("pdf_fetch_error_fallback_blank_page", {
+      url,
+      error,
+    });
     return getBlankPagePdfBytes();
   }
 }
@@ -83,16 +91,33 @@ export const PAGE_DIMENSIONS = {
   A4_WIDTH: (210 / 25.4) * 72,
   /** A4 height in points */
   A4_HEIGHT: (297 / 25.4) * 72,
+  /** A5 width in points */
+  A5_WIDTH: (148 / 25.4) * 72,
+  /** A5 height in points */
+  A5_HEIGHT: (210 / 25.4) * 72,
   /** Standard bleeding in points (6mm) */
   BLEEDING: (6 / 25.4) * 72,
 } as const;
+
+export function getPageSizeWithBleed(
+  format: BookFormat,
+): { width: number; height: number } {
+  if (format === "DIN A4") {
+    return {
+      width: PAGE_DIMENSIONS.A4_WIDTH + PAGE_DIMENSIONS.BLEEDING,
+      height: PAGE_DIMENSIONS.A4_HEIGHT + PAGE_DIMENSIONS.BLEEDING,
+    };
+  }
+
+  return {
+    width: PAGE_DIMENSIONS.A5_WIDTH + PAGE_DIMENSIONS.BLEEDING,
+    height: PAGE_DIMENSIONS.A5_HEIGHT + PAGE_DIMENSIONS.BLEEDING,
+  };
+}
 
 /**
  * Get A4 dimensions with bleeding
  */
 export function getA4WithBleeding(): { width: number; height: number } {
-  return {
-    width: PAGE_DIMENSIONS.A4_WIDTH + PAGE_DIMENSIONS.BLEEDING,
-    height: PAGE_DIMENSIONS.A4_HEIGHT + PAGE_DIMENSIONS.BLEEDING,
-  };
+  return getPageSizeWithBleed("DIN A4");
 }

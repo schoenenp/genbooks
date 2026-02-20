@@ -5,6 +5,7 @@ import {
   type NextAuthConfig,
   type Session,
 } from "next-auth";
+import type { UserRole } from "@prisma/client";
 import NodemailerProvider from "next-auth/providers/nodemailer";
 import GoogleProvider from "next-auth/providers/google";
 // import LinkedinProvider from "next-auth/providers/linkedin";
@@ -22,15 +23,13 @@ declare module "next-auth" {
   interface Session extends DefaultSession {
     user: {
       id: string;
-      // ...other properties
-      // role: UserRole;
+      role: UserRole;
     } & DefaultSession["user"];
   }
 
-  // interface User {
-  //   // ...other properties
-  //   // role: UserRole;
-  // }
+  interface User {
+    role: UserRole;
+  }
 }
 
 /**
@@ -82,12 +81,13 @@ export const authConfig = {
       user,
     }: {
       session: Session;
-      user: { id: string };
+      user: { id: string; role: UserRole };
     }) => ({
       ...session,
       user: {
         ...session.user,
         id: user.id,
+        role: user.role ?? "USER",
       },
     }),
   },

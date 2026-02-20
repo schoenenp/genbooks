@@ -11,7 +11,7 @@ export default function ConfigInfo(props: { bid?: string }) {
   const { name, region, bookTitle, subTitle, planEnd, planStart } = configData;
 
   return (
-    <div className="w-full max-w-md p-4">
+    <div className="content-card w-full max-w-md p-4">
       <ul className="flex flex-col gap-8">
         <li className="flex flex-col gap-1.5">
           <h3 className="text-2xl font-bold">Projekt Name:</h3>

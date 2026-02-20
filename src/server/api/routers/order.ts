@@ -1,4 +1,7 @@
 import { z } from "zod";
+import type Stripe from "stripe";
+import { TRPCError } from "@trpc/server";
+import { Prisma } from "@prisma/client";
 
 import {
   createTRPCRouter,
@@ -10,10 +13,37 @@ import createOrderKey, {
   verifyCancelKey,
 } from "@/util/order/functions";
 import { decryptPayload, encryptPayload } from "@/util/crypto";
-import { stripe } from "@/util/stripe";
+import { stripeClient } from "@/util/stripe";
 import { createOrderConfirmationEmail } from "@/util/order/templates/create-validation-order";
 import { formatDisplayDate } from "@/util/date";
 import { env } from "@/env";
+import {
+  createSponsorInvoicesForRedemption,
+  parseSponsorSessionMetadata,
+  retrySponsorProofInvoiceAsync,
+  toAddressParam,
+} from "@/util/sponsor/invoices";
+import { logger } from "@/util/logger";
+import { enforceProcedureRateLimit } from "@/util/rate-limit";
+import {
+  getCancellationGuardError,
+  getCancellationPaymentStatus,
+} from "./order-cancel-transition";
+
+function mapCheckoutPaymentStatus(
+  paymentStatus?: Stripe.Checkout.Session.PaymentStatus,
+):
+  | "SUCCEEDED"
+  | "PENDING"
+  | "CANCELLED" {
+  if (paymentStatus === "paid" || paymentStatus === "no_payment_required") {
+    return "SUCCEEDED";
+  }
+  if (paymentStatus === "unpaid") {
+    return "PENDING";
+  }
+  return "PENDING";
+}
 
 export const orderRouter = createTRPCRouter({
   validate: publicProcedure
@@ -23,9 +53,22 @@ export const orderRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const retrievedSession = await stripe.checkout.sessions.retrieve(
+      enforceProcedureRateLimit(ctx, {
+        scope: "order.validate",
+        maxRequests: 20,
+        windowMs: 10 * 60 * 1000,
+      });
+
+      const retrievedSession = await stripeClient.checkout.sessions.retrieve(
         input.session,
       );
+
+      if (retrievedSession.status !== "complete") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Checkout ist noch nicht abgeschlossen",
+        });
+      }
 
       const existingBookOrder = await ctx.db.bookOrder.findFirst({
         where: {
@@ -33,58 +76,163 @@ export const orderRouter = createTRPCRouter({
         },
         include: {
           payment: true,
+          order: {
+            select: {
+              id: true,
+              orderKey: true,
+            },
+          },
         },
       });
 
       if (!existingBookOrder) {
-        throw new Error("Keine Bestellung gefunden");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Keine Bestellung gefunden",
+        });
       }
 
-      await ctx.db.bookOrder.update({
-        where: {
-          id: existingBookOrder.id,
-        },
-        data: {
-          payment: {
-            update: {
-              status:
-                retrievedSession.payment_status === "unpaid"
-                  ? "PENDING"
-                  : "SUCCEEDED",
-              total: retrievedSession.amount_total ?? 0,
-              shippingCost: retrievedSession.shipping_cost?.amount_total ?? 0,
+      if (existingBookOrder.order?.orderKey) {
+        return encryptPayload({ orderKey: existingBookOrder.order.orderKey });
+      }
+
+      const createdOrderKey = await ctx.db.$transaction(async (tx) => {
+        await tx.bookOrder.update({
+          where: {
+            id: existingBookOrder.id,
+          },
+          data: {
+            payment: {
+              update: {
+                status:
+                  retrievedSession.payment_status === "unpaid"
+                    ? "PENDING"
+                    : "SUCCEEDED",
+                total: retrievedSession.amount_total ?? 0,
+                shippingCost: retrievedSession.shipping_cost?.amount_total ?? 0,
+              },
             },
           },
-        },
-      });
+        });
 
-      const createdOrder = await ctx.db.order.create({
-        data: {
-          user: ctx.session?.user
-            ? {
-                connect: {
-                  id: ctx.session?.user.id,
+        const currentBookOrder = await tx.bookOrder.findUnique({
+          where: { id: existingBookOrder.id },
+          include: {
+            order: true,
+          },
+        });
+
+        if (!currentBookOrder) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Keine Bestellung gefunden",
+          });
+        }
+
+        if (currentBookOrder.order?.orderKey) {
+          return currentBookOrder.order.orderKey;
+        }
+
+        let createdOrder = currentBookOrder.order ?? null;
+        if (!createdOrder) {
+          try {
+            createdOrder = await tx.order.create({
+              data: {
+                user: ctx.session?.user
+                  ? {
+                      connect: {
+                        id: ctx.session.user.id,
+                      },
+                    }
+                  : undefined,
+                bookOrder: {
+                  connect: {
+                    id: existingBookOrder.id,
+                  },
                 },
-              }
-            : undefined,
-          bookOrder: {
-            connect: {
-              id: existingBookOrder.id,
-            },
+              },
+            });
+          } catch (error) {
+            // Handle a concurrent validator creating the linked order.
+            if (
+              error instanceof Prisma.PrismaClientKnownRequestError &&
+              error.code === "P2002"
+            ) {
+              const racedBookOrder = await tx.bookOrder.findUnique({
+                where: { id: existingBookOrder.id },
+                include: { order: true },
+              });
+              createdOrder = racedBookOrder?.order ?? null;
+            } else {
+              throw error;
+            }
+          }
+        }
+
+        if (!createdOrder) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to create order",
+          });
+        }
+
+        if (createdOrder.orderKey) {
+          return createdOrder.orderKey;
+        }
+
+        const newOrderKey = createOrderKey(createdOrder.id);
+        await tx.order.update({
+          where: {
+            id: createdOrder.id,
           },
-        },
+          data: {
+            orderKey: newOrderKey,
+          },
+        });
+        return newOrderKey;
       });
 
-      const createdOrderKey = createOrderKey(createdOrder.id);
+      const sponsorMetadata = parseSponsorSessionMetadata(
+        retrievedSession.metadata,
+      );
 
-      await ctx.db.order.update({
-        where: {
-          id: createdOrder.id,
-        },
-        data: {
-          orderKey: createdOrderKey,
-        },
-      });
+      if (sponsorMetadata) {
+        const schoolEmail = retrievedSession.customer_details?.email;
+        const schoolName = retrievedSession.customer_details?.name ?? "School";
+        const schoolAddress = toAddressParam(
+          retrievedSession.customer_details?.address ?? null,
+        );
+        const schoolPhone = retrievedSession.customer_details?.phone ?? undefined;
+
+        if (!schoolEmail) {
+          logger.warn("missing_school_email_for_sponsor_invoice", {
+            checkoutSessionId: retrievedSession.id,
+          });
+        } else {
+          const sponsorInvoiceInput = {
+            db: ctx.db,
+            referenceId: retrievedSession.id,
+            sponsor: sponsorMetadata,
+            school: {
+              email: schoolEmail,
+              name: schoolName,
+              address: schoolAddress ?? undefined,
+              phone: schoolPhone,
+            },
+            quantity: existingBookOrder.quantity,
+          } as const;
+
+          try {
+            await createSponsorInvoicesForRedemption(sponsorInvoiceInput);
+          } catch (invoiceError) {
+            logger.error("sponsor_invoice_creation_failed", {
+              referenceId: sponsorInvoiceInput.referenceId,
+              error: invoiceError,
+            });
+            retrySponsorProofInvoiceAsync(sponsorInvoiceInput);
+          }
+        }
+      }
 
       const customerEmail =
         retrievedSession.customer_details?.email ?? env.SHOP_EMAIL;
@@ -102,11 +250,13 @@ export const orderRouter = createTRPCRouter({
           html,
         );
       } catch (err) {
-        console.error("Failed to send email:", err);
+        logger.error("order_confirmation_email_failed", {
+          checkoutSessionId: retrievedSession.id,
+          error: err,
+        });
       }
 
-      const orderKey = encryptPayload({ orderKey: createdOrderKey });
-      return orderKey;
+      return encryptPayload({ orderKey: createdOrderKey });
     }),
   cancelByUser: publicProcedure
     .input(
@@ -121,7 +271,7 @@ export const orderRouter = createTRPCRouter({
 
       // Validate the payload
       if (!payload.orderId || !payload.cancelKey) {
-        throw new Error("Invalid payload");
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid payload" });
       }
 
       // Verify cancel key
@@ -130,7 +280,10 @@ export const orderRouter = createTRPCRouter({
         payload.cancelKey,
       );
       if (!validCancelKey) {
-        throw new Error("Invalid cancellation key");
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Invalid cancellation key",
+        });
       }
 
       // Check if order exists and is cancellable
@@ -142,7 +295,10 @@ export const orderRouter = createTRPCRouter({
       });
 
       if (!bookOrder) {
-        throw new Error("Order not found or not cancellable");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Order not found or not cancellable",
+        });
       }
 
       await ctx.db.bookOrder.delete({
@@ -176,7 +332,10 @@ export const orderRouter = createTRPCRouter({
         },
       });
       if (!order) {
-        throw new Error("Keine Bestellung gefunden.");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Keine Bestellung gefunden.",
+        });
       }
 
       let orderDetails;
@@ -184,7 +343,7 @@ export const orderRouter = createTRPCRouter({
       let shippingPrice = order?.bookOrder?.payment.shippingCost ?? 0;
 
       if (order.bookOrder?.payment.shopId) {
-        orderDetails = await stripe.checkout.sessions.retrieve(
+        orderDetails = await stripeClient.checkout.sessions.retrieve(
           order.bookOrder?.payment.shopId,
         );
         if (orderDetails.amount_total) {
@@ -210,7 +369,9 @@ export const orderRouter = createTRPCRouter({
             ? "Bezahlt"
             : orderDetails?.payment_status === "no_payment_required"
               ? "Gratis"
-              : "Wartend",
+              : order.bookOrder?.payment.status === "SUCCEEDED"
+                ? "Bezahlt"
+                : "Wartend",
       };
 
       return orderObject ?? null;
@@ -228,10 +389,11 @@ export const orderRouter = createTRPCRouter({
       try {
         payload = await decryptPayload(orderId);
       } catch (err) {
-        throw new Error(`decrypting error: ${err as string}`);
+        logger.warn("order_public_id_decrypt_failed", { error: err });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Ungültiger Bestelllink" });
       }
       if (!payload) {
-        throw new Error("No payload found...");
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No payload found..." });
       }
       const order = await db.order.findUnique({
         where: {
@@ -248,15 +410,19 @@ export const orderRouter = createTRPCRouter({
         },
       });
       if (!order) {
-        throw new Error("Keine Bestellung gefunden.");
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Keine Bestellung gefunden.",
+        });
       }
 
       let orderDetails;
       let orderPrice = order?.bookOrder?.payment.total ?? 0;
       let shippingPrice = order?.bookOrder?.payment.shippingCost ?? 0;
+      let invoiceUrl: string | null | undefined;
 
       if (order.bookOrder?.payment.shopId) {
-        orderDetails = await stripe.checkout.sessions.retrieve(
+        orderDetails = await stripeClient.checkout.sessions.retrieve(
           order.bookOrder?.payment.shopId,
         );
         if (orderDetails.amount_total) {
@@ -267,12 +433,12 @@ export const orderRouter = createTRPCRouter({
         }
       }
 
-      if (!orderDetails) {
-        throw new Error("Keine Online Bezahlung gefunden.");
+      const invoiceId =
+        typeof orderDetails?.invoice === "string" ? orderDetails.invoice : null;
+      if (invoiceId) {
+        const invoice = await stripeClient.invoices.retrieve(invoiceId);
+        invoiceUrl = invoice.hosted_invoice_url;
       }
-      const invoiceId = orderDetails.invoice as string;
-      const invoice = await stripe.invoices.retrieve(invoiceId);
-      const invoiceUrl = invoice.hosted_invoice_url;
 
       const booksPrice = order.bookOrder?.payment.price ?? 0;
       const orderObject = {
@@ -284,17 +450,10 @@ export const orderRouter = createTRPCRouter({
         shipping: `${(shippingPrice / 100).toFixed(2)}€`,
         total: `${(orderPrice / 100).toFixed(2)}€`,
         trackingId: order.shippingId,
-        invoiceUrl,
-        paymentStatus:
-          orderDetails?.payment_status === "paid"
-            ? "SUCCEEDED"
-            : orderDetails?.payment_status === "no_payment_required"
-              ? "SUCCEEDED"
-              : orderDetails?.payment_status === "unpaid"
-                ? "PENDING"
-                : orderDetails?.payment_status === "canceled"
-                  ? "CANCELLED"
-                  : "PENDING",
+        invoiceUrl: invoiceUrl ?? null,
+        paymentStatus: orderDetails?.payment_status
+          ? mapCheckoutPaymentStatus(orderDetails.payment_status)
+          : order.bookOrder?.payment.status ?? "PENDING",
       };
 
       return orderObject ?? null;
@@ -375,6 +534,12 @@ export const orderRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit(ctx, {
+        scope: "order.cancelPending",
+        maxRequests: 5,
+        windowMs: 10 * 60 * 1000,
+      });
+
       const payload: { orderKey: string } = await decryptPayload(input.orderId);
 
       const order = await ctx.db.order.findUnique({
@@ -391,55 +556,76 @@ export const orderRouter = createTRPCRouter({
       });
 
       if (!order) {
-        throw new Error("Order not found");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Order not found" });
       }
 
-      if (order.status === "CANCELED") {
-        throw new Error("Order is already canceled");
+      const guardError = getCancellationGuardError({
+        orderStatus: order.status,
+        hasPayment: Boolean(order.bookOrder?.payment),
+      });
+      if (guardError) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: guardError });
+      }
+      const payment = order.bookOrder?.payment;
+      if (!payment) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Order payment not found",
+        });
       }
 
-      // Handle Stripe refund if payment exists
-      if (order.bookOrder?.payment.shopId) {
+      let paymentStatus: "REFUNDED" | "CANCELLED" = "CANCELLED";
+      let refundId: string | undefined;
+      let refundedAt: Date | undefined;
+
+      // Handle Stripe refund if payment exists and has a payment intent.
+      if (payment.shopId) {
         try {
           // Get the payment intent from the session
-          const session = await stripe.checkout.sessions.retrieve(
-            order.bookOrder.payment.shopId,
+          const session = await stripeClient.checkout.sessions.retrieve(
+            payment.shopId,
           );
 
           if (session.payment_intent) {
             // Create refund
-            const refund = await stripe.refunds.create({
-              payment_intent: session.payment_intent as string,
-              reason: "requested_by_customer",
+            const refund = await stripeClient.refunds.create(
+              {
+                payment_intent: session.payment_intent as string,
+                reason: "requested_by_customer",
+              },
+              {
+                idempotencyKey: `refund_${payment.id}`,
+              },
+            );
+            paymentStatus = getCancellationPaymentStatus({
+              hasPaymentIntent: true,
             });
-
-            // Update payment status
-            await ctx.db.bookOrder.update({
-              where: {
-                id: order.bookOrder.id,
-              },
-              data: {
-                payment: {
-                  update: {
-                    status: "REFUNDED",
-                    refundId: refund.id,
-                    refundedAt: new Date(),
-                  },
-                },
-              },
+            refundId = refund.id;
+            refundedAt = new Date();
+          } else {
+            paymentStatus = getCancellationPaymentStatus({
+              hasPaymentIntent: false,
             });
           }
         } catch (error) {
-          console.error("Stripe refund error:", error);
-          throw new Error("Failed to process refund");
+          logger.error("stripe_refund_error", {
+            orderKey: payload.orderKey,
+            error,
+          });
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to process refund",
+          });
         }
       }
       await ctx.db.payment.update({
         where: {
-          id: order.bookOrder?.payment.id,
+          id: payment.id,
         },
         data: {
-          status: "REFUNDED",
+          status: paymentStatus,
+          refundId,
+          refundedAt,
         },
       });
       return ctx.db.order.update({

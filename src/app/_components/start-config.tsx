@@ -27,49 +27,53 @@ export default function StartConfig() {
   const [isFormValid, setIsFormValid] = useState(false);
 
   return (
-    <div className="flex w-full flex-col items-center justify-center gap-12">
-      <h1 className="font-cairo text-pirrot-red-400 flex items-center justify-center gap-4 p-4 text-5xl font-black uppercase lg:text-7xl">
-        Schulplaner Generator
-      </h1>
-      <p className="font-baloo max-w-xl p-4 text-xl lg:text-center">
-        Gestalten Sie individuelle Schulplaner mit Hausaufgabenübersicht,
-        Stundenplan, Kalender und allen wichtigen Funktionen für den
-        Schulalltag.
-      </p>
+    <div className="rise-in relative z-10 flex w-full flex-col items-center justify-center gap-16 pb-12">
+      <section className="section-shell flex flex-col items-center gap-6 pt-8 text-center">
+        <span className="btn-soft inline-flex px-4 py-2 text-sm uppercase tracking-wider">
+          Digitaldruck Pirrot
+        </span>
+        <h1 className="hero-title text-pirrot-red-500 flex items-center justify-center gap-4 text-5xl font-black uppercase lg:text-7xl">
+          Schulplaner Generator
+        </h1>
+        <p className="mx-auto max-w-3xl text-lg text-info-800 lg:text-2xl">
+          Gestalten Sie individuelle Schulplaner mit Hausaufgabenübersicht,
+          Stundenplan, Kalender und allen wichtigen Funktionen für den
+          Schulalltag.
+        </p>
+      </section>
       <HowItWorks />
 
       <TemplateGallery />
 
-      <div className="bg-pirrot-blue-50 border-red flex min-h-[640px] w-full items-center justify-center p-2 py-12 lg:p-4">
-        <div className="grid w-full max-w-screen-xl grid-cols-1 items-center justify-center gap-8 py-12 lg:grid-cols-3">
-          <div className="bg-pirrot-blue-50 text-pirrot-blue-50 order-2 col-span-1 flex w-full flex-col items-center justify-center gap-4 p-4 py-24 lg:order-1">
+      <section className="section-shell w-full py-2">
+        <div className="content-card grid min-h-[640px] w-full grid-cols-1 items-center justify-center gap-8 p-3 py-8 lg:grid-cols-3 lg:p-6">
+          <div className="order-2 col-span-1 flex w-full flex-col items-center justify-center gap-4 px-3 py-10 lg:order-1 lg:py-20">
             <BookPreview
               name={previewData.name}
               period={previewData.period}
               sub={previewData.sub}
             />
-            <span className="text-info-950 flex items-center justify-center gap-2 text-center font-semibold">
+            <span className="text-info-950 flex items-center justify-center gap-2 text-center text-sm font-semibold uppercase tracking-wide">
               <EyeIcon strokeWidth={3} size={20} /> Vorschau
             </span>
 
-            {/* Add validation feedback */}
             {!isFormValid && (
-              <div className="text-pirrot-red-400 mt-2 flex items-center gap-2 text-sm">
+              <div className="text-pirrot-red-500 mt-2 flex items-center gap-2 rounded-full border border-pirrot-red-200 bg-white/70 px-4 py-2 text-sm">
                 <AlertCircle size={16} />
                 <span>Bitte füllen Sie alle Pflichtfelder aus</span>
               </div>
             )}
           </div>
 
-          <div className="text-info-950 relative order-1 col-span-1 flex flex-col justify-center gap-8 lg:order-2 lg:col-span-2">
-            <div className="bg-pirrot-blue-100/20 absolute z-0 size-full rounded-3xl blur-xl"></div>
+          <div className="relative order-1 col-span-1 flex flex-col justify-center gap-8 lg:order-2 lg:col-span-2">
+            <div className="bg-pirrot-blue-100/35 absolute z-0 size-full rounded-3xl blur-2xl" />
             <PlannerForm
               onFormChange={setPreviewData}
               onValidationChange={setIsFormValid}
             />
           </div>
         </div>
-      </div>
+      </section>
 
       <About />
 

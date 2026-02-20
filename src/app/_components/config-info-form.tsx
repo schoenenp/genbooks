@@ -79,7 +79,6 @@ export default function ConfigInfoForm({
           break;
 
         default:
-          console.log();
           setFormError(
             `${err.message} — Formular Error, versuchen Sie es später erneut.`,
           );
@@ -106,13 +105,13 @@ export default function ConfigInfoForm({
 
   if (formError)
     return (
-      <div className="font-baloo flex flex-col items-center justify-center gap-8 p-4 pt-5 pb-6 text-xl">
+      <div className="flex flex-col items-center justify-center gap-8 p-4 pb-6 pt-5 text-xl">
         <div className="flex w-full justify-between">
           <h1 className="text-pirrot-red-400 text-2xl font-bold">::Error::</h1>
         </div>
         <p>{formError}</p>
         <button
-          className="bg-pirrot-red-300 border-pirrot-red-500/10 hover:bg-pirrot-red-400 cursor-pointer rounded border p-1 px-3 uppercase transition duration-300"
+          className="btn-soft cursor-pointer px-3 py-1 uppercase"
           type="button"
           onClick={() => setFormError(undefined)}
         >
@@ -122,14 +121,14 @@ export default function ConfigInfoForm({
     );
 
   return (
-    <form className="font-baloo flex flex-col items-center justify-center gap-8 p-4 pt-5 pb-6 text-xl">
+    <form className="flex flex-col items-center justify-center gap-8 p-4 pb-6 pt-5 text-xl">
       <div className="text-info-950 flex w-full flex-col gap-2">
-        <label className="font-cairo font-bold" htmlFor="title">
+        <label className="form-label" htmlFor="title">
           Titel
         </label>
         <input
           id="title"
-          className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
+          className="field-shell w-full px-3 py-2.5"
           onChange={(e) =>
             setInfoFormState((prev) => ({
               ...prev,
@@ -141,12 +140,12 @@ export default function ConfigInfoForm({
       </div>
       <div className="flex w-full flex-col gap-8 md:flex-row">
         <div className="text-info-950 flex w-full flex-1 flex-col gap-2">
-          <label className="font-cairo font-bold" htmlFor="name">
+          <label className="form-label" htmlFor="name">
             Schulart / Untertitel
           </label>
           <input
             id="sub"
-            className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
+            className="field-shell w-full px-3 py-2.5"
             list="schoolsList"
             onChange={(e) =>
               setInfoFormState((prev) => ({
@@ -169,7 +168,7 @@ export default function ConfigInfoForm({
         </div>
 
         <div className="w-full flex-1">
-          <label className="font-cairo font-bold" htmlFor="country">
+          <label className="form-label" htmlFor="country">
             Land
           </label>
           <select
@@ -182,7 +181,7 @@ export default function ConfigInfoForm({
                 region: "",
               }))
             }
-            className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
+            className="field-shell w-full px-3 py-2.5"
           >
             {COUNTRIES.map((c) => (
               <option key={c.code} value={c.code}>
@@ -193,7 +192,7 @@ export default function ConfigInfoForm({
         </div>
 
         <div className="w-full flex-1">
-          <label className="font-cairo font-bold" htmlFor="region">
+          <label className="form-label" htmlFor="region">
             Bundesland
           </label>
           <select
@@ -204,7 +203,7 @@ export default function ConfigInfoForm({
                 region: e.target.value,
               }))
             }
-            className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
+            className="field-shell w-full px-3 py-2.5"
           >
             <option value="">-- Bitte wählen --</option>
             {getRegionsByCountry(country ?? "DE").map((r) => (
@@ -217,7 +216,7 @@ export default function ConfigInfoForm({
       </div>
       <div className="text-info-950 flex w-full flex-col justify-between gap-8 lg:flex-row">
         <div className="flex flex-1 flex-col gap-2">
-          <label className="font-cairo font-bold" htmlFor="start">
+          <label className="form-label" htmlFor="start">
             Planer Start
           </label>
           <DatePicker
@@ -236,12 +235,12 @@ export default function ConfigInfoForm({
             dateFormat="dd.MM.yyyy"
             locale="de"
             placeholderText="DD.MM.YYYY"
-            className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
+            className="field-shell w-full px-3 py-2.5"
           />
         </div>
 
         <div className="flex flex-1 flex-col gap-2">
-          <label className="font-cairo font-bold" htmlFor="end">
+          <label className="form-label" htmlFor="end">
             Planer Ende
           </label>
           <DatePicker
@@ -258,7 +257,7 @@ export default function ConfigInfoForm({
             dateFormat="dd.MM.yyyy"
             locale="de"
             placeholderText="DD.MM.YYYY"
-            className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
+            className="field-shell w-full px-3 py-2.5"
           />
         </div>
       </div>
@@ -266,7 +265,7 @@ export default function ConfigInfoForm({
         <button
           type="button"
           onClick={handleSaveCancel}
-          className={`hover:bg-pirrot-blue-100/50 bg-pirrot-blue-50 text-info-950 relative flex flex-1 cursor-pointer items-center justify-center gap-2 rounded border border-white/50 px-4 py-2 transition-colors duration-500 hover:animate-pulse`}
+          className="btn-soft relative flex flex-1 cursor-pointer items-center justify-center gap-2 px-4 py-2"
         >
           {" "}
           Abbrechen <XIcon />
@@ -274,7 +273,7 @@ export default function ConfigInfoForm({
         <button
           type="button"
           onClick={handleSaveConfigInfo}
-          className={`hover:bg-pirrot-blue-100/50 bg-pirrot-blue-50 text-info-950 relative flex flex-1 cursor-pointer items-center justify-center gap-2 rounded border border-white/50 px-4 py-2 transition-colors duration-500 hover:animate-pulse`}
+          className="btn-solid relative flex flex-1 cursor-pointer items-center justify-center gap-2 px-4 py-2"
         >
           Speichern <SaveIcon />
         </button>

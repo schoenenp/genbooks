@@ -1,10 +1,84 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 
+import { Naming } from "@/util/naming";
 import {
   createTRPCRouter,
   protectedProcedure,
   publicProcedure,
 } from "@/server/api/trpc";
+import { canToggleTemplateByRole } from "./book-template-access";
+
+async function getBookAccessMeta(
+  ctx: {
+    db: {
+      book: {
+        findUnique: (args: {
+          where: { id: string };
+          select: {
+            id: true;
+            createdById: true;
+            isTemplate: true;
+            deletedAt: true;
+          };
+        }) => Promise<{
+          id: string;
+          createdById: string | null;
+          isTemplate: boolean;
+          deletedAt: Date | null;
+        } | null>;
+      };
+    };
+  },
+  bookId: string,
+) {
+  const book = await ctx.db.book.findUnique({
+    where: { id: bookId },
+    select: {
+      id: true,
+      createdById: true,
+      isTemplate: true,
+      deletedAt: true,
+    },
+  });
+
+  if (!book || book.deletedAt) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Book not found" });
+  }
+
+  return book;
+}
+
+async function assertOwnedBookAccess(
+  ctx: {
+    db: {
+      book: {
+        findUnique: (args: {
+          where: { id: string };
+          select: {
+            id: true;
+            createdById: true;
+            isTemplate: true;
+            deletedAt: true;
+          };
+        }) => Promise<{
+          id: string;
+          createdById: string | null;
+          isTemplate: boolean;
+          deletedAt: Date | null;
+        } | null>;
+      };
+    };
+    session: { user: { id: string } };
+  },
+  bookId: string,
+) {
+  const book = await getBookAccessMeta(ctx, bookId);
+  if (!book.createdById || book.createdById !== ctx.session.user.id) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+  return book;
+}
 
 export const bookRouter = createTRPCRouter({
   updateInfo: protectedProcedure
@@ -22,9 +96,13 @@ export const bookRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.session.user) {
-        return;
+      if (!input.id) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Missing book id",
+        });
       }
+      await assertOwnedBookAccess(ctx, input.id);
       const { name, sub, period, region, country } = input;
 
       const { start: planStart, end: planEnd } = period;
@@ -55,6 +133,7 @@ export const bookRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { id, name } = input;
+      await assertOwnedBookAccess(ctx, id);
       return ctx.db.book.update({
         where: {
           id,
@@ -84,42 +163,47 @@ export const bookRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { bookId, modules: bookModules } = input;
+      const book = await getBookAccessMeta(ctx, bookId);
+      const sessionUserId = ctx.session?.user.id;
 
-      await ctx.db.book.update({
-        where: { id: bookId },
-        data: {
-          modules: {
-            deleteMany: {},
+      if (book.createdById) {
+        if (book.createdById !== sessionUserId) {
+          throw new TRPCError({ code: "UNAUTHORIZED" });
+        }
+      } else if (book.isTemplate) {
+        // Public template books are read-only in the configurator.
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      return ctx.db.$transaction(async (tx) => {
+        return tx.book.update({
+          where: {
+            id: bookId,
           },
-        },
-      });
-
-      return ctx.db.book.update({
-        where: {
-          id: bookId,
-        },
-        data: {
-          createdBy: ctx.session?.user.id
-            ? {
-                connect: {
-                  id: ctx.session.user.id,
-                },
-              }
-            : undefined,
-          modules: {
-            createMany: {
-              data: bookModules.map((m) => ({
-                idx: m.idx,
-                moduleId: m.id,
-                colorCode: m.colorCode
-                  ? m.colorCode === 4
-                    ? "COLOR"
-                    : "GRAYSCALE"
-                  : undefined,
-              })),
+          data: {
+            createdBy: ctx.session?.user.id
+              ? {
+                  connect: {
+                    id: ctx.session.user.id,
+                  },
+                }
+              : undefined,
+            modules: {
+              deleteMany: {},
+              createMany: {
+                data: bookModules.map((m) => ({
+                  idx: m.idx,
+                  moduleId: m.id,
+                  colorCode: m.colorCode
+                    ? m.colorCode === 4
+                      ? "COLOR"
+                      : "GRAYSCALE"
+                    : undefined,
+                })),
+              },
             },
           },
-        },
+        });
       });
     }),
   getUserBooks: protectedProcedure.query(({ ctx }) => {
@@ -143,25 +227,24 @@ export const bookRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { bookId, isTemplate } = input;
-      const user = ctx.session.user as {
-        id: string;
-        role: "ADMIN" | "STAFF" | "MODERATOR" | "USER";
-      };
+      const user = ctx.session.user;
+      const targetBook = await ctx.db.book.findFirst({
+        where: { id: bookId, deletedAt: null },
+        select: { id: true, createdById: true },
+      });
+
+      if (!targetBook) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Book not found" });
+      }
 
       // Check role
-      if (
-        user.role !== "ADMIN" &&
-        user.role !== "STAFF" &&
-        user.role !== "MODERATOR"
-      ) {
-        throw new Error("Unauthorized");
+      if (!canToggleTemplateByRole(user.role)) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
       }
 
       return ctx.db.book.update({
         where: { id: bookId },
-        /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment */
-        data: { isTemplate } as any,
-        /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment */
+        data: { isTemplate },
       });
     }),
   getById: publicProcedure
@@ -170,19 +253,32 @@ export const bookRouter = createTRPCRouter({
         id: z.string().optional(),
       }),
     )
-    .query(({ ctx, input }) => {
+    .query(async ({ ctx, input }) => {
       const { id } = input;
 
       const { db } = ctx;
-      return id
-        ? db.book.findUnique({
-            where: { id, deletedAt: null },
-            include: {
-              modules: true,
-              customDates: true,
-            },
-          })
-        : null;
+      if (!id) return null;
+
+      const book = await db.book.findUnique({
+        where: { id, deletedAt: null },
+        include: {
+          modules: true,
+          customDates: true,
+        },
+      });
+
+      if (!book) return null;
+
+      const sessionUserId = ctx.session?.user.id;
+      if (book.createdById && book.createdById !== sessionUserId) {
+        return null;
+      }
+
+      if (!book.createdById && book.isTemplate) {
+        return null;
+      }
+
+      return book;
     }),
   saveCustomDates: protectedProcedure
     .input(
@@ -198,6 +294,7 @@ export const bookRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { bookId, dates } = input;
+      await assertOwnedBookAccess(ctx, bookId);
 
       // Transaction: Delete old dates, create new ones
       return ctx.db.$transaction(async (tx) => {
@@ -211,7 +308,9 @@ export const bookRouter = createTRPCRouter({
           await tx.customDate.createMany({
             data: dates.map((d) => ({
               bookId,
-              date: new Date(d.date),
+              date: d.date.includes("T")
+                ? new Date(d.date)
+                : new Date(`${d.date}T00:00:00.000Z`),
               name: d.name,
             })),
           });
@@ -234,11 +333,9 @@ export const bookRouter = createTRPCRouter({
       const start = new Date(planStart);
       const end = new Date(planEnd);
 
-      const random8Digit = Math.floor(10000000 + Math.random() * 90000000);
-
       return ctx.db.book.create({
         data: {
-          name: `Planer-${random8Digit}`,
+          name: Naming.book(),
           bookTitle: name,
           subTitle: sub,
           planStart: start,
@@ -255,7 +352,8 @@ export const bookRouter = createTRPCRouter({
         bookId: z.string(),
       }),
     )
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await assertOwnedBookAccess(ctx, input.bookId);
       return ctx.db.book.update({
         where: {
           id: input.bookId,
@@ -288,23 +386,20 @@ export const bookRouter = createTRPCRouter({
   cloneTemplate: publicProcedure
     .input(z.object({ templateId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const template = await ctx.db.book.findUnique({
-        where: { id: input.templateId },
+      const template = await ctx.db.book.findFirst({
+        where: { id: input.templateId, isTemplate: true, deletedAt: null },
         include: {
           modules: true,
         },
       });
 
       if (!template) {
-        throw new Error("Template not found");
+        throw new TRPCError({ code: "NOT_FOUND", message: "Template not found" });
       }
 
-      const random8Digit = Math.floor(10000000 + Math.random() * 90000000);
-
-      // Deep copy logic
       return ctx.db.book.create({
         data: {
-          name: `Copy-${template.name}-${random8Digit}`,
+          name: Naming.bookCopy(template.name),
           bookTitle: template.bookTitle,
           subTitle: template.subTitle,
           format: template.format,

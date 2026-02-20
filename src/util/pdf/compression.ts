@@ -1,4 +1,5 @@
 import { PDFName, type PDFDocument } from "pdf-lib";
+import { logger } from "@/util/logger";
 
 export type CompressionLevel = "low" | "medium" | "high";
 
@@ -28,6 +29,6 @@ export function configureCompression(
       catalog.set(PDFName.of("CompressStreams"), PDFName.of("true"));
     }
   } catch (error) {
-    console.warn("Could not apply compression settings:", error);
+    logger.warn("pdf_compression_settings_failed", { error });
   }
 }

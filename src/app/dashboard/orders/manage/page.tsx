@@ -24,9 +24,10 @@ export default async function OrderManage(props: {
 
 return (
     <HydrateClient>
-    <main className="flex min-h-screen flex-col bg-gradient-to-b from-pirrot-blue-100 to-pirrot-blue-50 text-pirrot-blue-50">
+    <main className="relative flex min-h-screen flex-col items-center overflow-hidden text-info-900">
+       <div className="subtle-grid pointer-events-none absolute inset-0 opacity-35" />
        <Navigation />
-       <div className="p-4 flex h-full flex-col gap-4 overflow-y-auto">
+       <div className="section-shell z-10 flex h-full flex-col gap-4 overflow-y-auto py-10">
         <Overview orderId={payload ?? ""} />
        </div>
     </main>

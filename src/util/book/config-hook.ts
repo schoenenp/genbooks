@@ -145,22 +145,14 @@ export const useBookConfig = (initialData?: ConfigState) => {
     if (!stepConfig) return false;
 
     const selectedModules = configState.book?.modules?.[stepId] ?? [];
-    
-    // For debugging
-    console.log('Step:', stepId);
-    console.log('Selected modules:', selectedModules);
-    console.log('Config:', stepConfig.modules);
-    console.log('Module count:', selectedModules.length);
-    
+
     // Check minimum required modules
     if (selectedModules.length < stepConfig.modules.min) {
-        console.log('Failed min check');
         return false;
     }
     
     // Check maximum allowed modules (if max is not -1)
     if (stepConfig.modules.max !== -1 && selectedModules.length > stepConfig.modules.max) {
-        console.log('Failed max check');
         return false;
     }
     
@@ -169,11 +161,7 @@ export const useBookConfig = (initialData?: ConfigState) => {
         !stepConfig.modules.exclude.includes(module) &&
         (stepConfig.modules.include.length === 0 || stepConfig.modules.include.includes(module))
     );
-    
-    if (!allAllowed) {
-        console.log('Failed module type check');
-    }
-    
+
     return allAllowed;
 }, [configState.book?.modules]);
 

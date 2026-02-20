@@ -1,4 +1,5 @@
 import { PDFDocument } from "pdf-lib";
+import { logger } from "@/util/logger";
 
 const CDN_URL = process.env.NEXT_PUBLIC_CDN_SERVER_URL ?? "";
 
@@ -29,7 +30,7 @@ export async function generateCoverPreview(
       : `${CDN_URL}${pdfUrl}`;
     const response = await fetch(fullPdfUrl);
     if (!response.ok) {
-      console.warn("Failed to fetch PDF for cover preview");
+      logger.warn("cover_preview_pdf_fetch_failed", { status: response.status });
       return null;
     }
     const pdfBytes = await response.arrayBuffer();
@@ -85,7 +86,7 @@ export async function generateCoverPreview(
 
     return canvas.toDataURL("image/jpeg", 0.5);
   } catch (error) {
-    console.warn("Failed to generate cover preview:", error);
+    logger.warn("cover_preview_generation_failed", { error });
     return null;
   }
 }

@@ -1,4 +1,5 @@
 'use client'
+import { logger } from "@/util/logger";
 type ColorProfileItem = {
   page: number;
   c: number; 
@@ -29,7 +30,7 @@ export async function preflightDocument(
       });
       result = await response.json() as PreflightResult
     }catch(err){
-      console.log(err)
+      logger.warn("pdf_preflight_request_failed", { error: err })
     }
 
   return result

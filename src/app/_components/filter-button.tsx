@@ -33,15 +33,15 @@ export  function FilterButton({ item, isActive, onToggle }: FilterButtonProps) {
       <button
         type="button"
         onClick={onToggle}
-        className={`hover:bg-pirrot-blue-100/50 relative flex gap-2 flex-1 cursor-pointer rounded border w-full p-1 md:px-4 md:py-2 transition-colors duration-500 hover:animate-pulse justify-center items-center ${
+        className={`relative flex w-full flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border px-2 py-2 text-sm font-semibold ${
           item.isComplete
-            ? "border-pirrot-green-300/50 bg-pirrot-green-100/50 text-info-950"
-            : "bg-pirrot-blue-50 text-info-950 border-white/50"
+            ? "border-pirrot-green-300/50 bg-pirrot-green-100/60 text-info-950"
+            : "field-shell text-info-950"
         } `}
       >
         {item.icon}
-        <span className="hidden md:block">{item.id}</span> 
-        {isActive && <FilterX className="absolute top-2 right-2 size-4" />}
+        <span className="hidden md:block">{item.id}</span>
+        {isActive && <FilterX className="absolute top-2 right-2 size-4 text-pirrot-blue-700" />}
       </button>
     );
   }

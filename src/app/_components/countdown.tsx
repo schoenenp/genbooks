@@ -2,23 +2,31 @@
 import { api } from '@/trpc/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { getRetryAfterSeconds } from "@/util/trpc-error"
 
 export default function Countdown({
   duration = 5,
   session = "",
-  onCountEnded = () => console.log("count ended. redirecting to route."),
+  onCountEnded = () => undefined,
   redirect = '/',
 }) {
-  const [count, setCount] = useState<number>()
+  const [count, setCount] = useState<number | undefined>(session ? undefined : duration)
+  const [retryCount, setRetryCount] = useState<number>()
   const router = useRouter()
   const hasValidated = useRef(false)
   
   const validateOrder = api.order.validate.useMutation({
     onSuccess:(data) => {
-      console.log("DATA: ", data)
       if(data){
         hasValidated.current = true
+        setRetryCount(undefined)
         setCount(duration)
+      }
+    },
+    onError: (error) => {
+      const retryAfterSeconds = getRetryAfterSeconds(error)
+      if (retryAfterSeconds) {
+        setRetryCount(retryAfterSeconds)
       }
     },
   }) 
@@ -31,6 +39,20 @@ export default function Countdown({
   },[session, validateOrder])
 
   useEffect(() => {
+    if (retryCount === undefined) return;
+    if (retryCount <= 0) {
+      setRetryCount(undefined)
+      if (session) {
+        validateOrder.mutate({ session })
+      }
+      return
+    }
+
+    const id = setTimeout(() => setRetryCount((current) => (current ?? 0) - 1), 1000)
+    return () => clearTimeout(id)
+  }, [retryCount, session, validateOrder])
+
+  useEffect(() => {
     if (count !== undefined && count <= 0) {
       onCountEnded?.()
       router.push(redirect)
@@ -41,5 +63,5 @@ export default function Countdown({
     return () => clearTimeout(id)
   }, [count, onCountEnded, redirect, router])
 
-  return <span>{count}</span>
+  return <span>{count ?? retryCount ?? duration}</span>
 }

@@ -1,10 +1,12 @@
 'use client'
 
-import LoadingSpinner from "@/app/_components/loading-spinner"
 import { api } from "@/trpc/react"
 import type { OrderStatus, PaymentStatus } from "@prisma/client";
 import { Calendar, Package, CreditCard, Truck, CheckCircle, Clock, XCircle, AlertCircle, RefreshCw } from "lucide-react"
 import Link from "next/link";
+import { useState } from "react";
+import { DashboardSkeleton } from "../../_components/dashboard-states";
+import { getRetryAfterSeconds } from "@/util/trpc-error";
 
 
 type OrderOverviewProps = {
@@ -14,6 +16,7 @@ type OrderOverviewProps = {
 
 export default function Overview({ orderId }: OrderOverviewProps) {
     const utils = api.useUtils()
+    const [cancelError, setCancelError] = useState<string | null>(null)
     const orderData = api.order.getByPublicId.useQuery({
         orderId
     }, {
@@ -21,21 +24,31 @@ export default function Overview({ orderId }: OrderOverviewProps) {
     })
     const cancelOrder = api.order.cancelPending.useMutation({
         onSuccess:async () => {
+            setCancelError(null)
             await utils.order.getByPublicId.invalidate({orderId})
-        }
+        },
+        onError: (error) => {
+            const retryAfterSeconds = getRetryAfterSeconds(error)
+            if (retryAfterSeconds) {
+                setCancelError(`Zu viele Anfragen. Bitte in etwa ${retryAfterSeconds}s erneut versuchen.`)
+                return
+            }
+            setCancelError(error.message)
+        },
     })
     
     if (orderData.isLoading || cancelOrder.isPending) {
         return (
-            <div className="flex justify-center items-center p-8">
-                <LoadingSpinner />
+            <div className="flex flex-col gap-4">
+                <DashboardSkeleton rows={3} />
+                <DashboardSkeleton rows={4} />
             </div>
         )
     }
 
     if (orderData.error) {
         return (
-            <div className="flex flex-col items-center justify-center p-8 text-pirrot-red-400">
+            <div className="content-card flex flex-col items-center justify-center p-8 text-pirrot-red-500">
                 <XCircle className="w-16 h-16 mb-4" />
                 <h2 className="text-xl font-bold font-cairo mb-2">Fehler beim Laden</h2>
                 <p className="text-pirrot-red-300">{orderData.error.message}</p>
@@ -45,7 +58,7 @@ export default function Overview({ orderId }: OrderOverviewProps) {
 
     if (!orderData.data) {
         return (
-            <div className="flex flex-col items-center justify-center p-8 text-info-600">
+            <div className="content-card flex flex-col items-center justify-center p-8 text-info-600">
                 <AlertCircle className="w-16 h-16 mb-4" />
                 <h2 className="text-xl font-bold font-cairo mb-2">Keine Bestellung gefunden</h2>
                 <p className="text-info-500">Die angeforderte Bestellung konnte nicht gefunden werden.</p>
@@ -138,7 +151,7 @@ export default function Overview({ orderId }: OrderOverviewProps) {
     }
 
     const statusConfig = getStatusConfig(order.status)
-    const paymentConfig = getPaymentStatusConfig(order.paymentStatus as PaymentStatus)
+    const paymentConfig = getPaymentStatusConfig(order.paymentStatus)
     const StatusIcon = statusConfig.icon
     const PaymentIcon = paymentConfig.icon
 
@@ -147,7 +160,7 @@ export default function Overview({ orderId }: OrderOverviewProps) {
     }
 
     return (
-        <div className="max-w-4xl mx-auto">
+        <div className="mx-auto max-w-4xl">
             {/* Header */}
             <div className="mb-8">
                 <h1 className="text-3xl font-bold font-cairo text-info-950 mb-2">
@@ -162,24 +175,24 @@ export default function Overview({ orderId }: OrderOverviewProps) {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Order Details Card */}
                 <div className="lg:col-span-2">
-                    <div className="bg-pirrot-blue-50/50 border border-pirrot-blue-200/30 rounded p-6 shadow-sm">
+                    <div className="content-card stagger-item p-6">
                         <h2 className="text-xl font-bold font-cairo text-info-950 mb-4 flex items-center gap-2">
                             <Package className="w-5 h-5" />
                             Bestelldetails
                         </h2>
                         
                         <div className="space-y-4">
-                            <div className="flex justify-between items-center py-3 border-b border-pirrot-blue-200/30">
+                            <div className="flex items-center justify-between border-b border-pirrot-blue-200/30 py-3">
                                 <span className="font-baloo text-info-700">Bestellnummer:</span>
                                 <span className="font-bold font-cairo text-info-950">#{order.id}</span>
                             </div>
                             
-                            <div className="flex justify-between items-center py-3 border-b border-pirrot-blue-200/30">
+                            <div className="flex items-center justify-between border-b border-pirrot-blue-200/30 py-3">
                                 <span className="font-baloo text-info-700">Produkt:</span>
                                 <span className="font-bold font-cairo text-info-950">{order.name}</span>
                             </div>
                             
-                            <div className="flex justify-between items-center py-3 border-b border-pirrot-blue-200/30">
+                            <div className="flex items-center justify-between border-b border-pirrot-blue-200/30 py-3">
                                 <span className="font-baloo text-info-700">Bestelldatum:</span>
                                 <span className="font-cairo text-info-950 flex items-center gap-2">
                                     <Calendar className="w-4 h-4" />
@@ -187,7 +200,7 @@ export default function Overview({ orderId }: OrderOverviewProps) {
                                 </span>
                             </div>
                             
-                            <div className="flex justify-between items-center py-3">
+                            <div className="flex items-center justify-between py-3">
                                 <span className="font-baloo text-info-700">Status:</span>
                                 <span className={`px-3 py-1 rounded-full text-sm font-semibold border ${statusConfig.color} flex items-center gap-2`}>
                                     <StatusIcon className="w-4 h-4" />
@@ -200,7 +213,7 @@ export default function Overview({ orderId }: OrderOverviewProps) {
 
                 {/* Payment & Pricing Card */}
                 <div className="lg:col-span-1">
-                    <div className="bg-pirrot-blue-50/50 border border-pirrot-blue-200/30 rounded p-6 shadow-sm">
+                    <div className="content-card stagger-item p-6" style={{ animationDelay: "90ms" }}>
                         <h2 className="text-xl font-bold font-cairo text-info-950 mb-4 flex items-center gap-2">
                             <CreditCard className="w-5 h-5" />
                             Zahlung & Preis
@@ -238,19 +251,35 @@ export default function Overview({ orderId }: OrderOverviewProps) {
 
             {/* Action Buttons */}
             <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
-                <button type="button" disabled={!order.trackingId}  className="bg-pirrot-blue-300 hover:bg-pirrot-blue-400 text-white font-bold font-cairo py-3 px-6 rounded transition-colors duration-200 flex items-center justify-center gap-2">
+                {cancelError && (
+                    <div className="w-full basis-full rounded-lg border border-warning-200 bg-warning-50 px-4 py-3 text-warning-900">
+                        {cancelError}
+                    </div>
+                )}
+                <button type="button" disabled={!order.trackingId}  className="btn-solid flex items-center justify-center gap-2 px-6 py-3 disabled:opacity-50">
                     <Truck className="w-5 h-5" />
                     Versand verfolgen
                 </button>
                 
-                <Link target="_blank" rel="no referrer"  className="bg-info-100 hover:bg-info-200 text-info-800 font-bold font-cairo py-3 px-6 rounded transition-colors duration-200 flex items-center justify-center gap-2"
-                href={order.invoiceUrl ?? "#"}>
-                    <Package className="w-5 h-5" />
-                    Rechnung herunterladen
-                </Link>
+                {order.invoiceUrl ? (
+                    <Link target="_blank" rel="noreferrer"  className="btn-soft flex items-center justify-center gap-2 px-6 py-3"
+                    href={order.invoiceUrl}>
+                        <Package className="w-5 h-5" />
+                        Rechnung herunterladen
+                    </Link>
+                ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="btn-soft flex cursor-not-allowed items-center justify-center gap-2 px-6 py-3 text-info-800/60"
+                    >
+                        <Package className="w-5 h-5" />
+                        Keine Rechnung verfügbar
+                    </button>
+                )}
                 
                 {order.status === 'PENDING' && (
-                    <button type="button" onClick={handleCancelOrder} disabled={order.status !== 'PENDING'} className="bg-pirrot-red-300 hover:bg-pirrot-red-400 text-white font-bold font-cairo py-3 px-6 rounded transition-colors duration-200 flex items-center justify-center gap-2">
+                    <button type="button" onClick={handleCancelOrder} disabled={order.status !== 'PENDING' || cancelOrder.isPending} className="btn-soft flex items-center justify-center gap-2 px-6 py-3 disabled:opacity-60">
                         <XCircle className="w-5 h-5" />
                         Bestellung stornieren
                     </button>

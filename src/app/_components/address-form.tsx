@@ -21,17 +21,17 @@ export const AddressForm = ({
     setter: (patch: Partial<typeof state>) => void
     title: string
   }) => (
-    <form className="flex flex-1 w-full flex-col gap-2 text-sm justify-center items-center bg-pirrot-blue-50 rounded border border-pirrot-blue-500/5 p-4 pl-24">
+    <form className="content-card flex w-full flex-1 flex-col items-center justify-center gap-2 p-4 text-sm lg:pl-10">
     <div className="flex flex-col gap-2 w-full">
-      <h3 className="font-bold font-cairo">{title}</h3>
+      <h3 className="font-bold">{title}</h3>
   
       <div className="w-full flex flex-col gap-1 text-info-950">
-              <label className="font-bold font-cairo" htmlFor="org">
+              <label className="form-label" htmlFor="org">
                 Organisation
               </label>
               <input
                 id="org"
-                className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
+                className="field-shell w-full px-3 py-2.5"
                 placeholder="Schule oder Einrichtung"
                 value={state.org}
                 onChange={(e) => setter({ org: e.target.value })}
@@ -90,13 +90,13 @@ export const AddressForm = ({
         />
       </div>
       <div className="w-full flex flex-col gap-1 text-info-950">
-              <label className="font-bold font-cairo" htmlFor="optional">
+              <label className="form-label" htmlFor="optional">
                 Optional
               </label>
               <input
                 id="optional"
-                className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
-                placeholder="Addresszusatz, z.B. 3.OG, Campus 1C, Sekretäriat, etc ..."
+                className="field-shell w-full px-3 py-2.5"
+                placeholder="Adresszusatz, z.B. 3.OG, Campus 1C, Sekretariat, etc."
                 value={state.optional}
                 onChange={(e) => setter({ optional: e.target.value })}
               />
@@ -106,13 +106,13 @@ export const AddressForm = ({
 
              
       <div className="w-full flex flex-col gap-1 text-info-950">
-        <label className="font-bold font-cairo" htmlFor="email">
+        <label className="form-label" htmlFor="email">
           E-Mail
         </label>
         <input
           id="email"
           type="email"
-          className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
+          className="field-shell w-full px-3 py-2.5"
           placeholder="max@example.com"
           value={state.email}
           onChange={(e) => setter({ email: e.target.value })}
@@ -120,13 +120,13 @@ export const AddressForm = ({
       </div>
 
       <div className="w-full flex flex-col gap-1 text-info-950">
-        <label className="font-bold font-cairo" htmlFor="phone">
+        <label className="form-label" htmlFor="phone">
           Telefon (optional)
         </label>
         <input
           id="phone"
           type="tel"
-          className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-2"
+          className="field-shell w-full px-3 py-2.5"
           placeholder="0123 456789"
           value={state.phone}
           onChange={(e) => setter({ phone: e.target.value })}
@@ -155,13 +155,13 @@ export const AddressForm = ({
     type?: string
   }) => (
     <label className={`flex flex-col ${small ? "w-16" : 'w-full'}`}>
-      <span className="font-bold font-cairo">{label}</span>
+      <span className="form-label">{label}</span>
       <input
         type={type}
         placeholder={placeholder}
         value={value ?? ''}
         onChange={onChange}
-        className={`bg-pirrot-blue-950/5 rounded border border-white/50 p-2`}
+        className="field-shell px-3 py-2.5"
       />
     </label>
   )

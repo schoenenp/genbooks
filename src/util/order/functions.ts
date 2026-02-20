@@ -1,6 +1,7 @@
-import { createHash } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 import nodemailer from 'nodemailer';
 import { env } from '@/env';
+import { logger } from "@/util/logger";
 
 const ABC = 'ABCEFGHJKLNPQSTUVWXYZ'
 
@@ -16,17 +17,20 @@ export default function createOrderKey(orderNo:number, orderType = "M"){
 }
 
 
-export function createCancelKey(key: string, secret: string = process.env.CANCEL_SECRET ?? 'default-secret-key'): string {
+export function createCancelKey(key: string, secret: string = env.CANCEL_SECRET): string {
     // Create a hash using SHA-256
     const hash = createHash('sha256');
     hash.update(key + secret);
     return hash.digest('hex');
 }
 
-export function verifyCancelKey(key: string, hash: string, secret: string = process.env.CANCEL_SECRET ?? 'default-secret-key'): boolean {
-    // Verify the hash by recreating it
+export function verifyCancelKey(key: string, hash: string, secret: string = env.CANCEL_SECRET): boolean {
+    // Verify using timing-safe compare to avoid side-channel leaks.
     const expectedHash = createCancelKey(key, secret);
-    return hash === expectedHash;
+    if (hash.length !== expectedHash.length) {
+      return false;
+    }
+    return timingSafeEqual(Buffer.from(hash), Buffer.from(expectedHash));
 }
 
 export async function sendOrderVerification(to: string, subject: string, html: string)
@@ -48,6 +52,6 @@ export async function sendOrderVerification(to: string, subject: string, html: s
     bcc: [ env.SHOP_EMAIL ]
   })
 
-  console.log('Message sent: %s', info.messageId);
+  logger.info("order_verification_email_sent", { messageId: info.messageId });
   return info;
 }

@@ -16,11 +16,12 @@ export default async function ModuleOverview() {
   
 return (
     <HydrateClient>
-    <main className="flex min-h-screen flex-col bg-gradient-to-b from-pirrot-blue-100 to-pirrot-blue-50">
+    <main className="relative flex min-h-screen flex-col items-center overflow-hidden text-info-900">
+       <div className="subtle-grid pointer-events-none absolute inset-0 opacity-35" />
        <Navigation />
-       <div className="flex-1 p-4 flex flex-col gap-4">
-        <div className="w-full ">
-       <h1 className="text-4xl font-bold">Module</h1>
+       <div className="section-shell z-10 flex flex-1 flex-col gap-4 py-10">
+        <div className="w-full">
+       <h1 className="text-4xl font-black uppercase">Module</h1>
         </div>
         <ModuleGrid  />
        </div>

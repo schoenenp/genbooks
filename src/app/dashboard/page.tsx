@@ -14,7 +14,7 @@ import OrdersSection from "./_components/orders";
 export default async function Dashboard({
     searchParams,
   }: {
-    searchParams: Promise<{ view: string }>
+    searchParams: Promise<{ view?: string }>
   }) {
 
   const session = await auth()
@@ -23,6 +23,7 @@ export default async function Dashboard({
   void api.module.getUserModules.prefetch()
   void api.book.getUserBooks.prefetch()
   void api.order.initSection.prefetch()
+  void api.sponsor.getStatus.prefetch()
 
   if(!session?.user) redirect("/")
   
@@ -43,27 +44,32 @@ export default async function Dashboard({
 
   return (
     <HydrateClient>
-     <main className="flex min-h-screen flex-col bg-gradient-to-b from-pirrot-blue-50 items-center to-pirrot-blue-100 text-info-900 relative">
-     <div id="modal-hook"></div>
-     <Navigation />
-        <div className="w-full max-w-screen-xl flex flex-col flex-wrap lg:flex-row gap-4 p-4 py-16 relative">
-        <h2 className="text-3xl w-full uppercase font-black">Dashboard</h2>
-            <div className="w-full max-w-40 flex flex-col uppercase gap-2 text-xl">
-        {DASHBOARD_LINKS.map((dl,idx) => <Link
-              key={idx} 
-              className={`
-                flex gap-2 items-center
-                ${view === dl.name 
-                  || view === undefined 
-                  ? "font-bold" 
-                  : ""}
-                `} 
-                href={`?view=${dl.name}`}
-              >
-              {dl.icon}  {dl.name}
-              </Link>)}
+     <main className="relative flex min-h-screen flex-col items-center overflow-hidden text-info-900">
+      <div className="subtle-grid pointer-events-none absolute inset-0 opacity-35" />
+      <div id="modal-hook"></div>
+      <Navigation />
+        <div className="section-shell relative flex w-full flex-col gap-6 py-16">
+          <h2 className="text-3xl font-black uppercase lg:text-4xl">Dashboard</h2>
+          <div className="flex w-full flex-col gap-4">
+            <aside className="content-card h-fit p-3">
+              <nav className="flex flex-col gap-2 lg:flex-row">
+                {DASHBOARD_LINKS.map((dl) => (
+                  <Link
+                    key={dl.name}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold uppercase lg:flex-1 lg:justify-center ${
+                      view === dl.name || view === undefined
+                        ? "bg-pirrot-blue-100 text-pirrot-blue-900"
+                        : "text-info-800 hover:bg-pirrot-blue-100/40"
+                    }`}
+                    href={`?view=${dl.name}`}
+                  >
+                    {dl.icon} {dl.name}
+                  </Link>
+                ))}
+              </nav>
+            </aside>
+            <div className="min-w-0">{renderView()}</div>
           </div>
-           {renderView()}
         </div>
       </main>
     </HydrateClient>
@@ -72,7 +78,6 @@ export default async function Dashboard({
 
 type DashLink = {
     name: string;
-    link: string;
     icon: React.ReactNode;
 }
 
@@ -80,22 +85,18 @@ type DashLink = {
 const DASHBOARD_LINKS:DashLink[] = [
   {
     name:"profil",
-    link:"profil",
     icon: <UserIcon />,
   },
   {
     name:"planer",
-    link:"planer",
     icon: <BookCopy />,
   },
   {
     name:"module",
-    link:"module",
     icon: <Component />,
   },
   {
     name:"orders",
-    link:"orders",
     icon: <ReceiptEuro />,
   },
 ]

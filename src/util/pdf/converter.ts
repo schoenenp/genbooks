@@ -10,6 +10,7 @@ import { finalizeDocument } from "./alignment";
 import { fetchPdfBytes } from "./helpers";
 import type {
   BookDetails,
+  BookFormat,
   PDFModule,
   ProcessingOptions,
   Result,
@@ -63,8 +64,10 @@ class PDFProcessor {
         bookDetails,
         moduleItem,
         finalPdf: await PDFDocument.create(), // Dummy, not used
+        format: "DIN A5",
         previewMode: false,
         isGrayscale: colorMap.get(moduleItem.id) === 1,
+        currentPageCount: calculatedPageCount,
       };
 
       let modulePages: number;
@@ -109,6 +112,7 @@ class PDFProcessor {
       previewMode = false,
       compressionLevel = "low",
       addWatermark: shouldAddWatermark = false,
+      format = "DIN A5",
       colorMap = new Map(),
       grayscaleApiKey,
     } = options;
@@ -135,6 +139,7 @@ class PDFProcessor {
         bookDetails,
         moduleItem: coverModule,
         finalPdf,
+        format,
         previewMode,
         isGrayscale: isCoverGrayscale,
         grayscaleApiKey,
@@ -282,6 +287,7 @@ export async function processPdfModules(
     compressionLevel?: "low" | "medium" | "high";
     addPageNumbers?: boolean;
     addWatermark?: boolean;
+    format?: BookFormat;
     colorMap?: Map<ModuleId, ColorCode>;
     grayscaleApiKey?: string;
   } = {},
@@ -294,6 +300,7 @@ export async function processPdfModules(
       compressionLevel: options.compressionLevel ?? "low",
       addPageNumbers: options.addPageNumbers ?? true,
       addWatermark: options.addWatermark ?? false,
+      format: options.format ?? "DIN A5",
       colorMap: options.colorMap,
       grayscaleApiKey: options.grayscaleApiKey,
     });
@@ -313,6 +320,7 @@ export async function processPdfModulesPreview(
     compressionLevel?: "low" | "medium" | "high";
     addPageNumbers?: boolean;
     addWatermark?: boolean;
+    format?: BookFormat;
     colorMap?: Map<ModuleId, ColorCode>;
     grayscaleApiKey?: string;
   } = {},
@@ -337,6 +345,7 @@ export async function processPdfModulesPreview(
         compressionLevel: options.compressionLevel ?? "high",
         addPageNumbers: options.addPageNumbers ?? true,
         addWatermark: options.addWatermark ?? true,
+        format: options.format ?? "DIN A5",
         colorMap: options.colorMap,
         grayscaleApiKey: options.grayscaleApiKey,
       },
@@ -351,6 +360,20 @@ export async function processPdfModulesPreview(
   } finally {
     console.timeEnd("PDF Preview Generation Time");
   }
+}
+
+/**
+ * Calculate full page counts for pricing without generating PDF output.
+ */
+export async function calculatePdfPageCounts(
+  bookDetails: BookDetails,
+  modules: PDFModule[],
+  options: {
+    colorMap?: Map<ModuleId, ColorCode>;
+  } = {},
+): Promise<{ fullPageCount: number; bPages: number; cPages: number }> {
+  const processor = new PDFProcessor();
+  return processor.calculateFullPageCounts(bookDetails, modules, options.colorMap);
 }
 
 // Re-export types for backwards compatibility

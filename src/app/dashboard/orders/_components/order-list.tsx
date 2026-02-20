@@ -2,6 +2,8 @@
 import type { OrderStatus } from '@prisma/client';
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
+import { DashboardEmptyState } from "../../_components/dashboard-states";
+import { ShoppingBag } from "lucide-react";
 
 // Define the type for a single order
 type Order = {
@@ -51,49 +53,59 @@ const OrderList: React.FC<OrderListProps> = ({ orders = [], itemsPerPage = 10 })
     }
   };
 
+  if (orders.length === 0) {
+    return (
+      <DashboardEmptyState
+        icon={ShoppingBag}
+        title="Keine Bestellungen vorhanden"
+        description="Neue Bestellungen erscheinen hier automatisch mit Status, Betrag und Zeitverlauf."
+      />
+    );
+  }
+
   return (
-    <div className="container mx-auto p-4">
+    <div className="w-full p-1">
       <h1 className="text-2xl font-bold mb-4">Bestellungen</h1>
 
       {/* Desktop Table View */}
       <div className="hidden md:block">
-        <div className="bg-pirrot-blue-50 shadow-xs rounded overflow-hidden">
+        <div className="content-card overflow-hidden">
           <table className="min-w-full leading-normal">
             <thead>
               <tr>
-                <th className="px-5 py-3 border-b-2 border-info-200 bg-info-100 text-left text-xs font-semibold text-info-600 uppercase tracking-wider">
+                <th className="bg-pirrot-blue-100/60 border-b border-info-200 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-info-700">
                   Order ID
                 </th>
-                <th className="px-5 py-3 border-b-2 border-info-200 bg-info-100 text-left text-xs font-semibold text-info-600 uppercase tracking-wider">
+                <th className="bg-pirrot-blue-100/60 border-b border-info-200 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-info-700">
                   Name
                 </th>
-                <th className="px-5 py-3 border-b-2 border-info-200 bg-info-100 text-left text-xs font-semibold text-info-600 uppercase tracking-wider">
+                <th className="bg-pirrot-blue-100/60 border-b border-info-200 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-info-700">
                   Date
                 </th>
-                <th className="px-5 py-3 border-b-2 border-info-200 bg-info-100 text-left text-xs font-semibold text-info-600 uppercase tracking-wider">
+                <th className="bg-pirrot-blue-100/60 border-b border-info-200 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-info-700">
                   Total
                 </th>
-                <th className="px-5 py-3 border-b-2 border-info-200 bg-info-100 text-left text-xs font-semibold text-info-600 uppercase tracking-wider">
+                <th className="bg-pirrot-blue-100/60 border-b border-info-200 px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-info-700">
                   Status
                 </th>
               </tr>
             </thead>
             <tbody>
               {currentOrders.map((order, idx) => (
-                <tr onClick={() => router.push(`/dashboard/orders/manage?pl=${order.hash}`)} key={idx} className="hover:bg-info-50">
-                  <td className="px-5 py-4 border-b border-info-200 bg-white text-sm">
-                    <p className="text-info-900 whitespace-no-wrap">{order.id}</p>
+                <tr onClick={() => router.push(`/dashboard/orders/manage?pl=${order.hash}`)} key={idx} className="cursor-pointer hover:bg-pirrot-blue-50/55">
+                  <td className="border-b border-info-200 bg-white/70 px-5 py-4 text-sm">
+                    <p className="whitespace-nowrap text-info-900">{order.id}</p>
                   </td>
-                  <td className="px-5 py-4 border-b border-info-200 bg-white text-sm">
-                    <p className="text-info-900 whitespace-no-wrap">{order.name}</p>
+                  <td className="border-b border-info-200 bg-white/70 px-5 py-4 text-sm">
+                    <p className="whitespace-nowrap text-info-900">{order.name}</p>
                   </td>
-                  <td className="px-5 py-4 border-b border-info-200 bg-white text-sm">
-                    <p className="text-info-900 whitespace-no-wrap">{order.date}</p>
+                  <td className="border-b border-info-200 bg-white/70 px-5 py-4 text-sm">
+                    <p className="whitespace-nowrap text-info-900">{order.date}</p>
                   </td>
-                  <td className="px-5 py-4 border-b border-info-200 bg-white text-sm">
-                    <p className="text-info-900 whitespace-no-wrap">{order.total}</p>
+                  <td className="border-b border-info-200 bg-white/70 px-5 py-4 text-sm">
+                    <p className="whitespace-nowrap text-info-900">{order.total}</p>
                   </td>
-                  <td className="px-5 py-4 border-b border-info-200 bg-white text-sm">
+                  <td className="border-b border-info-200 bg-white/70 px-5 py-4 text-sm">
                     <span
                       className={`relative inline-block px-3 py-1 font-semibold leading-tight rounded-full ${getStatusColor(
                         order.status
@@ -113,7 +125,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders = [], itemsPerPage = 10 })
       <div className="md:hidden">
         <div className="space-y-4">
           {currentOrders.map((order, key) => (
-            <div key={key} className="bg-white p-4 rounded-lg shadow">
+            <div key={key} className="content-card p-4">
               <div className="flex justify-between items-center mb-2">
                 <span className="font-bold text-lg">{order.id}</span>
                 <span
@@ -145,7 +157,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders = [], itemsPerPage = 10 })
 
       {/* Pagination Controls */}
       {totalPages > 1 && (
-        <div className="px-5 py-5 bg-white border-t flex flex-col xs:flex-row items-center xs:justify-between">
+        <div className="mt-3 flex flex-col items-center border-t border-info-200 px-5 py-5 xs:flex-row xs:justify-between">
           <span className="text-xs xs:text-sm text-info-900">
             Showing {Math.min(startIndex + 1, orders.length)} to {Math.min(endIndex, orders.length)} of {orders.length} Entries
           </span>
@@ -153,14 +165,14 @@ const OrderList: React.FC<OrderListProps> = ({ orders = [], itemsPerPage = 10 })
             <button
               onClick={() => goToPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="text-sm bg-info-300 hover:bg-info-400 text-info-800 font-semibold py-2 px-4 rounded-l disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-soft rounded-l px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               Zurück
             </button>
             <button
               onClick={() => goToPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="text-sm bg-info-300 hover:bg-info-400 text-info-800 font-semibold py-2 px-4 rounded-r disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-soft rounded-r px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
             >
               Weiter
             </button>

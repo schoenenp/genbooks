@@ -1,7 +1,10 @@
-// IMPORTANT: Replace this with a securely generated and managed secret key.
-const secretKey = '12345678901234567890123456789012';
-
 import crypto from 'node:crypto';
+import { env } from "@/env";
+
+function getEncryptionKey(): Buffer {
+  // Derive a stable 32-byte key from configured secret material.
+  return crypto.createHash("sha256").update(env.CANCEL_SECRET).digest();
+}
 
 /**
  * Encrypts a JSON payload using AES-GCM.
@@ -10,7 +13,7 @@ import crypto from 'node:crypto';
  */
 export function encryptPayload(payload: object): string {
   const iv = crypto.randomBytes(12);
-  const keyBuffer = Buffer.from(secretKey, 'utf-8');
+  const keyBuffer = getEncryptionKey();
   const cipher = crypto.createCipheriv('aes-256-gcm', keyBuffer, iv);
 
   const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf-8');
@@ -46,7 +49,7 @@ export async function decryptPayload<T>(encryptedBase64: string): Promise<T> {
   const tag = encryptedBytes.slice(encryptedBytes.length - 16);
   const ciphertext = encryptedBytes.slice(12, encryptedBytes.length - 16);
 
-  const keyBuffer = Buffer.from(secretKey, 'utf-8');
+  const keyBuffer = getEncryptionKey();
   const decipher = crypto.createDecipheriv('aes-256-gcm', keyBuffer, iv);
   decipher.setAuthTag(tag);
 

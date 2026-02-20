@@ -2,6 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import { BaseHandler } from "./base.handler";
 import type { TagDefinition, TagContext, HandlerResult } from "../types";
 import { convertPdfToGrayscale } from "../grayscale";
+import { convertPdfToPreviewGrayscale } from "../preview-grayscale";
 
 /**
  * Default handler for modules without specific form field requirements.
@@ -27,9 +28,11 @@ class DefaultHandler extends BaseHandler {
   ): Promise<HandlerResult> {
     const { finalPdf, previewMode, isGrayscale } = context;
     const sourceBytes = isGrayscale
-      ? await convertPdfToGrayscale(templateBytes, {
-          apiKey: context.grayscaleApiKey,
-        })
+      ? previewMode
+        ? await convertPdfToPreviewGrayscale(templateBytes)
+        : await convertPdfToGrayscale(templateBytes, {
+            apiKey: context.grayscaleApiKey,
+          })
       : templateBytes;
 
     const doc = await PDFDocument.load(sourceBytes);

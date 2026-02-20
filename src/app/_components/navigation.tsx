@@ -1,4 +1,4 @@
-import { HomeIcon, LogInIcon, LogOutIcon, UserIcon } from "lucide-react";
+import { HomeIcon, LogInIcon, LogOutIcon, LayoutDashboard } from "lucide-react";
 
 import Link from "next/link";
 import { auth } from "@/server/auth";
@@ -7,34 +7,49 @@ export default async function Navigation() {
   const session = await auth();
 
   return (
-    <div
+    <header
       id="navigation"
-      className="sticky top-0 z-[101] flex w-full items-center justify-between text-white drop-shadow"
+      className="sticky top-0 z-[101] mt-4 w-full px-3 sm:px-5"
     >
-      <i className="bg-pirrot-blue-100/50 absolute h-full w-full p-4 blur-lg"></i>
-      <div className="relative flex w-full items-center justify-between p-2">
-        <Link className="text-pirrot-blue-50 z-[60]" href="/">
+      <div className="content-card relative mx-auto flex w-full max-w-screen-xl items-center justify-between px-3 py-2 text-info-900">
+        <Link
+          className="text-pirrot-blue-950 z-[60] flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold hover:bg-pirrot-blue-100/50"
+          href="/"
+        >
           <HomeIcon />
+          <span className="hidden sm:inline">
+            Startseite
+          </span>
         </Link>
-        <div>
-          <div className="flex gap-2">
-            {session?.user && (
-              <Link href="/dashboard">
-                <UserIcon />
-              </Link>
-            )}
-            {session?.user ? (
-              <Link href="/auth/signout">
-                <LogOutIcon />
-              </Link>
-            ) : (
-              <Link href="/auth/signin">
-                <LogInIcon />
-              </Link>
-            )}
-          </div>
+        <div className="flex gap-2">
+          {session?.user && (
+            <Link
+              href="/dashboard"
+              className="btn-soft flex items-center gap-2 px-3 py-2 text-sm"
+            >
+              <LayoutDashboard size={18} />
+              <span className="hidden sm:inline">Dashboard</span>
+            </Link>
+          )}
+          {session?.user ? (
+            <Link
+              href="/auth/signout"
+              className="btn-soft flex items-center gap-2 px-3 py-2 text-sm"
+            >
+              <LogOutIcon />
+              <span className="hidden sm:inline">Abmelden</span>
+            </Link>
+          ) : (
+            <Link
+              href="/auth/signin"
+              className="btn-solid flex items-center gap-2 px-3 py-2 text-sm"
+            >
+              <LogInIcon />
+              <span className="hidden sm:inline">Anmelden</span>
+            </Link>
+          )}
         </div>
       </div>
-    </div>
+    </header>
   );
 }

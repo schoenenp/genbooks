@@ -6,6 +6,7 @@ import { AddressForm } from './address-form'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import LoadingSpinner from './loading-spinner'
+import { getRetryAfterSeconds } from "@/util/trpc-error"
 
 
 export type OrderAddress = {
@@ -27,13 +28,15 @@ export default function ConfigOrderForm({
   initialFormState,
   onAbortForm,
   quantity,
-  format
+  format,
+  sponsorToken,
 }: {
   bookId: string
   initialFormState?: OrderAddress
   onAbortForm: () => void
   quantity: number
   format: string
+  sponsorToken?: string
 }) {
   
   const [orderFormAddress, setOrderFormAddress] = useState<OrderAddress>(
@@ -52,7 +55,8 @@ export default function ConfigOrderForm({
       quantity,
       isPickup,
       saveUser,
-      format: format as "DIN A4" | "DIN A5"
+      format: format as "DIN A4" | "DIN A5",
+      sponsorToken,
     },
   }
 
@@ -80,11 +84,20 @@ export default function ConfigOrderForm({
       await utils.config.invalidate()
       if(data.checkout_session){
         router.push(data.checkout_session)
+      } else if (data.redirect_url) {
+        router.push(data.redirect_url)
       } else {
         setFormError("Fehler beim Erstellen der Zahlung")
       }
     },
     onError: (err) => {
+      const retryAfterSeconds = getRetryAfterSeconds(err)
+      if (retryAfterSeconds) {
+        setFormError(
+          `Zu viele Anfragen. Bitte warten Sie etwa ${retryAfterSeconds} Sekunden und versuchen Sie es erneut.`,
+        )
+        return
+      }
       setFormError(
         err.message === 'UNAUTHORIZED'
           ? `${err.message} —  Bitte loggen Sie sich ein um den Planer zu verwalten.`
@@ -94,7 +107,6 @@ export default function ConfigOrderForm({
   })
 
   const handleSaveConfigOrder = () => {
-    console.log(orderFormAddress)
     setupBookOrder.mutate(orderObject)
   }
 
@@ -108,13 +120,13 @@ export default function ConfigOrderForm({
 
   if (formError)
     return (
-      <div className="flex flex-col gap-2 md:gap-4 lg:gap-8 justify-center items-center font-baloo p-4 pt-5 pb-6">
+      <div className="flex flex-col items-center justify-center gap-2 p-4 pb-6 pt-5 md:gap-4 lg:gap-8">
         <div className="w-full flex justify-between">
           <h1 className="text-2xl font-bold text-pirrot-red-400">::Error::</h1>
         </div>          
         <p>{formError}</p>
         <button
-          className="uppercase bg-pirrot-red-300 border border-pirrot-red-500/10 hover:bg-pirrot-red-400 transition duration-300 p-1 px-3 cursor-pointer rounded"
+          className="btn-soft cursor-pointer rounded px-3 py-1 uppercase"
           type="button"
           onClick={() => setFormError(undefined)}
         >
@@ -124,11 +136,11 @@ export default function ConfigOrderForm({
     )
 
   return (
-    <div className="flex gap-2 flex-col lg:flex-row flex-wrap font-baloo">
+    <div className="flex flex-col flex-wrap gap-2 lg:flex-row">
       {/* left column */}
       <div className="w-full lg:max-w-xs flex flex-col gap-2 p-4">
         <div className="w-full aspect-video p-1">
-          <h3 className="font-bold font-cairo">Ihre Adressen:</h3>
+          <h3 className="font-bold">Ihre Adressen</h3>
           <p className="mb-2">
             Die Rechnungsadresse wird standardmäßig als Lieferadresse genutzt.
             Falls abweichend, geben Sie bitte eine separate Lieferadresse an.
@@ -136,10 +148,8 @@ export default function ConfigOrderForm({
          
         </div>
 
-        <div
-          className={`w-full aspect-video p-2 border rounded border-pirrot-blue-500 bg-pirrot-blue-100/50`}
-        >
-          <h3 className="font-bold font-cairo">Rechnungsadresse</h3>
+        <div className="field-shell w-full aspect-video p-2">
+          <h3 className="font-bold">Rechnungsadresse</h3>
           <p className="text-sm">
             <b>{orderFormAddress.org}</b>
             <br />
@@ -163,7 +173,7 @@ export default function ConfigOrderForm({
             />
             
    
-      <div className="w-full flex items-center gap-1 text-info-950 relative">
+      <div className="field-shell w-full flex items-center gap-2 px-3 py-2 text-info-950 relative">
             <input
               id="isPickup"
               type="checkbox"
@@ -173,11 +183,11 @@ export default function ConfigOrderForm({
               }}
               className="mr-2"
             />
-            <label htmlFor="isPickup" className="font-cairo items-center flex gap-2 relative">
-              Abholung Vorort<Link className='group flex gap-2 items-center' target='_blank' rel='no referrer' href="https://www.google.com/maps/search/?api=1&query=Digitaldruck%20Pirrot%20GmbH,Trierer%20Str"><CircleQuestionMark className='size-5' /> <span className='hidden group-hover:flex text-pirrot-red-400'>Link zur Hauptfiliale</span></Link>
+            <label htmlFor="isPickup" className="form-label flex items-center gap-2 relative">
+              Abholung vor Ort<Link className='group flex items-center gap-2' target='_blank' rel='noreferrer' href="https://www.google.com/maps/search/?api=1&query=Digitaldruck%20Pirrot%20GmbH,Trierer%20Str"><CircleQuestionMark className='size-5' /> <span className='hidden group-hover:flex text-pirrot-red-500'>Zur Filiale</span></Link>
             </label>
           </div>
-      <div className="w-full flex items-center gap-1 text-info-950">
+      <div className="field-shell w-full flex items-center gap-2 px-3 py-2 text-info-950">
         <input
           id="saveUser"
           type="checkbox"
@@ -185,7 +195,7 @@ export default function ConfigOrderForm({
           onChange={(e) => setSaveUser(e.target.checked)}
           className="mr-2"
         />
-        <label htmlFor="saveUser" className="font-cairo">
+        <label htmlFor="saveUser" className="form-label">
           Daten für nächsten Besuch speichern
         </label>
       </div>
@@ -194,7 +204,7 @@ export default function ConfigOrderForm({
         <button
           type="button"
           onClick={handleOrderCancel}
-          className="hover:bg-pirrot-blue-100/50 relative items-center justify-center cursor-pointer px-4 py-2 transition-colors duration-500 hover:animate-pulse text-info-950 border-pirrot-blue-300/10 bg-pirrot-blue-100/20 flex gap-1 rounded border p-2 font-bold"
+          className="btn-soft relative flex cursor-pointer items-center justify-center gap-1 px-4 py-2 font-bold"
         >
           Abbrechen <XIcon />
         </button>
@@ -202,9 +212,9 @@ export default function ConfigOrderForm({
           type="button"
           disabled={!isOrderFormStateValid}
           onClick={handleSaveConfigOrder}
-          className="hover:bg-pirrot-blue-100/50 relative items-center justify-center cursor-pointer px-4 py-2 transition-colors duration-500 hover:animate-pulse text-info-950 border-pirrot-blue-300/10 bg-pirrot-blue-100/20 flex gap-1 rounded border p-2 font-bold disabled:opacity-25"
+          className="btn-solid relative flex cursor-pointer items-center justify-center gap-1 px-4 py-2 font-bold disabled:opacity-25"
         >
-          Zahlungspflichtig Bestellen <Coins />
+          Zahlungspflichtig bestellen <Coins />
         </button>
       </div>
     </div>

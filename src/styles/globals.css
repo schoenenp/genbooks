@@ -84,12 +84,6 @@
   --font-cairo: var(--font-cairo), sans-serif;
 }
 
-
-p {
-  font-family: var(--font-baloo);
-}
-
-/* Add these animation definitions */
 @keyframes float {
   0% {
     transform: translateY(0px);
@@ -107,11 +101,164 @@ p {
   animation: float 3s ease-in-out infinite;
 }
 
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
-html{
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+html {
   scroll-behavior: smooth;
 }
 
+body {
+  color: var(--color-info-900);
+  background:
+    radial-gradient(circle at 14% 8%, color-mix(in oklab, var(--color-pirrot-blue-100) 65%, white), transparent 40%),
+    radial-gradient(circle at 84% 12%, color-mix(in oklab, var(--color-pirrot-red-100) 70%, white), transparent 42%),
+    linear-gradient(180deg, color-mix(in oklab, var(--color-pirrot-blue-50) 92%, white), var(--color-pirrot-blue-200));
+  min-height: 100vh;
+  font-family: var(--font-baloo);
+  text-rendering: optimizeLegibility;
+}
+
 #navigation {
-  scroll-margin-top: 60px;
+  scroll-margin-top: 80px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-cairo);
+}
+
+p {
+  line-height: 1.6;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  transition: all 180ms ease;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-pirrot-blue-500);
+  outline-offset: 2px;
+}
+
+.hero-title {
+  letter-spacing: 0.06em;
+  text-wrap: balance;
+  line-height: 1;
+}
+
+.section-shell {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+.content-card {
+  border: 1px solid color-mix(in oklab, var(--color-pirrot-blue-300) 30%, white);
+  border-radius: 1rem;
+  background: color-mix(in oklab, white 64%, var(--color-pirrot-blue-50));
+  box-shadow:
+    0 10px 30px color-mix(in oklab, var(--color-pirrot-blue-900) 7%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 80%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.subtle-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-pirrot-blue-200) 38%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-pirrot-blue-200) 38%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.btn-solid {
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--color-pirrot-blue-700) 26%, transparent);
+  background: linear-gradient(
+    165deg,
+    color-mix(in oklab, var(--color-pirrot-blue-500) 92%, white),
+    color-mix(in oklab, var(--color-pirrot-blue-700) 90%, black)
+  );
+  color: white;
+  font-weight: 700;
+  box-shadow: 0 8px 18px color-mix(in oklab, var(--color-pirrot-blue-700) 24%, transparent);
+}
+
+.btn-solid:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px color-mix(in oklab, var(--color-pirrot-blue-700) 32%, transparent);
+}
+
+.btn-soft {
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--color-pirrot-blue-300) 42%, transparent);
+  background: color-mix(in oklab, white 80%, var(--color-pirrot-blue-100));
+  color: var(--color-info-900);
+  font-weight: 700;
+}
+
+.btn-soft:hover {
+  background: color-mix(in oklab, white 72%, var(--color-pirrot-blue-100));
+}
+
+.field-shell {
+  border: 1px solid color-mix(in oklab, var(--color-pirrot-blue-300) 38%, transparent);
+  background: color-mix(in oklab, white 76%, var(--color-pirrot-blue-50));
+  border-radius: 0.8rem;
+}
+
+.form-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-info-900);
+}
+
+.rise-in {
+  animation: rise 420ms ease both;
+}
+
+.skeleton {
+  border-radius: 0.6rem;
+  background: linear-gradient(
+    110deg,
+    color-mix(in oklab, var(--color-pirrot-blue-100) 55%, white) 15%,
+    color-mix(in oklab, var(--color-pirrot-blue-50) 90%, white) 40%,
+    color-mix(in oklab, var(--color-pirrot-blue-100) 55%, white) 65%
+  );
+  background-size: 220% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+.stagger-item {
+  animation: rise 420ms ease both;
+  animation-delay: var(--stagger-delay, 0ms);
 }

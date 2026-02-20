@@ -13,6 +13,8 @@ export interface PDFModule {
   pdfUrl: string;
 }
 
+export type BookFormat = "DIN A4" | "DIN A5";
+
 export type DetailsItem = {
   pageCount?: number;
   fullPageCount?: number;
@@ -47,6 +49,7 @@ export interface ProcessingOptions {
   previewMode?: boolean;
   compressionLevel?: "low" | "medium" | "high";
   addWatermark?: boolean;
+  format?: BookFormat;
   colorMap?: Map<string, 1 | 4>;
   grayscaleApiKey?: string;
 }
@@ -88,12 +91,16 @@ export interface TagContext {
   moduleItem: PDFModule;
   /** The final PDF document being built */
   finalPdf: PDFDocument;
+  /** Selected print format (with normalization at finalize stage) */
+  format: BookFormat;
   /** Whether we're generating a preview (limited pages) */
   previewMode: boolean;
   /** Whether this module should be grayscale */
   isGrayscale: boolean;
   /** API key for grayscale conversion (server-side only) */
   grayscaleApiKey?: string;
+  /** Running total page count at this module boundary (used for accurate estimations) */
+  currentPageCount?: number;
 
   // Planner-specific context (populated per week iteration)
   /** Current week index (0-based) */

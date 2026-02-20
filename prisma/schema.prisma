@@ -334,6 +334,7 @@ enum UserRole {
   STAFF
   MODERATOR
   USER
+  SPONSOR
 }
 
 enum BookPart {
@@ -378,4 +379,17 @@ model CustomDate {
   book   Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
 
   @@index([bookId])
+}
+
+model Campaign {
+  id                String   @id @default(cuid())
+  sponsorUserId     String
+  templateId        String
+  snapshotBookId    String
+  promotionCodeId   String   @unique
+  maxRedemptions    Int
+  timesRedeemed     Int      @default(0)
+  expiresAt         DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }

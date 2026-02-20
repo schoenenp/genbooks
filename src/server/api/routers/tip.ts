@@ -4,6 +4,7 @@ import {
   createTRPCRouter,
   publicProcedure,
 } from "@/server/api/trpc";
+import { logger } from "@/util/logger";
 
 export const tipRouter = createTRPCRouter({
   hello: publicProcedure
@@ -20,7 +21,7 @@ export const tipRouter = createTRPCRouter({
   .query(({ctx, input}) => {
     const {tips} = input
     const {db} = ctx
-    console.log(tips)
+    logger.debug("tip_get_current", { requestedTipCount: tips.length })
     return db.tooltip.findMany({
   where: {
     title: {

@@ -8,16 +8,16 @@ interface SearchInputProps {
   
   export function SearchInput({ value, onChange, onClear }: SearchInputProps) {
     return (
-      <div className="bg-pirrot-blue-50 flex flex-col gap-2 p-1">
+      <div className="content-card flex flex-col gap-2 p-2">
         <div className="flex justify-between">
           <h3 className="font-bold">Modulsuche</h3>
-          <button type="button" onClick={onClear}>
+          <button type="button" onClick={onClear} className="btn-soft p-1.5">
             <XIcon />
           </button>
         </div>
         <input
           onChange={(e) => onChange(e.target.value)}
-          className="bg-pirrot-blue-950/5 w-full rounded border border-white/50 p-1"
+          className="field-shell w-full px-3 py-2.5"
           placeholder="Suchbegriff eingeben."
           value={value}
         />

@@ -48,11 +48,7 @@ export interface FileItem {
       const singleFile = files[0]!
       const { data, name } = singleFile
       const fileType = getFileTypeFromBuffer(data)
-
-      console.log("fileType made: ", fileType)
-      const preppedFile  = new File([data as BlobPart], name, {type: "application/pdf"})
-      console.log("PREPPED TYPE: ", preppedFile)
-      console.log("PREPPED FILE: ", preppedFile.type)
+      const preppedFile  = new File([data as BlobPart], name, {type: fileType ?? "application/pdf"})
       formData.append("file", preppedFile, name) ;
     } else {
       if (files.length < 1) {
@@ -69,9 +65,6 @@ export interface FileItem {
   const fetchLink = `${UPLOAD_URL}${files.length > 1 ? "bulk" : "single"}`
   
     try {
-      // console.log("WHERE UPLOAD?!: ", fetchLink)
-      // console.log("WHAT UPLOAD?!: ", formData)
-
       const response = await fetch(fetchLink, {
         method: "post",
         headers: {
@@ -82,7 +75,6 @@ export interface FileItem {
   
       if (!response.ok) {
         const errorText = await response.text();
-        // console.log("Upload error body:", errorText);
         throw new Error(`Upload failed: ${response.status} |/| ${response.statusText} ?>> ${errorText}`);
       }
   
