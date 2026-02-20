@@ -43,7 +43,6 @@ const trustHost =
     ? true
     : process.env.AUTH_TRUST_HOST === "true";
 const smtpPort = env.EMAIL_SERVER_PORT;
-const smtpSecure = smtpPort === 465;
 
 export const authConfig = {
   trustHost,
@@ -56,10 +55,6 @@ export const authConfig = {
       server: {
         host: env.EMAIL_SERVER_HOST,
         port: smtpPort,
-        secure: smtpSecure,
-        connectionTimeout: 20_000,
-        greetingTimeout: 15_000,
-        socketTimeout: 30_000,
         auth: {
           user: env.EMAIL_SERVER_USER,
           pass: env.EMAIL_SERVER_PASSWORD,
