@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { Mail, Loader2 } from 'lucide-react';
 
@@ -34,6 +34,16 @@ const Login: React.FC<LoginProps> = ({
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
 
+  const getAbsoluteCallbackUrl = useCallback((): string => {
+    if (typeof window === 'undefined') return '/dashboard';
+
+    try {
+      return new URL('/dashboard', window.location.origin).toString();
+    } catch {
+      return '/dashboard';
+    }
+  }, []);
+
   // Email validation function
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -62,6 +72,7 @@ const Login: React.FC<LoginProps> = ({
     try {
       const result = await signIn('nodemailer', {
         email,
+        callbackUrl: getAbsoluteCallbackUrl(),
         redirect: false
       });
 
@@ -93,6 +104,7 @@ const Login: React.FC<LoginProps> = ({
 
     try {
       const result = await signIn(provider, {
+        callbackUrl: getAbsoluteCallbackUrl(),
         redirect: false
       });
 

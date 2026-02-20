@@ -176,6 +176,48 @@ function buildVerificationUrl(url: string, request: Request): string {
   return parsedUrl.toString();
 }
 
+function enforceVerificationLinkPolicy(url: string): string {
+  const parsedUrl = new URL(url);
+  const fallbackOrigin = new URL(getConfiguredAuthOrigin());
+  const hostname = parsedUrl.hostname.toLowerCase();
+
+  if (allowedAuthHosts.has(hostname)) {
+    parsedUrl.protocol = "https:";
+    parsedUrl.port = "";
+  } else if (!isProduction && localhostHosts.has(hostname)) {
+    parsedUrl.protocol = "http:";
+  } else {
+    parsedUrl.protocol = fallbackOrigin.protocol;
+    parsedUrl.host = fallbackOrigin.host;
+    parsedUrl.port = fallbackOrigin.port;
+  }
+
+  const callbackUrl = parsedUrl.searchParams.get("callbackUrl");
+  if (callbackUrl) {
+    try {
+      const callbackTarget = new URL(callbackUrl, parsedUrl.origin);
+      const callbackHostname = callbackTarget.hostname.toLowerCase();
+
+      if (allowedAuthHosts.has(callbackHostname)) {
+        callbackTarget.protocol = "https:";
+        callbackTarget.port = "";
+      } else if (!isProduction && localhostHosts.has(callbackHostname)) {
+        callbackTarget.protocol = "http:";
+      } else {
+        callbackTarget.protocol = parsedUrl.protocol;
+        callbackTarget.host = parsedUrl.host;
+        callbackTarget.port = parsedUrl.port;
+      }
+
+      parsedUrl.searchParams.set("callbackUrl", callbackTarget.toString());
+    } catch {
+      parsedUrl.searchParams.set("callbackUrl", parsedUrl.origin);
+    }
+  }
+
+  return parsedUrl.toString();
+}
+
 function verificationEmailText(params: { host: string; url: string }) {
   return `Sign in to ${params.host}\n${params.url}\n\nIf you did not request this email, you can ignore it.`;
 }
@@ -283,7 +325,9 @@ export const authConfig = {
       async sendVerificationRequest({ identifier, provider, request, url }) {
         enforceVerificationRateLimit(request, identifier);
 
-        const verificationUrl = buildVerificationUrl(url, request);
+        const verificationUrl = enforceVerificationLinkPolicy(
+          buildVerificationUrl(url, request),
+        );
         const host = new URL(verificationUrl).host;
         const transport = createTransport(provider.server);
 
