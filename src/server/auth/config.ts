@@ -38,8 +38,13 @@ declare module "next-auth" {
  * @see https://next-auth.js.org/configuration/options
  */
 const adapter = PrismaAdapter(db as never);
+const trustHost =
+  process.env.AUTH_TRUST_HOST === undefined
+    ? true
+    : process.env.AUTH_TRUST_HOST === "true";
 
 export const authConfig = {
+  trustHost,
   pages: {
     signIn: "/auth/signin",
     signOut: "/auth/signout",
