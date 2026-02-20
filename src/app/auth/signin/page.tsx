@@ -42,6 +42,16 @@ function SignInContent() {
     return (ERROR_MESSAGES[err] ?? ERROR_MESSAGES.Default)!;
   }, []);
 
+  const getAbsoluteCallbackUrl = useCallback((): string => {
+    if (typeof window === "undefined") return callbackUrl;
+
+    try {
+      return new URL(callbackUrl, window.location.origin).toString();
+    } catch {
+      return `${window.location.origin}/dashboard`;
+    }
+  }, [callbackUrl]);
+
   useEffect(() => {
     if (error) {
       setShowError(true);
@@ -50,7 +60,7 @@ function SignInContent() {
   }, [error, getErrorMessage]);
 
   const handleGoogleSignIn = () => {
-    void signIn("google", { callbackUrl });
+    void signIn("google", { callbackUrl: getAbsoluteCallbackUrl() });
   };
 
   const handleEmailSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -63,7 +73,7 @@ function SignInContent() {
     try {
       const result = await signIn("nodemailer", {
         email: emailValue,
-        callbackUrl,
+        callbackUrl: getAbsoluteCallbackUrl(),
         redirect: false,
       });
 
