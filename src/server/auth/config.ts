@@ -42,6 +42,7 @@ const adapter = PrismaAdapter(db as never);
 const trustHost = process.env.AUTH_TRUST_HOST === "true";
 const smtpPort = env.EMAIL_SERVER_PORT;
 const smtpSecure = smtpPort === 465;
+const isProduction = env.NODE_ENV === "production";
 const localhostHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 const allowedAuthHosts = new Set(["planer.pirrot.de", "planer.pirrot.eu"]);
 const verificationRateLimitWindowMs = 10 * 60 * 1000;
@@ -56,7 +57,9 @@ function trimTrailingSlash(value: string) {
 }
 
 function isAllowedAuthHostname(hostname: string) {
-  return localhostHosts.has(hostname) || allowedAuthHosts.has(hostname);
+  if (allowedAuthHosts.has(hostname)) return true;
+  if (!isProduction && localhostHosts.has(hostname)) return true;
+  return false;
 }
 
 function toAllowedOrigin(value: string): string | null {
@@ -93,6 +96,10 @@ function getConfiguredAuthOrigin() {
     if (allowedOrigin) return allowedOrigin;
   }
 
+  if (isProduction) {
+    return "https://planer.pirrot.de";
+  }
+
   return "http://127.0.0.1:3000";
 }
 
@@ -104,13 +111,19 @@ function getRequestOrigin(request: Request): string | null {
   const host = forwardedHost ?? request.headers.get("host")?.trim();
   if (!host) return null;
 
-  const hostname = host.split(":")[0]?.toLowerCase();
-  if (!hostname || !isAllowedAuthHostname(hostname)) {
+  try {
+    const parsedHost = new URL(`http://${host}`);
+    const hostname = parsedHost.hostname.toLowerCase();
+    if (!isAllowedAuthHostname(hostname)) return null;
+
+    if (localhostHosts.has(hostname)) {
+      return `http://${parsedHost.host}`;
+    }
+
+    return `https://${hostname}`;
+  } catch {
     return null;
   }
-
-  const protocol = localhostHosts.has(hostname) ? "http" : "https";
-  return `${protocol}://${host}`;
 }
 
 function getCallbackOrigin(url: URL): string | null {
@@ -141,6 +154,24 @@ function buildVerificationUrl(url: string, request: Request): string {
 
   parsedUrl.protocol = canonicalOrigin.protocol;
   parsedUrl.host = canonicalOrigin.host;
+
+  const callbackUrl = parsedUrl.searchParams.get("callbackUrl");
+  if (callbackUrl) {
+    try {
+      const callbackTarget = new URL(callbackUrl, canonicalOrigin.origin);
+      const safeCallbackOrigin =
+        toAllowedOrigin(callbackTarget.origin) ?? canonicalOrigin.origin;
+      const normalizedCallback = new URL(callbackTarget.toString());
+      const normalizedOrigin = new URL(safeCallbackOrigin);
+
+      normalizedCallback.protocol = normalizedOrigin.protocol;
+      normalizedCallback.host = normalizedOrigin.host;
+
+      parsedUrl.searchParams.set("callbackUrl", normalizedCallback.toString());
+    } catch {
+      parsedUrl.searchParams.set("callbackUrl", canonicalOrigin.origin);
+    }
+  }
 
   return parsedUrl.toString();
 }
