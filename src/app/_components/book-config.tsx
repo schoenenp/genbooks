@@ -319,12 +319,12 @@ export default function BookConfig(props: {
       const matchesFilters = !hasFilters
         ? true
         : filterValues.every((val) => {
-            const normalizedVal = val?.trim().toLowerCase() ?? "";
-            if (!normalizedVal) return true;
-            return searchableFields.some(
-              (field) => modFields[field] === normalizedVal,
-            );
-          });
+          const normalizedVal = val?.trim().toLowerCase() ?? "";
+          if (!normalizedVal) return true;
+          return searchableFields.some(
+            (field) => modFields[field] === normalizedVal,
+          );
+        });
 
       return matchesSearch && matchesFilters;
     },
@@ -665,18 +665,18 @@ export default function BookConfig(props: {
               initialFormState={
                 existingBook
                   ? {
-                      id: existingBook.id,
-                      name: existingBook.bookTitle,
-                      sub: existingBook.subTitle,
-                      country: existingBook.country,
-                      region: existingBook?.region,
-                      period: {
-                        start: existingBook.planStart
-                          .toISOString()
-                          .slice(0, 16),
-                        end: existingBook?.planEnd?.toISOString().slice(0, 16),
-                      },
-                    }
+                    id: existingBook.id,
+                    name: existingBook.bookTitle,
+                    sub: existingBook.subTitle,
+                    country: existingBook.country,
+                    region: existingBook?.region,
+                    period: {
+                      start: existingBook.planStart
+                        .toISOString()
+                        .slice(0, 16),
+                      end: existingBook?.planEnd?.toISOString().slice(0, 16),
+                    },
+                  }
                   : undefined
               }
             />
@@ -826,10 +826,10 @@ export default function BookConfig(props: {
                     <ul className="border-info-950/5 bg-pirrot-blue-950/5 max-h-68 flex-1 space-y-2 overflow-y-auto rounded border-b p-1 py-2">
                       {orderSummary.pickedModuleDetails?.planner.length ===
                         0 && (
-                        <li className="text-gray-500 italic">
-                          Keine Module ausgewählt.
-                        </li>
-                      )}
+                          <li className="text-gray-500 italic">
+                            Keine Module ausgewählt.
+                          </li>
+                        )}
                       {orderSummary.pickedModuleDetails?.planner.map(
                         (mod, idx) => (
                           <li
@@ -1198,10 +1198,10 @@ export default function BookConfig(props: {
             )}
 
             {/* HEADER */}
-              <div className="content-card sticky top-2 z-[59] flex w-full flex-col justify-start gap-4 p-3 pb-3 lg:justify-between">
-                <div className="pb-3">
-                  <Link
-                    href="/"
+            <div className="content-card sticky top-2 z-[59] flex w-full flex-col justify-start gap-4 p-3 pb-3 lg:justify-between">
+              <div className="pb-3">
+                <Link
+                  href="/"
                   className="underline underline-offset-4 transition-all duration-300 hover:underline-offset-8"
                 >
                   ← Zurück zum Anfang
@@ -1272,7 +1272,7 @@ export default function BookConfig(props: {
               <div className="content-card relative size-full h-72 overflow-hidden rounded lg:h-96">
                 <Image
                   className="size-full rounded object-cover"
-                  src="/assets/gen/pirgen_official.png"
+                  src="/assets/gen/pirgen_bg.png"
                   fill
                   priority
                   alt="hero"
