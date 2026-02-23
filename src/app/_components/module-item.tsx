@@ -39,23 +39,27 @@ export default function ModuleItem(props: ModuleItemProps) {
     props.onPickedItem({ id, type })
   }
 
-  const getBorderColor = (moduleType: string) => {
+  const getIndicatorColor = (moduleType: string) => {
     switch (moduleType) {
       case "umschlag":
-        return " border-pirrot-blue-300  "
+        return "var(--color-pirrot-blue-300)"
       case "wochenplaner":
-        return " border-pirrot-green-300 "
+        return "var(--color-pirrot-green-300)"
       case "bindung":
-        return " border-warning-300 "
+        return "var(--color-warning-300)"
       case "custom":
-        return " border-purple-300 "
+        return "var(--color-pirrot-red-300)"
       default:
         if (theme !== null && theme === "custom") {
-          return " border-purple-300 "
+          return "var(--color-pirrot-red-300)"
         }
-        return " border-pirrot-red-300 "
+        return "var(--color-pirrot-red-300)"
     }
   }
+
+  const pickedStyle = props.isPicked
+    ? { outline: `2px solid ${getIndicatorColor(type.toLocaleLowerCase())}` }
+    : undefined
 
   return <>
     <Modal selector="modal-hook" show={isPickingModule}>
@@ -78,14 +82,18 @@ export default function ModuleItem(props: ModuleItemProps) {
         </div>
       </div>
     </Modal>
-    <div onClick={() => setIsPickingModule(true)} className={`content-card stagger-item select-none relative flex min-w-0 cursor-pointer flex-col justify-between gap-1 shadow-sm ${props.isPicked && "border-2 " + getBorderColor(type.toLocaleLowerCase())}`}>
+    <div
+      onClick={() => setIsPickingModule(true)}
+      style={pickedStyle}
+      className="content-card stagger-item select-none relative flex min-w-0 cursor-pointer flex-col justify-between gap-1 shadow-sm"
+    >
       <div className="flex flex-col lg:flex-row justify-between gap-1 lg:gap-4 p-2">
         <h3 className="font-bold first-letter:uppercase">{type}</h3>
         <h3 className="text-sm truncate">{name}</h3>
       </div>
-      <div className={`w-full aspect-video flex justify-end items-end-safe transition-colors duration-300 p-2 rounded-sm relative`}>
+      <div className="relative flex aspect-video w-full items-end-safe justify-end rounded-[1rem] p-2 transition-colors duration-300">
         {theme !== null && <span className={`text-xs z-50 ${theme === "custom" ? "bg-purple-500/20" : "bg-pirrot-blue-50"} p-1`}>{theme}</span>}
-        <Image className="object-cover rounded-lg"
+        <Image className="rounded-[1rem] object-cover"
           src={thumbnailUrl && thumbnailUrl !== null ? thumbnailUrl : "/default.png"}
           priority={false}
           onError={handleImageError}

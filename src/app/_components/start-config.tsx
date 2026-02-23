@@ -14,7 +14,15 @@ const currentDate = new Date();
 const nextYearDate = new Date(currentDate);
 nextYearDate.setFullYear(currentDate.getFullYear() + 1);
 
-export default function StartConfig() {
+type StartConfigProps = {
+  initialCountry?: string;
+  initialRegion?: string;
+};
+
+export default function StartConfig({
+  initialCountry = "DE",
+  initialRegion = "DE-SL",
+}: StartConfigProps) {
   const [previewData, setPreviewData] = useState({
     name: "Hausaufgaben",
     sub: "Meine Schule",
@@ -68,6 +76,8 @@ export default function StartConfig() {
           <div className="relative order-1 col-span-1 flex flex-col justify-center gap-8 lg:order-2 lg:col-span-2">
             <div className="bg-pirrot-blue-100/35 absolute z-0 size-full rounded-3xl blur-2xl" />
             <PlannerForm
+              initialCountry={initialCountry}
+              initialRegion={initialRegion}
               onFormChange={setPreviewData}
               onValidationChange={setIsFormValid}
             />

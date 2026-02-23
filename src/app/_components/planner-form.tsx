@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import { getRegionsByCountry, COUNTRIES } from "@/util/book/regions";
+import {
+  getDefaultRegionForCountry,
+  sanitizeCountryRegionPrefill,
+} from "@/util/geo-prefill";
 import DatePicker from "react-datepicker";
 import { de } from "date-fns/locale";
 import { registerLocale } from "react-datepicker";
@@ -17,6 +21,8 @@ const nextYearDate = new Date(currentDate);
 nextYearDate.setFullYear(currentDate.getFullYear() + 1);
 
 interface PlannerFormProps {
+  initialCountry?: string;
+  initialRegion?: string;
   onFormChange?: (data: {
     name: string;
     sub: string;
@@ -26,14 +32,20 @@ interface PlannerFormProps {
 }
 
 export default function PlannerForm({
+  initialCountry,
+  initialRegion,
   onFormChange,
   onValidationChange,
 }: PlannerFormProps) {
+  const initialLocation = sanitizeCountryRegionPrefill(
+    initialCountry,
+    initialRegion,
+  );
   const router = useRouter();
   const [name, setName] = useState<string>("Hausaufgaben");
   const [sub, setSub] = useState<string>("Meine Schule");
-  const [country, setCountry] = useState<string>("DE");
-  const [region, setRegion] = useState<string>("DE-SL");
+  const [country, setCountry] = useState<string>(initialLocation.country);
+  const [region, setRegion] = useState<string>(initialLocation.region);
 
   const makeConfig = api.book.init.useMutation({
     onSuccess: async (data) => {
@@ -149,8 +161,9 @@ export default function PlannerForm({
             id="country"
             value={country}
             onChange={(e) => {
-              setCountry(e.target.value);
-              setRegion("");
+              const nextCountry = e.target.value;
+              setCountry(nextCountry);
+              setRegion(getDefaultRegionForCountry(nextCountry));
             }}
             className="field-shell w-full px-3 py-2.5"
           >

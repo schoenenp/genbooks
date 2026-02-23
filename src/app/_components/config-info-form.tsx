@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { getRegionsByCountry, COUNTRIES } from "@/util/book/regions";
+import { getDefaultRegionForCountry } from "@/util/geo-prefill";
 import { SaveIcon, XIcon } from "lucide-react";
 import { api } from "@/trpc/react";
 import DatePicker from "react-datepicker";
@@ -51,7 +52,7 @@ export default function ConfigInfoForm({
       : {
           name: null,
           country: "DE", // Default country
-          region: null,
+          region: getDefaultRegionForCountry("DE"),
           period: {
             start: new Date(),
           },
@@ -178,7 +179,7 @@ export default function ConfigInfoForm({
               setInfoFormState((prev) => ({
                 ...prev,
                 country: e.target.value,
-                region: "",
+                region: getDefaultRegionForCountry(e.target.value),
               }))
             }
             className="field-shell w-full px-3 py-2.5"

@@ -17,16 +17,16 @@ export default function ModuleCarouselItem(props: ModuleItemProps){
         props.onPickedItem({id, type})
     }
 
-    const getBorderColor = (moduleType: string) => {
+    const getIndicatorColor = (moduleType: string) => {
         switch (moduleType) {
             case "umschlag":
-                return " border-pirrot-blue-300  "
+                return "var(--color-pirrot-blue-300)"
             case "wochenplaner":
-                return " border-pirrot-green-300 "
+                return "var(--color-pirrot-green-300)"
             case "bindung":
-                return " border-warning-300 "
+                return "var(--color-warning-300)"
             default:
-                return " border-pirrot-red-300 "
+                return "var(--color-pirrot-red-300)"
         }
     }
 
@@ -38,6 +38,10 @@ export default function ModuleCarouselItem(props: ModuleItemProps){
     const handleImageError = () => {
         setThumbnailUrl("/default.png");
     }
+
+    const pickedStyle = props.isPicked
+        ? { outline: `2px solid ${getIndicatorColor(type.toLocaleLowerCase())}` }
+        : undefined
 
     return <>
      <Modal selector="modal-hook" show={isPickingModule}>
@@ -61,18 +65,17 @@ export default function ModuleCarouselItem(props: ModuleItemProps){
     </div>
     </Modal>
     <div onClick={() => setIsPickingModule(true)}  className={`select-none text-center relative flex flex-col gap-2 group cursor-pointer flex-[0_0_75%] sm:flex-[0_0_66%] xl:flex-[0_0_30%] min-w-0 pb-4 p-2 md:p-4 `}>
-        <div className={`content-card flex min-w-0 flex-col gap-2
-  ${props.isPicked
-    ? "border-2 " + getBorderColor(type.toLocaleLowerCase())
-    : "border-white/50"}
-`}>
+        <div
+            style={pickedStyle}
+            className="content-card flex min-w-0 flex-col gap-2"
+        >
             <div className="flex p-1 justify-between">
             <h3 className="font-bold first-letter:uppercase">{type}</h3>
             <h3 className="text-sm truncate">{name}</h3>
         </div>
-    <div className={`w-full aspect-video flex justify-end items-end-safe transition-colors duration-300 p-2 rounded-sm relative`}>
+    <div className="relative flex aspect-video w-full items-end-safe justify-end rounded-[1rem] p-2 transition-colors duration-300">
     {theme !== null && <span className='text-xs z-50 bg-pirrot-blue-50 p-1'>{theme}</span>}
-<Image className="object-cover rounded" 
+<Image className="rounded-[1rem] object-cover" 
     src={thumbnailUrl && thumbnailUrl !== null ? thumbnailUrl : "/default.png"}
     priority={false}
     onError={handleImageError} 

@@ -14,7 +14,7 @@ interface ModuleCarouselProps {
   modules: ModulePickerItem[]
   onPickedItem: (pickedItem: { id: string; type: string }) => void
   pickedModules: ConfigModules
-  getBookPart: (type: string) => ConfigBookPart
+  getBookPart: (type: string, part?: string) => ConfigBookPart
   autoplayDelay?: number
   borderColor?: string
   bgColor?: string
@@ -73,7 +73,7 @@ export default function ModuleCarousel({
           {filteredModules.map((m) => (
             <ModuleCarouselItem
               key={m.id}
-              isPicked={pickedModules[getBookPart(m.type)]?.includes(m.id)}
+              isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(m.id)}
               item={m}
               onPickedItem={onPickedItem}
             />

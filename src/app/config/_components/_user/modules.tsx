@@ -8,7 +8,7 @@ import { useState } from "react";
 import { fileToBase64, validatePDFUpload } from "@/util/pdf/functions";
 import type { BookPart } from "@prisma/client";
 import ModuleItem, { type ModulePickerItem } from "@/app/_components/module-item";
-import { getPageRules } from "@/util/book/functions";
+import { getBookPart, getPageRules } from "@/util/book/functions";
 import LoadingSpinner from "@/app/_components/loading-spinner";
 import type { ConfigModules } from "@/hooks/use-module-state";
 
@@ -172,8 +172,7 @@ export default function UserModules({
             {userModules?.map((m, i) => <ModuleItem
               key={i}
               item={m}
-              isPicked={pickedModules.MODULES.includes(m.id)
-                || pickedModules.COVER.includes(m.id)}
+              isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(m.id)}
               onPickedItem={handlePickedItem}
             />)}
           </div>}

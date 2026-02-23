@@ -232,6 +232,11 @@ export default function BookConfig(props: {
 
   const uniqueThemes = getUniqueThemes(modules);
 
+  const moduleLookupById = useMemo(() => {
+    const allModules = [...modules, ...(userModules ?? [])];
+    return new Map(allModules.map((moduleItem) => [moduleItem.id, moduleItem]));
+  }, [modules, userModules]);
+
   // Computed values
   const modulesByType = useMemo(() => {
     const idToModule = new Map(modules.map((m) => [m.id, m]));
@@ -293,9 +298,9 @@ export default function BookConfig(props: {
       const hasPickedFilter = onlyPickedModules && pickedModules;
 
       if (hasPickedFilter) {
-        const isModulePicked = pickedModules[getBookPart(mod.type)]?.includes(
-          mod.id,
-        );
+        const isModulePicked = pickedModules[
+          getBookPart(mod.type, mod.part)
+        ]?.includes(mod.id);
         if (!isModulePicked) return false;
       }
 
@@ -355,21 +360,29 @@ export default function BookConfig(props: {
     }));
   }
 
-  function handlePlannerModule(id: string, type: string) {
-    const currentPlanner = modulesByType.planner.find((p) => p.type === type);
-    const withoutPlanner = pickedModules.MODULES.filter(
-      (m) => m !== currentPlanner?.id,
-    );
+  function handlePlannerModule(id: string) {
+    setPickedModules((prev) => {
+      const withoutPlanner = prev.MODULES.filter((moduleId) => {
+        const moduleItem = moduleLookupById.get(moduleId);
+        if (!moduleItem) {
+          return true;
+        }
+        return (
+          moduleItem.part !== "PLANNER" &&
+          moduleItem.type.toLowerCase() !== FILTER_TYPES.PLANNER
+        );
+      });
 
-    setPickedModules((prev) => ({
-      ...prev,
-      MODULES: [...withoutPlanner, id],
-    }));
+      return {
+        ...prev,
+        MODULES: [...withoutPlanner, id],
+      };
+    });
   }
 
   function handleRegularModule(
     id: string,
-    bookPart: string,
+    bookPart: ConfigBookPart,
     currentModules: string[],
     isAlreadyPicked: boolean,
   ) {
@@ -383,28 +396,40 @@ export default function BookConfig(props: {
 
   function handlePickedItem(pickedItem: { id: string; type: string }) {
     const { id, type } = pickedItem;
+    const pickedModule = moduleLookupById.get(id);
+    const normalizedType = (pickedModule?.type ?? type).toLowerCase();
+    const normalizedPart = pickedModule?.part?.toUpperCase();
 
-    const bookPart = getBookPart(type);
+    const bookPart = getBookPart(type, pickedModule?.part);
     const currentModules = pickedModules[bookPart] ?? [];
     const isAlreadyPicked = currentModules.includes(id);
 
-    const isCoverModule = type.toLowerCase() === "umschlag";
-    const isBindingModule = type.toLowerCase() === "bindung";
-    const isPlannerModule = type.toLowerCase() === "wochenplaner";
+    if (isAlreadyPicked) {
+      handleRegularModule(id, bookPart, currentModules, true);
+      return;
+    }
 
-    if (isCoverModule && completionStatus.hasCoverModule) {
+    const isCoverModule =
+      normalizedPart === "COVER" || normalizedType === FILTER_TYPES.COVER;
+    const isBindingModule =
+      normalizedPart === "BINDING" ||
+      normalizedPart === "SETTINGS" ||
+      normalizedType === FILTER_TYPES.BINDING ||
+      normalizedType === "farben";
+    const isPlannerModule =
+      normalizedPart === "PLANNER" || normalizedType === FILTER_TYPES.PLANNER;
+
+    if (isCoverModule) {
       handleCoverModule(id);
-    } else if (isBindingModule && completionStatus.hasBindingModule) {
+    } else if (isBindingModule) {
       handleBindingModule(id);
-    } else if (isPlannerModule && completionStatus.hasPlannerModule) {
-      handlePlannerModule(id, type);
+    } else if (isPlannerModule) {
+      handlePlannerModule(id);
     } else {
-      handleRegularModule(id, bookPart, currentModules, isAlreadyPicked);
+      handleRegularModule(id, bookPart, currentModules, false);
     }
 
-    if (!isAlreadyPicked) {
-      setIsBookInfoOpen(true);
-    }
+    setIsBookInfoOpen(true);
   }
 
   async function handleSummaryView() {
@@ -1310,9 +1335,7 @@ export default function BookConfig(props: {
                   .map((m) => (
                     <ModuleItem
                       key={m.id}
-                      isPicked={pickedModules[getBookPart(m.type)]?.includes(
-                        m.id,
-                      )}
+                      isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(m.id)}
                       item={m}
                       onPickedItem={handlePickedItem}
                     />
@@ -1416,7 +1439,7 @@ export default function BookConfig(props: {
                     .map((m) => (
                       <ModuleItem
                         key={m.id}
-                        isPicked={pickedModules[getBookPart(m.type)]?.includes(
+                        isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(
                           m.id,
                         )}
                         item={m}

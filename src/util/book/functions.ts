@@ -26,7 +26,25 @@ const formatDate = (date: Date): string => {
 // const nextYearDateStr = formatDate(nextYearDate)
 // // e.g., "2025-03-21"
 
-export function getBookPart(modType: string): ConfigBookPart {
+export function getBookPart(
+  modType: string,
+  modPart?: string | null,
+): ConfigBookPart {
+  const normalizedPart = modPart?.toUpperCase();
+
+  switch (normalizedPart) {
+    case "COVER":
+      return "COVER";
+    case "BINDING":
+    case "SETTINGS":
+      return "SETTINGS";
+    case "DEFAULT":
+    case "PLANNER":
+      return "MODULES";
+    default:
+      break;
+  }
+
   const normalizedType = modType.toLowerCase();
 
   switch (normalizedType) {
