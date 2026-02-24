@@ -201,6 +201,61 @@ export default function BookConfig(props: {
     return newMap;
   });
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
+  const [useMobilePdfFallback, setUseMobilePdfFallback] = useState(false);
+
+  useEffect(() => {
+    const userAgent = navigator.userAgent ?? "";
+    const platform = navigator.platform ?? "";
+    const touchPoints = navigator.maxTouchPoints ?? 0;
+    const isiPadOS = platform === "MacIntel" && touchPoints > 1;
+    const isiOS = /iPad|iPhone|iPod/i.test(userAgent) || isiPadOS;
+    const isMobileDevice = /Android|webOS|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(
+      userAgent,
+    );
+
+    setUseMobilePdfFallback(isiOS || isMobileDevice);
+  }, []);
+
+  const handleOpenPreviewInNewTab = useCallback(() => {
+    if (!previewFileURL) return;
+    const opened = window.open(previewFileURL, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      window.location.href = previewFileURL;
+    }
+  }, [previewFileURL]);
+
+  const renderMobilePdfFallback = (className = "") => {
+    if (!previewFileURL) return null;
+    return (
+      <div
+        className={`field-shell bg-pirrot-blue-950/5 flex size-full flex-col items-center justify-center gap-3 p-4 text-center ${className}`}
+      >
+        <p className="text-sm">
+          Auf iPad und Mobilgeräten wird die PDF-Vorschau hier nicht zuverlässig
+          angezeigt.
+        </p>
+        <p className="text-info-800 text-xs">
+          Bitte öffnen Sie die Vorschau in einem neuen Tab.
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            onClick={handleOpenPreviewInNewTab}
+            className="btn-solid px-3 py-2 text-sm"
+          >
+            Vorschau öffnen
+          </button>
+          <a
+            href={previewFileURL}
+            download="vorschau.pdf"
+            className="btn-soft px-3 py-2 text-sm"
+          >
+            PDF herunterladen
+          </a>
+        </div>
+      </div>
+    );
+  };
 
   // API mutations
   const utils = api.useUtils();
@@ -821,15 +876,19 @@ export default function BookConfig(props: {
                 </div>
                 <div className="inline-block flex-1 p-1 lg:hidden">
                   {previewFileURL ? (
-                    <div className="aspect-square h-full w-full lg:aspect-auto">
-                      <iframe
-                        src={previewFileURL + "#view=fit"}
-                        title="PDF Preview"
-                        width="100%"
-                        height="100%"
-                        className="bg-pirrot-blue-950/10 border-info-950/5 border"
-                      />
-                    </div>
+                    useMobilePdfFallback ? (
+                      renderMobilePdfFallback("h-full w-full")
+                    ) : (
+                      <div className="aspect-square h-full w-full lg:aspect-auto">
+                        <iframe
+                          src={previewFileURL + "#view=fit"}
+                          title="PDF Preview"
+                          width="100%"
+                          height="100%"
+                          className="bg-pirrot-blue-950/10 border-info-950/5 border"
+                        />
+                      </div>
+                    )
                   ) : (
                     <div className="flex size-full flex-col items-center justify-center gap-4">
                       <div className="flex flex-col items-center justify-center gap-2">
@@ -972,14 +1031,22 @@ export default function BookConfig(props: {
               {/* RIGHT: PDF Preview */}
               <div className="hidden flex-1 items-center justify-center p-1 lg:flex">
                 {previewFileURL ? (
-                  <div className="flex h-full max-h-[85vh] w-full">
-                    <iframe
-                      src={previewFileURL}
-                      title="PDF Preview"
-                      width="100%"
-                      height="100%"
-                      className="border-info-950/5 border"
-                    />
+                  <div className="flex h-full max-h-[85vh] w-full flex-col gap-2">
+                    <p className="text-info-800 text-xs">
+                      Hinweis: Dies ist nur eine Vorschau, daher können einzelne
+                      Seiten fehlen.
+                    </p>
+                    {useMobilePdfFallback ? (
+                      renderMobilePdfFallback()
+                    ) : (
+                      <iframe
+                        src={previewFileURL}
+                        title="PDF Preview"
+                        width="100%"
+                        height="100%"
+                        className="border-info-950/5 border"
+                      />
+                    )}
                   </div>
                 ) : (
                   <div className="flex size-full flex-col items-center justify-center gap-4">
@@ -1015,13 +1082,17 @@ export default function BookConfig(props: {
             </div>
             <div className="h-[85vh] w-full p-1">
               {previewFileURL ? (
-                <iframe
-                  src={previewFileURL}
-                  title="PDF Preview"
-                  width="100%"
-                  height="100%"
-                  className="border-info-950/5 border"
-                />
+                useMobilePdfFallback ? (
+                  renderMobilePdfFallback()
+                ) : (
+                  <iframe
+                    src={previewFileURL}
+                    title="PDF Preview"
+                    width="100%"
+                    height="100%"
+                    className="border-info-950/5 border"
+                  />
+                )
               ) : (
                 <div className="flex size-full flex-col items-center justify-center gap-4">
                   <div className="flex flex-col items-center justify-center gap-2">
