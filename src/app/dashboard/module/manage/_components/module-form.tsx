@@ -11,7 +11,7 @@ import { api } from "@/trpc/react";
 
 
 import { getPageRules } from "@/util/book/functions";
-import { isModulePdfFile } from "@/util/module-files";
+import { pickModulePdfFile } from "@/util/module-files";
 import { urlToFile, fileToBase64, extractTextFields  } from "@/util/pdf/functions";
 
 type FileState = {
@@ -135,7 +135,7 @@ function useModuleFormState(moduleId?: string, pageData?: PageData) {
       }
   
       // Initialize Main File and process if it's a PDF
-      const fileData = moduleItem.files.find(isModulePdfFile);
+      const fileData = pickModulePdfFile(moduleItem.files);
       if (fileData) {
         const originalFile = await urlToFile(fileData.src, fileData.name ?? "");
         if (originalFile) {

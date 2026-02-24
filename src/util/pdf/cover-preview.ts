@@ -1,6 +1,6 @@
 import { PDFDocument } from "pdf-lib";
 import { logger } from "@/util/logger";
-import { isModulePdfFile } from "@/util/module-files";
+import { pickModulePdfFile } from "@/util/module-files";
 
 const CDN_URL = process.env.NEXT_PUBLIC_CDN_SERVER_URL ?? "";
 
@@ -116,7 +116,7 @@ export function getCoverPdfUrl(
 ): string | null {
   for (const mod of modules) {
     if (!mod?.module?.files) continue;
-    const pdfFile = mod.module.files.find((f) => isModulePdfFile(f));
+    const pdfFile = pickModulePdfFile(mod.module.files);
     if (pdfFile) {
       return pdfFile.src;
     }
