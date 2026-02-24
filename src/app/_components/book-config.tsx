@@ -257,6 +257,12 @@ export default function BookConfig(props: {
     );
   };
 
+  const renderPreviewDisclaimer = () => (
+    <p className="text-info-800 text-xs">
+      Hinweis: Dies ist nur eine Vorschau, daher können einzelne Seiten fehlen.
+    </p>
+  );
+
   // API mutations
   const utils = api.useUtils();
   const { mutate: updateName } = api.book.updatePlannerName.useMutation({
@@ -1031,21 +1037,20 @@ export default function BookConfig(props: {
               {/* RIGHT: PDF Preview */}
               <div className="hidden flex-1 items-center justify-center p-1 lg:flex">
                 {previewFileURL ? (
-                  <div className="flex h-full max-h-[85vh] w-full flex-col gap-2">
-                    <p className="text-info-800 text-xs">
-                      Hinweis: Dies ist nur eine Vorschau, daher können einzelne
-                      Seiten fehlen.
-                    </p>
+                  <div className="flex h-full max-h-[85vh] w-full min-h-0 flex-col gap-2">
+                    {renderPreviewDisclaimer()}
                     {useMobilePdfFallback ? (
-                      renderMobilePdfFallback()
+                      renderMobilePdfFallback("min-h-0 flex-1")
                     ) : (
-                      <iframe
-                        src={previewFileURL}
-                        title="PDF Preview"
-                        width="100%"
-                        height="100%"
-                        className="border-info-950/5 border"
-                      />
+                      <div className="min-h-0 flex-1">
+                        <iframe
+                          src={previewFileURL}
+                          title="PDF Preview"
+                          width="100%"
+                          height="100%"
+                          className="border-info-950/5 h-full w-full border"
+                        />
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -1080,19 +1085,24 @@ export default function BookConfig(props: {
                 <XIcon className="size-6" />
               </button>
             </div>
-            <div className="h-[85vh] w-full p-1">
+            <div className="flex h-[85vh] w-full min-h-0 flex-col gap-2 p-1">
               {previewFileURL ? (
-                useMobilePdfFallback ? (
-                  renderMobilePdfFallback()
-                ) : (
-                  <iframe
-                    src={previewFileURL}
-                    title="PDF Preview"
-                    width="100%"
-                    height="100%"
-                    className="border-info-950/5 border"
-                  />
-                )
+                <>
+                  {renderPreviewDisclaimer()}
+                  {useMobilePdfFallback ? (
+                    renderMobilePdfFallback("min-h-0 flex-1")
+                  ) : (
+                    <div className="min-h-0 flex-1">
+                      <iframe
+                        src={previewFileURL}
+                        title="PDF Preview"
+                        width="100%"
+                        height="100%"
+                        className="border-info-950/5 h-full w-full border"
+                      />
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="flex size-full flex-col items-center justify-center gap-4">
                   <div className="flex flex-col items-center justify-center gap-2">
