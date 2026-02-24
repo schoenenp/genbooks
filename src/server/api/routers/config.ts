@@ -25,6 +25,7 @@ import {
   type SponsorSessionMetadata,
 } from "@/util/sponsor/invoices";
 import { logger } from "@/util/logger";
+import { isModulePdfFile } from "@/util/module-files";
 import { enforceProcedureRateLimit } from "@/util/rate-limit";
 import { buildModuleFeedVisibilityWhere } from "./module-visibility";
 import { canAccessBookForSetupOrder } from "./setup-order-access";
@@ -175,7 +176,7 @@ export const configRouter = createTRPCRouter({
           colorCode: "COLOR" | "GRAYSCALE" | null;
           module: {
             type: { name: string };
-            files: Array<{ name: string | null; src: string }>;
+            files: Array<{ name: string | null; src: string; type: string }>;
           };
         }>;
       }) => {
@@ -183,7 +184,7 @@ export const configRouter = createTRPCRouter({
         const pdfModules = bookForCost.modules.map((moduleItem) => {
           const type = moduleItem.module.type.name;
           let pdfUrl =
-            moduleItem.module.files.find((file) => file.name?.startsWith("file_"))
+            moduleItem.module.files.find((file) => isModulePdfFile(file))
               ?.src ?? "/storage/notizen.pdf";
 
           pdfUrl = env.NEXT_PUBLIC_CDN_SERVER_URL + pdfUrl;
@@ -771,7 +772,7 @@ export const configRouter = createTRPCRouter({
         const { id, name, theme, files, type, part, createdAt } = moduleItem;
 
         const thumbnailFile = files.find((f) => f.name?.startsWith("thumb_"));
-        const moduleFile = files.find((f) => f.name?.startsWith("file_"));
+        const moduleFile = files.find((f) => isModulePdfFile(f));
 
         const thumbnail =
           thumbnailFile && !thumbnailFile.src.startsWith("https://")

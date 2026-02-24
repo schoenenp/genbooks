@@ -8,6 +8,7 @@ import {
   publicProcedure,
 } from "@/server/api/trpc";
 import { getBase64, uploadData, type FileItem } from "@/util/upload/functions";
+import { isModulePdfFile } from "@/util/module-files";
 import { validatePDFUpload } from "@/util/pdf/functions";
 import { handleBookPart } from "@/util/book/functions";
 import {
@@ -224,7 +225,7 @@ export const moduleRouter = createTRPCRouter({
 
       if (base64File && base64File !== "") {
         const existingFile = existingModule.files.find((f) =>
-          f.name?.startsWith("DATEI-"),
+          isModulePdfFile(f),
         );
         if (existingFile) {
           filesToDisconnect.push({ id: existingFile.id });
