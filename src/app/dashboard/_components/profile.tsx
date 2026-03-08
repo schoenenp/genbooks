@@ -4,23 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/trpc/react";
 import LoadingSpinner from "@/app/_components/loading-spinner";
-import { ClipboardCopyIcon } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  CalendarClock,
+  ClipboardCopyIcon,
+  Target,
+  TrendingUp,
+} from "lucide-react";
 import { DashboardSkeleton } from "./dashboard-states";
 
 const CONNECT_COUNTRY_OPTIONS = [
-  { code: "AT", label: "Oesterreich (AT)" },
+  { code: "AT", label: "Österreich (AT)" },
   { code: "DE", label: "Deutschland (DE)" },
-  { code: "CH", label: "Schweiz (CH)" },
-  { code: "IT", label: "Italien (IT)" },
-  { code: "FR", label: "Frankreich (FR)" },
-  { code: "NL", label: "Niederlande (NL)" },
-  { code: "BE", label: "Belgien (BE)" },
-  { code: "LU", label: "Luxemburg (LU)" },
-  { code: "ES", label: "Spanien (ES)" },
-  { code: "PT", label: "Portugal (PT)" },
-  { code: "IE", label: "Irland (IE)" },
-  { code: "GB", label: "Vereinigtes Königreich (GB)" },
-  { code: "US", label: "USA (US)" },
 ] as const;
 
 const CONNECT_COUNTRY_CODE_SET: ReadonlySet<string> = new Set(
@@ -29,7 +25,6 @@ const CONNECT_COUNTRY_CODE_SET: ReadonlySet<string> = new Set(
 
 const DEFAULT_CAMPAIGN_MAX_REDEMPTIONS = "10";
 const DEFAULT_CAMPAIGN_VALID_DAYS = "90";
-
 type CampaignEditState = {
   maxRedemptions: string;
   validForDays: string;
@@ -77,12 +72,86 @@ function inferValidDaysFromExpiresAt(expiresAt?: number): string {
   return String(Math.max(diffDays, 1));
 }
 
+function formatEuro(amountCents: number): string {
+  return new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "EUR",
+  }).format(amountCents / 100);
+}
+
+function formatSubscriptionOption(option: {
+  interval: "month" | "year" | null;
+  unitAmount: number | null;
+  currency: string | null;
+}): string {
+  const amount =
+    typeof option.unitAmount === "number" && option.currency
+      ? new Intl.NumberFormat("de-DE", {
+        style: "currency",
+        currency: option.currency.toUpperCase(),
+      }).format(option.unitAmount / 100)
+      : "Preis";
+
+  const intervalLabel =
+    option.interval === "month"
+      ? "Monat"
+      : option.interval === "year"
+        ? "Jahr"
+        : "Intervall";
+
+  return `${amount} / ${intervalLabel}`;
+}
+
+function friendlyErrorMessage(
+  rawMessage: string | undefined,
+  fallback: string,
+): string {
+  if (!rawMessage) {
+    return fallback;
+  }
+  if (
+    rawMessage.includes("Invalid `") ||
+    rawMessage.includes("Cannot read properties of undefined") ||
+    rawMessage.includes("Unknown argument `")
+  ) {
+    return fallback;
+  }
+  return rawMessage;
+}
+
 type SessionUser = {
   id?: string | undefined;
   name?: string | null | undefined;
   email?: string | null | undefined;
   image?: string | null | undefined;
 };
+
+function SubscriptionLockedSection(props: {
+  locked: boolean;
+  className: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={`relative ${props.className}`}>
+      <div
+        className={
+          props.locked
+            ? "pointer-events-none select-none blur-[2px] opacity-60"
+            : undefined
+        }
+      >
+        {props.children}
+      </div>
+      {props.locked ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-4">
+          <div className="rounded bg-white/90 px-3 py-2 text-center text-xs font-semibold">
+            Aktives Partner-Programm-Abo erforderlich
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 export default function ProfileSection(user: SessionUser) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -100,87 +169,106 @@ export default function ProfileSection(user: SessionUser) {
   const [campaignUpdateNotice, setCampaignUpdateNotice] =
     useState<CampaignUpdateNotice | null>(null);
   const [campaignLinkCopyFeedback, setCampaignLinkCopyFeedback] = useState("");
-  const [copyingCampaignId, setCopyingCampaignId] = useState<string | null>(
-    null,
-  );
+  const [copyingCampaignId, setCopyingCampaignId] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const utils = api.useUtils();
 
-  const sponsorStatus = api.sponsor.getStatus.useQuery();
+  const partnerStatus = api.partner.getStatus.useQuery();
   const userBooks = api.book.getUserBooks.useQuery(undefined, {
-    enabled: sponsorStatus.data?.onboardingComplete === true,
+    enabled: partnerStatus.data?.onboardingComplete === true,
   });
-  const campaigns = api.sponsor.listCampaigns.useQuery(undefined, {
-    enabled: sponsorStatus.data?.onboardingComplete === true,
+  const campaigns = api.partner.listCampaigns.useQuery(undefined, {
+    enabled: partnerStatus.data?.onboardingComplete === true,
   });
-  const salesOverview = api.sponsor.getSalesOverview.useQuery(undefined, {
-    enabled: sponsorStatus.data?.onboardingComplete === true,
+  const salesOverview = api.partner.getSalesOverview.useQuery(undefined, {
+    enabled: partnerStatus.data?.onboardingComplete === true,
   });
 
-  const startOnboarding = api.sponsor.startConnectOnboarding.useMutation({
+  const startOnboarding = api.partner.startConnectOnboarding.useMutation({
     onSuccess: (data) => {
       window.location.href = data.onboardingUrl;
     },
   });
 
-  const finalizeOnboarding = api.sponsor.finalizeConnectOnboarding.useMutation({
+  const finalizeOnboarding = api.partner.finalizeConnectOnboarding.useMutation({
     onSuccess: async () => {
-      await utils.sponsor.getStatus.invalidate();
+      await utils.partner.getStatus.invalidate();
       await utils.user.getMyRole.invalidate();
-      await utils.sponsor.listCampaigns.invalidate();
-      await utils.sponsor.getSalesOverview.invalidate();
+      await utils.partner.listCampaigns.invalidate();
+      await utils.partner.getSalesOverview.invalidate();
     },
   });
 
-  const createCampaign = api.sponsor.createCampaign.useMutation({
+  const createCampaign = api.partner.createCampaign.useMutation({
     onSuccess: async () => {
-      await utils.sponsor.listCampaigns.invalidate();
-      await utils.sponsor.getSalesOverview.invalidate();
+      await utils.partner.listCampaigns.invalidate();
+      await utils.partner.getSalesOverview.invalidate();
       setCustomPromoCode("");
       setCampaignMaxRedemptions(DEFAULT_CAMPAIGN_MAX_REDEMPTIONS);
       setCampaignValidDays(DEFAULT_CAMPAIGN_VALID_DAYS);
     },
   });
 
-  const updateCampaign = api.sponsor.updateCampaign.useMutation({
+  const startSubscriptionCheckout =
+    api.partner.startSubscriptionCheckout.useMutation({
+      onSuccess: (data) => {
+        window.location.href = data.checkoutUrl;
+      },
+    });
+
+  const openSubscriptionPortal = api.partner.openSubscriptionPortal.useMutation({
+    onSuccess: (data) => {
+      window.location.href = data.portalUrl;
+    },
+  });
+
+  const updateCampaign = api.partner.updateCampaign.useMutation({
     onMutate: () => {
       setCampaignUpdateNotice(null);
       setCampaignLinkCopyFeedback("");
     },
     onSuccess: async (data, variables) => {
-      await utils.sponsor.listCampaigns.invalidate();
-      await utils.sponsor.getSalesOverview.invalidate();
+      await utils.partner.listCampaigns.invalidate();
+      await utils.partner.getSalesOverview.invalidate();
       const isRotatedCampaign = data.id !== variables.campaignId;
       setCampaignUpdateNotice(
         isRotatedCampaign
           ? {
-              variant: "rotated",
-              message:
-                "Kampagne wurde mit neuen Limits neu erstellt. Bitte den neuen Link verwenden.",
-              token: data.token,
-            }
+            variant: "rotated",
+            message:
+              "Kampagne wurde mit neuen Limits neu erstellt. Bitte den neuen Link verwenden.",
+            token: data.token,
+          }
           : {
-              variant: "updated",
-              message: "Kampagnen-Einstellungen wurden gespeichert.",
-            },
+            variant: "updated",
+            message: "Kampagnen-Einstellungen wurden gespeichert.",
+          },
       );
     },
   });
-
   useEffect(() => {
     setConnectCountry(inferConnectCountryFromBrowser());
   }, []);
 
   useEffect(() => {
     const hasReturned =
-      searchParams.get("sponsor_return") === "1" ||
-      searchParams.get("sponsor_refresh") === "1";
+      searchParams.get("partner_return") === "1" ||
+      searchParams.get("partner_refresh") === "1";
 
     if (hasReturned && !finalizeOnboarding.isPending) {
       finalizeOnboarding.mutate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  useEffect(() => {
+    const subscriptionRedirectState = searchParams.get("partner_sub");
+    if (!subscriptionRedirectState) {
+      return;
+    }
+
+    void utils.partner.getStatus.invalidate();
+  }, [searchParams, utils.partner.getStatus]);
 
   useEffect(() => {
     if (!campaigns.data) {
@@ -202,6 +290,91 @@ export default function ProfileSection(user: SessionUser) {
   const templateOptions = useMemo(
     () => (userBooks.data ?? []).filter((book) => Boolean(book.isTemplate)),
     [userBooks.data],
+  );
+  const subscription = partnerStatus.data?.subscription;
+  const hasActiveSubscription = subscription?.isActive ?? false;
+  const hasPartnerAccess =
+    partnerStatus.data?.role === "SPONSOR" ||
+    partnerStatus.data?.role === "ADMIN" ||
+    partnerStatus.data?.role === "STAFF";
+  const configuredPriceOptions = subscription?.configuredPriceOptions ?? [];
+  const campaignItems = useMemo(() => campaigns.data ?? [], [campaigns.data]);
+  const campaignOverview = useMemo(() => {
+    const nowUnix = Date.now() / 1000;
+    const withMeta = campaignItems.map((campaign) => {
+      const redemptionValue =
+        typeof campaign.activeRedemptions === "number"
+          ? campaign.activeRedemptions
+          : campaign.timesRedeemed;
+      const limit = campaign.maxRedemptions;
+      const remaining =
+        typeof limit === "number"
+          ? Math.max(limit - redemptionValue, 0)
+          : undefined;
+      const utilizationPercent =
+        typeof limit === "number" && limit > 0
+          ? Math.min(100, Math.round((redemptionValue / limit) * 100))
+          : undefined;
+      const daysToExpire =
+        typeof campaign.expiresAt === "number"
+          ? Math.ceil((campaign.expiresAt - nowUnix) / 86400)
+          : undefined;
+      return {
+        ...campaign,
+        redemptionValue,
+        remaining,
+        utilizationPercent,
+        daysToExpire,
+      };
+    });
+
+    const totalRedeemed = withMeta.reduce(
+      (sum, campaign) => sum + campaign.redemptionValue,
+      0,
+    );
+    const totalLimitedCapacity = withMeta.reduce(
+      (sum, campaign) => sum + (campaign.maxRedemptions ?? 0),
+      0,
+    );
+    const totalRemaining = withMeta.reduce(
+      (sum, campaign) => sum + (campaign.remaining ?? 0),
+      0,
+    );
+    const limitedUtilizationPercent =
+      totalLimitedCapacity > 0
+        ? Math.round((totalRedeemed / totalLimitedCapacity) * 100)
+        : 0;
+
+    const topCampaigns = [...withMeta]
+      .sort((a, b) => b.redemptionValue - a.redemptionValue)
+      .slice(0, 5);
+
+    const expiringSoon = withMeta
+      .filter(
+        (campaign) =>
+          typeof campaign.daysToExpire === "number" &&
+          campaign.daysToExpire >= 0 &&
+          campaign.daysToExpire <= 30,
+      )
+      .sort(
+        (a, b) =>
+          (a.daysToExpire ?? Number.POSITIVE_INFINITY) -
+          (b.daysToExpire ?? Number.POSITIVE_INFINITY),
+      )
+      .slice(0, 4);
+
+    return {
+      totalRedeemed,
+      totalLimitedCapacity,
+      totalRemaining,
+      limitedUtilizationPercent,
+      topCampaigns,
+      expiringSoon,
+    };
+  }, [campaignItems]);
+  const maxTopCampaignRedeemed = Math.max(
+    1,
+    ...campaignOverview.topCampaigns.map((campaign) => campaign.redemptionValue),
   );
 
   const setCampaignEditField = (
@@ -234,7 +407,7 @@ export default function ProfileSection(user: SessionUser) {
     }
   };
 
-  if (sponsorStatus.isLoading) {
+  if (partnerStatus.isLoading) {
     return (
       <div className="relative flex flex-1 flex-col gap-4 lg:min-h-96">
         <DashboardSkeleton rows={3} />
@@ -249,73 +422,199 @@ export default function ProfileSection(user: SessionUser) {
 
       <ul className="flex flex-col gap-2">
         <li>E-Mail: {user.email}</li>
-        <li>Rolle: {sponsorStatus.data?.role ?? "USER"}</li>
+        <li>Rolle: {partnerStatus.data?.role ?? "USER"}</li>
         <li>
           Stripe Connect:{" "}
-          {sponsorStatus.data?.onboardingComplete
+          {partnerStatus.data?.onboardingComplete
             ? "Verbunden"
             : "Nicht verbunden"}
         </li>
+        <li>
+          Partner-Programm-Abo:{" "}
+          {partnerStatus.data?.subscription.requiredPriceConfigured
+            ? hasActiveSubscription
+              ? "Aktiv"
+              : "Inaktiv"
+            : "Nicht konfiguriert"}
+        </li>
       </ul>
 
-      {!sponsorStatus.data?.onboardingComplete ? (
-        <div className="content-card flex flex-col gap-3 p-4">
-          <h3 className="text-xl font-bold">Sponsor werden</h3>
-          <p className="text-sm">
-            Verbinden Sie Ihr Stripe-Konto, um Sponsoring-Kampagnen zu
-            erstellen.
+      {hasPartnerAccess ? (
+        <div className="content-card p-4">
+          <h3 className="text-xl font-bold">Partner-Bereich</h3>
+          <p className="text-info-700 mt-2 text-sm">
+            Eingehende Partner-Bestellungen und Archiv finden Sie jetzt im eigenen Bereich.
           </p>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="connect-country" className="text-sm font-semibold">
-              Land für Stripe Connect
-            </label>
-            <select
-              id="connect-country"
-              value={connectCountry}
-              onChange={(event) => setConnectCountry(event.target.value)}
-              disabled={
-                startOnboarding.isPending || finalizeOnboarding.isPending
-              }
-              className="field-shell w-fit px-3 py-2 text-sm"
-            >
-              {CONNECT_COUNTRY_OPTIONS.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-info-700 text-xs">
-              Das Land kann nach Erstellung des Connect-Kontos nicht mehr im
-              Dashboard geändert werden.
-            </p>
+          <a href="/dashboard?view=partner" className="btn-soft mt-3 inline-flex px-3 py-2 text-sm">
+            Zum Partner-Bereich
+          </a>
+        </div>
+      ) : null}
+
+      {!partnerStatus.data?.onboardingComplete ? (
+        <div className="flex flex-col gap-6">
+          <div className="content-card flex flex-col gap-3 p-4">
+            <h3 className="text-xl font-bold">Partner-Programm-Abo</h3>
+            {configuredPriceOptions.length > 0 ? (
+              <ul className="text-sm">
+                {configuredPriceOptions.map((priceOption) => (
+                  <li key={priceOption.id}>
+                    <b>{formatSubscriptionOption(priceOption)}</b>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {!partnerStatus.data?.subscription.requiredPriceConfigured ? (
+              <p className="text-pirrot-red-500 text-sm">
+                Preis-ID fehlt. Konfigurieren Sie
+                `STRIPE_CONNECT_SUBSCRIPTION_MONTHLY_PRICE_ID` und/oder
+                `STRIPE_CONNECT_SUBSCRIPTION_YEARLY_PRICE_ID`, damit das Abo
+                gestartet werden kann.
+              </p>
+            ) : hasActiveSubscription ? (
+              <>
+                <p className="text-sm">
+                  Status: <b>Aktiv</b>
+                  {partnerStatus.data?.subscription.cancelAtPeriodEnd
+                    ? " (endet am Periodenende)"
+                    : ""}
+                </p>
+                <p className="text-info-700 text-xs">
+                  Laufzeit bis:{" "}
+                  {formatUnixDate(
+                    partnerStatus.data?.subscription.currentPeriodEnd ??
+                    undefined,
+                  )}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openSubscriptionPortal.mutate()}
+                  disabled={
+                    openSubscriptionPortal.isPending ||
+                    startSubscriptionCheckout.isPending
+                  }
+                  className="btn-soft w-fit px-4 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {openSubscriptionPortal.isPending
+                    ? "Öffne..."
+                    : "Abo verwalten"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm">
+                  Abo zuerst abschließen, danach wird Stripe Connect
+                  freigeschaltet.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {configuredPriceOptions.map((priceOption) => (
+                    <button
+                      key={priceOption.id}
+                      type="button"
+                      onClick={() =>
+                        startSubscriptionCheckout.mutate({
+                          priceId: priceOption.id,
+                        })
+                      }
+                      disabled={
+                        startSubscriptionCheckout.isPending ||
+                        openSubscriptionPortal.isPending
+                      }
+                      className="btn-solid w-fit px-4 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {startSubscriptionCheckout.isPending
+                        ? "Weiterleitung..."
+                        : `Abo starten (${formatSubscriptionOption(priceOption)})`}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {startSubscriptionCheckout.error && (
+              <p className="text-pirrot-red-500 text-sm">
+                {startSubscriptionCheckout.error.message}
+              </p>
+            )}
+            {openSubscriptionPortal.error && (
+              <p className="text-pirrot-red-500 text-sm">
+                {openSubscriptionPortal.error.message}
+              </p>
+            )}
           </div>
-          <button
-            type="button"
-            disabled={startOnboarding.isPending || finalizeOnboarding.isPending}
-            onClick={() =>
-              startOnboarding.mutate({
-                country: connectCountry,
-              })
-            }
-            className="btn-solid w-fit px-4 py-2 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {startOnboarding.isPending ? "Weiterleitung..." : "Sponsor werden"}
-          </button>
-          {startOnboarding.error && (
-            <p className="text-pirrot-red-500 text-sm">
-              {startOnboarding.error.message}
-            </p>
-          )}
-          {finalizeOnboarding.error && (
-            <p className="text-pirrot-red-500 text-sm">
-              {finalizeOnboarding.error.message}
-            </p>
-          )}
+
+          {hasActiveSubscription ? (
+            <div className="content-card flex flex-col gap-3 p-4">
+              <h3 className="text-xl font-bold">Partner werden</h3>
+              <p className="text-sm">
+                Verbinden Sie Ihr Stripe-Konto, um Partner-Kampagnen zu
+                erstellen.
+              </p>
+              <>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="connect-country" className="text-sm font-semibold">
+                    Land für Stripe Connect
+                  </label>
+                  <select
+                    id="connect-country"
+                    value={connectCountry}
+                    onChange={(event) => setConnectCountry(event.target.value)}
+                    disabled={
+                      startOnboarding.isPending || finalizeOnboarding.isPending
+                    }
+                    className="field-shell w-fit px-3 py-2 text-sm"
+                  >
+                    {CONNECT_COUNTRY_OPTIONS.map((option) => (
+                      <option key={option.code} value={option.code}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-info-700 text-xs">
+                    Das Land kann nach Erstellung des Connect-Kontos nicht mehr
+                    im Dashboard geändert werden.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={startOnboarding.isPending || finalizeOnboarding.isPending}
+                  onClick={() =>
+                    startOnboarding.mutate({
+                      country: connectCountry,
+                    })
+                  }
+                  className="btn-solid w-fit px-4 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {startOnboarding.isPending
+                    ? "Weiterleitung..."
+                    : "Partner werden"}
+                </button>
+              </>
+              {startOnboarding.error && (
+                <p className="text-pirrot-red-500 text-sm">
+                  {startOnboarding.error.message}
+                </p>
+              )}
+              {finalizeOnboarding.error && (
+                <p className="text-pirrot-red-500 text-sm">
+                  {finalizeOnboarding.error.message}
+                </p>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          <div className="field-shell bg-pirrot-green-100/30 p-4">
-            <h3 className="text-xl font-bold">Sponsoring aktiv</h3>
+          <div
+            className={`field-shell p-4 ${hasActiveSubscription
+                ? "bg-pirrot-green-100/30"
+                : "bg-pirrot-blue-100/30"
+              }`}
+          >
+            <h3 className="text-xl font-bold">
+              {hasActiveSubscription
+                ? "Partner-Programm aktiv"
+                : "Partner-Programm-Abo erforderlich"}
+            </h3>
             <p className="text-sm">
               Ihre Vorlagen sind Ihre Produkte. Steuern Sie Ihre Kampagnen
               zentral über Laufzeit, Nutzung und Aktiv-Status.
@@ -323,6 +622,98 @@ export default function ProfileSection(user: SessionUser) {
           </div>
 
           <div className="content-card flex flex-col gap-3 p-4">
+            <h3 className="text-xl font-bold">Partner-Programm-Abo</h3>
+            {configuredPriceOptions.length > 0 ? (
+              <ul className="text-sm">
+                {configuredPriceOptions.map((priceOption) => (
+                  <li key={priceOption.id}>
+                    <b>{formatSubscriptionOption(priceOption)}</b>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {!partnerStatus.data?.subscription.requiredPriceConfigured ? (
+              <p className="text-pirrot-red-500 text-sm">
+                Preis-ID fehlt. Konfigurieren Sie
+                `STRIPE_CONNECT_SUBSCRIPTION_MONTHLY_PRICE_ID` und/oder
+                `STRIPE_CONNECT_SUBSCRIPTION_YEARLY_PRICE_ID`, damit das Abo
+                gestartet werden kann.
+              </p>
+            ) : hasActiveSubscription ? (
+              <>
+                <p className="text-sm">
+                  Status: <b>Aktiv</b>
+                  {partnerStatus.data?.subscription.cancelAtPeriodEnd
+                    ? " (endet am Periodenende)"
+                    : ""}
+                </p>
+                <p className="text-info-700 text-xs">
+                  Laufzeit bis:{" "}
+                  {formatUnixDate(
+                    partnerStatus.data?.subscription.currentPeriodEnd ??
+                    undefined,
+                  )}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => openSubscriptionPortal.mutate()}
+                  disabled={
+                    openSubscriptionPortal.isPending ||
+                    startSubscriptionCheckout.isPending
+                  }
+                  className="btn-soft w-fit px-4 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {openSubscriptionPortal.isPending
+                    ? "Öffne..."
+                    : "Abo verwalten"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm">
+                  Ohne aktives Abo können keine Kampagnen erstellt oder
+                  reaktiviert werden.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {configuredPriceOptions.map((priceOption) => (
+                    <button
+                      key={priceOption.id}
+                      type="button"
+                      onClick={() =>
+                        startSubscriptionCheckout.mutate({
+                          priceId: priceOption.id,
+                        })
+                      }
+                      disabled={
+                        startSubscriptionCheckout.isPending ||
+                        openSubscriptionPortal.isPending
+                      }
+                      className="btn-solid w-fit px-4 py-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {startSubscriptionCheckout.isPending
+                        ? "Weiterleitung..."
+                        : `Abo starten (${formatSubscriptionOption(priceOption)})`}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {startSubscriptionCheckout.error && (
+              <p className="text-pirrot-red-500 text-sm">
+                {startSubscriptionCheckout.error.message}
+              </p>
+            )}
+            {openSubscriptionPortal.error && (
+              <p className="text-pirrot-red-500 text-sm">
+                {openSubscriptionPortal.error.message}
+              </p>
+            )}
+          </div>
+
+          <SubscriptionLockedSection
+            locked={!hasActiveSubscription}
+            className="content-card flex flex-col gap-3 p-4"
+          >
             <h3 className="text-xl font-bold">Sales Übersicht</h3>
             {salesOverview.isLoading ? (
               <LoadingSpinner />
@@ -344,30 +735,194 @@ export default function ProfileSection(user: SessionUser) {
                   </p>
                   <p className="text-info-700 text-xs">
                     Offen: {salesOverview.data?.remainingRedemptions ?? 0}
+                    {" · "}
+                    Storniert: {salesOverview.data?.canceledRedemptions ?? 0}
                   </p>
                 </div>
                 <div className="field-shell p-3 text-sm">
-                  <p className="text-info-700">Abgerechnete Sponsoring-Summe</p>
+                  <p className="text-info-700">Abgerechnete Partner-Summe</p>
                   <p className="text-2xl font-black">
                     {(
-                      (salesOverview.data?.billedSponsorAmountCents ?? 0) / 100
+                      (salesOverview.data?.billedPartnerAmountCents ?? 0) / 100
                     ).toFixed(2)}{" "}
                     EUR
                   </p>
                   <p className="text-info-700 text-xs">
-                    Rechnungen: {salesOverview.data?.sponsorInvoiceCount ?? 0}
+                    Rechnungen: {salesOverview.data?.partnerInvoiceCount ?? 0}
                   </p>
                 </div>
               </div>
             )}
             {salesOverview.error && (
               <p className="text-pirrot-red-500 text-sm">
-                {salesOverview.error.message}
+                {friendlyErrorMessage(
+                  salesOverview.error.message,
+                  "Sales-Übersicht konnte nicht geladen werden.",
+                )}
               </p>
             )}
-          </div>
+          </SubscriptionLockedSection>
 
-          <div className="content-card flex flex-col gap-3 p-4">
+          <SubscriptionLockedSection
+            locked={!hasActiveSubscription}
+            className="content-card flex flex-col gap-4 p-4"
+          >
+            <div className="flex items-center gap-2">
+              <BarChart3 className="text-pirrot-blue-700" size={18} />
+              <h3 className="text-xl font-bold">Erweiterte Kampagnenanalyse</h3>
+            </div>
+            {campaigns.isLoading || salesOverview.isLoading ? (
+              <LoadingSpinner />
+            ) : campaignItems.length === 0 ? (
+              <p className="text-info-700 text-sm">
+                Noch keine Kampagnendaten vorhanden.
+              </p>
+            ) : (
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="field-shell flex flex-col gap-1 p-3 text-sm">
+                    <p className="text-info-700 inline-flex items-center gap-2">
+                      <Activity size={14} />
+                      Nutzungsgrad (limitierte Kampagnen)
+                    </p>
+                    <p className="text-2xl font-black">
+                      {campaignOverview.limitedUtilizationPercent}%
+                    </p>
+                    <p className="text-info-700 text-xs">
+                      {campaignOverview.totalRedeemed} von{" "}
+                      {campaignOverview.totalLimitedCapacity} Einlösungen
+                    </p>
+                  </div>
+                  <div className="field-shell flex flex-col gap-1 p-3 text-sm">
+                    <p className="text-info-700 inline-flex items-center gap-2">
+                      <Target size={14} />
+                      Offene Einlösungen
+                    </p>
+                    <p className="text-2xl font-black">
+                      {campaignOverview.totalRemaining}
+                    </p>
+                    <p className="text-info-700 text-xs">
+                      über limitierte Kampagnen hinweg
+                    </p>
+                  </div>
+                  <div className="field-shell flex flex-col gap-1 p-3 text-sm">
+                    <p className="text-info-700 inline-flex items-center gap-2">
+                      <TrendingUp size={14} />
+                      Ø Einlösungen je Kampagne
+                    </p>
+                    <p className="text-2xl font-black">
+                      {(
+                        campaignOverview.totalRedeemed /
+                        Math.max(campaignItems.length, 1)
+                      ).toFixed(1)}
+                    </p>
+                    <p className="text-info-700 text-xs">
+                      bei {campaignItems.length} Kampagnen
+                    </p>
+                  </div>
+                  <div className="field-shell flex flex-col gap-1 p-3 text-sm">
+                    <p className="text-info-700 inline-flex items-center gap-2">
+                      <BarChart3 size={14} />
+                      Partner-Umsatz
+                    </p>
+                    <p className="text-2xl font-black">
+                      {formatEuro(
+                        salesOverview.data?.billedPartnerAmountCents ?? 0,
+                      )}
+                    </p>
+                    <p className="text-info-700 text-xs">
+                      Rechnungen: {salesOverview.data?.partnerInvoiceCount ?? 0}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="field-shell flex flex-col gap-3 p-3 text-sm">
+                  <p className="font-semibold">Top-Kampagnen nach Einlösungen</p>
+                  {campaignOverview.topCampaigns.length === 0 ? (
+                    <p className="text-info-700 text-xs">
+                      Noch keine Einlösungen vorhanden.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {campaignOverview.topCampaigns.map((campaign) => {
+                        const barPercent = Math.max(
+                          8,
+                          Math.round(
+                            (campaign.redemptionValue / maxTopCampaignRedeemed) *
+                            100,
+                          ),
+                        );
+                        return (
+                          <div key={campaign.id} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold">{campaign.code}</span>
+                              <span className="text-info-700">
+                                {campaign.redemptionValue} aktive Einlösungen
+                              </span>
+                            </div>
+                            <div className="bg-pirrot-blue-100 h-2.5 rounded-full">
+                              <div
+                                className="from-pirrot-blue-500 to-pirrot-blue-700 h-full rounded-full bg-gradient-to-r"
+                                style={{ width: `${barPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="field-shell flex flex-col gap-2 p-3 text-sm xl:col-span-2">
+                  <p className="inline-flex items-center gap-2 font-semibold">
+                    <CalendarClock size={14} />
+                    Kampagnen mit Ablauf in den nächsten 30 Tagen
+                  </p>
+                  {campaignOverview.expiringSoon.length === 0 ? (
+                    <p className="text-info-700 text-xs">
+                      Keine Kampagnen laufen in den nächsten 30 Tagen ab.
+                    </p>
+                  ) : (
+                    <ul className="grid gap-2 md:grid-cols-2">
+                      {campaignOverview.expiringSoon.map((campaign) => (
+                        <li key={campaign.id} className="bg-white/55 rounded p-2">
+                          <p className="font-semibold">{campaign.code}</p>
+                          <p className="text-info-700 text-xs">
+                            {campaign.daysToExpire === 0
+                              ? "Läuft heute ab"
+                              : `Läuft in ${campaign.daysToExpire} Tagen ab`}
+                          </p>
+                          <p className="text-info-700 text-xs">
+                            Einlösungen: {campaign.timesRedeemed}
+                            {typeof campaign.activeRedemptions === "number" &&
+                              typeof campaign.canceledRedemptions === "number"
+                              ? ` (aktiv ${campaign.activeRedemptions}, storniert ${campaign.canceledRedemptions})`
+                              : ""}
+                            {typeof campaign.maxRedemptions === "number"
+                              ? ` / ${campaign.maxRedemptions}`
+                              : " / Unbegrenzt"}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+            {campaigns.error && (
+              <p className="text-pirrot-red-500 text-sm">
+                {friendlyErrorMessage(
+                  campaigns.error.message,
+                  "Kampagnen konnten nicht geladen werden.",
+                )}
+              </p>
+            )}
+          </SubscriptionLockedSection>
+
+          <SubscriptionLockedSection
+            locked={!hasActiveSubscription}
+            className="content-card flex flex-col gap-3 p-4"
+          >
             <h3 className="text-xl font-bold">Kampagne erstellen</h3>
             {userBooks.isLoading ? (
               <LoadingSpinner />
@@ -457,7 +1012,11 @@ export default function ProfileSection(user: SessionUser) {
 
                 <button
                   type="button"
-                  disabled={!selectedTemplateId || createCampaign.isPending}
+                  disabled={
+                    !selectedTemplateId ||
+                    createCampaign.isPending ||
+                    !hasActiveSubscription
+                  }
                   onClick={() =>
                     createCampaign.mutate({
                       templateId: selectedTemplateId,
@@ -473,6 +1032,12 @@ export default function ProfileSection(user: SessionUser) {
                     ? "Erstelle..."
                     : "Kampagne erstellen"}
                 </button>
+                {!hasActiveSubscription && (
+                  <p className="text-info-700 text-xs">
+                    Für neue Kampagnen ist ein aktives Partner-Programm-Abo
+                    erforderlich.
+                  </p>
+                )}
                 {createCampaign.error && (
                   <p className="text-pirrot-red-500 text-sm">
                     {createCampaign.error.message}
@@ -500,17 +1065,25 @@ export default function ProfileSection(user: SessionUser) {
                 </p>
               </div>
             )}
-          </div>
+          </SubscriptionLockedSection>
 
-          <div className="content-card flex flex-col gap-3 p-4">
+          <SubscriptionLockedSection
+            locked={!hasActiveSubscription}
+            className="content-card flex flex-col gap-3 p-4"
+          >
             <h3 className="text-xl font-bold">Meine Kampagnen</h3>
+            {!hasActiveSubscription && (
+              <p className="text-info-700 text-xs">
+                Kampagnen können ohne aktives Abo pausiert, aber nicht
+                reaktiviert oder erweitert werden.
+              </p>
+            )}
             {campaignUpdateNotice && (
               <div
-                className={`rounded border p-3 text-sm ${
-                  campaignUpdateNotice.variant === "rotated"
+                className={`rounded border p-3 text-sm ${campaignUpdateNotice.variant === "rotated"
                     ? "border-pirrot-green-300/50 bg-pirrot-green-100/50"
                     : "border-pirrot-blue-300/50 bg-pirrot-blue-100/50"
-                }`}
+                  }`}
               >
                 <p>
                   <b>
@@ -569,6 +1142,14 @@ export default function ProfileSection(user: SessionUser) {
                       <b>Einlösungen:</b> {campaign.timesRedeemed} /{" "}
                       {campaign.maxRedemptions ?? "Unbegrenzt"}
                     </p>
+                    {typeof campaign.activeRedemptions === "number" &&
+                      typeof campaign.canceledRedemptions === "number" ? (
+                      <p>
+                        <b>Aktiv:</b> {campaign.activeRedemptions}{" "}
+                        <b className="ml-2">Storniert:</b>{" "}
+                        {campaign.canceledRedemptions}
+                      </p>
+                    ) : null}
                     <p>
                       <b>Ablauf:</b> {formatUnixDate(campaign.expiresAt)}
                     </p>
@@ -612,7 +1193,10 @@ export default function ProfileSection(user: SessionUser) {
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        disabled={updateCampaign.isPending}
+                        disabled={
+                          updateCampaign.isPending ||
+                          (!hasActiveSubscription && !campaign.active)
+                        }
                         onClick={() =>
                           updateCampaign.mutate({
                             campaignId: campaign.id,
@@ -673,22 +1257,24 @@ export default function ProfileSection(user: SessionUser) {
                       <div className="flex items-end">
                         <button
                           type="button"
-                          disabled={updateCampaign.isPending}
+                          disabled={
+                            updateCampaign.isPending || !hasActiveSubscription
+                          }
                           onClick={() =>
                             updateCampaign.mutate({
                               campaignId: campaign.id,
                               maxRedemptions:
                                 Number.parseInt(
                                   campaignEdits[campaign.id]?.maxRedemptions ??
-                                    String(campaign.maxRedemptions ?? 1),
+                                  String(campaign.maxRedemptions ?? 1),
                                   10,
                                 ) || 1,
                               validForDays:
                                 Number.parseInt(
                                   campaignEdits[campaign.id]?.validForDays ??
-                                    inferValidDaysFromExpiresAt(
-                                      campaign.expiresAt,
-                                    ),
+                                  inferValidDaysFromExpiresAt(
+                                    campaign.expiresAt,
+                                  ),
                                   10,
                                 ) || 1,
                             })
@@ -710,7 +1296,7 @@ export default function ProfileSection(user: SessionUser) {
                 {updateCampaign.error.message}
               </p>
             )}
-          </div>
+          </SubscriptionLockedSection>
         </div>
       )}
     </div>

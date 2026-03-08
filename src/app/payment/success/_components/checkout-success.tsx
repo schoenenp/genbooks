@@ -118,6 +118,10 @@ export default function CheckoutSuccess({
   if (state === "loading") {
     return (
       <div className="content-card w-full max-w-2xl p-8 text-center">
+        <div className="mb-4 rounded-lg border-2 border-pirrot-red-500 bg-pirrot-red-50 px-4 py-3 text-left text-sm font-bold uppercase tracking-wide text-pirrot-red-700">
+          Wichtig: Fenster nicht schließen. Sie werden automatisch
+          weitergeleitet.
+        </div>
         <div className="mx-auto mb-4 flex w-fit items-center justify-center rounded-full bg-pirrot-blue-100 p-4 text-pirrot-blue-700">
           <LoadingSpinner />
         </div>
@@ -182,10 +186,15 @@ export default function CheckoutSuccess({
         </div>
       </div>
 
-      <div className="mb-6 rounded-xl border border-pirrot-blue-200/40 bg-pirrot-blue-50/40 p-4 text-info-800">
-        Sie werden in{" "}
-        <span className="font-bold text-info-950">{countdown}</span> Sekunden
-        automatisch zur Bestellansicht weitergeleitet.
+      <div className="mb-6 rounded-xl border-2 border-pirrot-red-500 bg-pirrot-red-50 p-4 text-pirrot-red-800">
+        <p className="text-sm font-bold uppercase tracking-wide">
+          Wichtig: Fenster nicht schließen
+        </p>
+        <p className="mt-1 text-sm">
+          Sie werden in{" "}
+          <span className="font-bold text-pirrot-red-900">{countdown}</span>{" "}
+          Sekunden automatisch zur Bestellansicht weitergeleitet.
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-3">

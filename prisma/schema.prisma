@@ -39,6 +39,13 @@ model Book {
 
   clientRef   String?      @default("pirrot")
   customDates CustomDate[]
+
+  sourceType             BookSourceType @default(STANDARD)
+  partnerClaimId         String?        @unique
+  partnerPromotionCodeId String?
+  partnerSnapshotBookId  String?
+  partnerClaim           PartnerClaim?  @relation("PartnerClaimBook", fields: [partnerClaimId], references: [id], onDelete: SetNull)
+  partnerOrder           PartnerOrder?
 }
 
 model BookModule {
@@ -148,9 +155,16 @@ model User {
   accounts Account[]
   sessions Session[]
 
-  books   Book[]
-  orders  Order[]
-  modules Module[]
+  books                    Book[]
+  orders                   Order[]
+  modules                  Module[]
+  partnerClaims            PartnerClaim[]
+  partnerOrdersAsPartner   PartnerOrder[]           @relation("PartnerOrdersAsPartner")
+  partnerOrdersAsSchool    PartnerOrder[]           @relation("PartnerOrdersAsSchool")
+  reviewedPartnerOrders    PartnerOrder[]           @relation("PartnerOrdersReviewedBy")
+  partnerNotifications     PartnerNotification[]
+  partnerOrderTransitions  PartnerOrderTransition[] @relation("PartnerOrderTransitionsActor")
+  partnerSettlementBatches PartnerSettlementBatch[] @relation("PartnerSettlementBatches")
 
   locations Location[]
 }
@@ -164,7 +178,8 @@ model Order {
   orderKey String?     @unique
   status   OrderStatus @default(PENDING)
 
-  bookOrder BookOrder?
+  bookOrder    BookOrder?
+  partnerOrder PartnerOrder?
 
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
@@ -371,6 +386,42 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PartnerClaimStatus {
+  PENDING
+  VERIFIED
+  CONSUMED
+  EXPIRED
+}
+
+enum BookSourceType {
+  STANDARD
+  PARTNER_TEMPLATE
+}
+
+enum PartnerOrderStatus {
+  SUBMITTED_BY_SCHOOL
+  UNDER_PARTNER_REVIEW
+  PARTNER_CONFIRMED
+  PARTNER_DECLINED
+  RELEASED_TO_PRODUCTION
+  FULFILLED
+}
+
+enum PartnerNotificationType {
+  INCOMING_PARTNER_ORDER
+  PARTNER_ORDER_CONFIRMED
+  PARTNER_ORDER_DECLINED
+  PARTNER_ORDER_RELEASED
+}
+
+enum PartnerSettlementBatchStatus {
+  DRAFT
+  FINALIZED
+  EXPORTED
+  PAID
+  CANCELLED
+}
+
 model CustomDate {
   id     String   @id @default(cuid())
   date   DateTime
@@ -382,14 +433,145 @@ model CustomDate {
 }
 
 model Campaign {
-  id                String   @id @default(cuid())
-  sponsorUserId     String
-  templateId        String
-  snapshotBookId    String
-  promotionCodeId   String   @unique
-  maxRedemptions    Int
-  timesRedeemed     Int      @default(0)
-  expiresAt         DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id              String    @id @default(cuid())
+  partnerUserId   String    @map("sponsorUserId")
+  templateId      String
+  snapshotBookId  String
+  promotionCodeId String    @unique
+  maxRedemptions  Int
+  timesRedeemed   Int       @default(0)
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model PartnerOrder {
+  id String @id @default(cuid())
+
+  partnerUserId String
+  partnerUser   User   @relation("PartnerOrdersAsPartner", fields: [partnerUserId], references: [id], onDelete: Cascade)
+
+  schoolUserId String?
+  schoolUser   User?   @relation("PartnerOrdersAsSchool", fields: [schoolUserId], references: [id], onDelete: SetNull)
+
+  reviewedByUserId String?
+  reviewedByUser   User?   @relation("PartnerOrdersReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  bookId String @unique
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  orderId Int?   @unique
+  order   Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  status PartnerOrderStatus @default(SUBMITTED_BY_SCHOOL)
+
+  submittedAt   DateTime  @default(now())
+  reviewedAt    DateTime?
+  declineReason String?   @db.Text
+  releasedAt    DateTime?
+  fulfilledAt   DateTime?
+
+  schoolSnapshot    Json?
+  partnerSnapshot   Json?
+  lineItemsSnapshot Json?
+
+  sourceCampaignId String?
+  sourceClaimId    String?
+
+  settlementBatchId String?
+  settlementBatch   PartnerSettlementBatch? @relation(fields: [settlementBatchId], references: [id], onDelete: SetNull)
+
+  notifications PartnerNotification[]
+  transitions   PartnerOrderTransition[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([partnerUserId, status, updatedAt])
+  @@index([status, submittedAt])
+  @@index([partnerUserId, settlementBatchId, status])
+}
+
+model PartnerNotification {
+  id String @id @default(cuid())
+
+  partnerUserId String
+  partnerUser   User   @relation(fields: [partnerUserId], references: [id], onDelete: Cascade)
+
+  partnerOrderId String?
+  partnerOrder   PartnerOrder? @relation(fields: [partnerOrderId], references: [id], onDelete: SetNull)
+
+  type      PartnerNotificationType
+  payload   Json?
+  readAt    DateTime?
+  createdAt DateTime                @default(now())
+
+  @@index([partnerUserId, readAt, createdAt])
+  @@index([type, createdAt])
+}
+
+model PartnerOrderTransition {
+  id String @id @default(cuid())
+
+  partnerOrderId String
+  partnerOrder   PartnerOrder @relation(fields: [partnerOrderId], references: [id], onDelete: Cascade)
+
+  actorUserId String?
+  actorUser   User?   @relation("PartnerOrderTransitionsActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  fromStatus PartnerOrderStatus?
+  toStatus   PartnerOrderStatus?
+
+  correlationId String
+  payloadHash   String?
+  payload       Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([partnerOrderId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model PartnerSettlementBatch {
+  id String @id @default(cuid())
+
+  partnerUserId String
+  partnerUser   User   @relation("PartnerSettlementBatches", fields: [partnerUserId], references: [id], onDelete: Cascade)
+
+  cycleStart DateTime
+  cycleEnd   DateTime
+  status     PartnerSettlementBatchStatus @default(DRAFT)
+  currency   String                       @default("EUR")
+  summary    Json?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  finalizedAt DateTime?
+
+  orders PartnerOrder[]
+
+  @@index([partnerUserId, status, cycleStart, cycleEnd])
+}
+
+model PartnerClaim {
+  id              String             @id @default(cuid())
+  campaignId      String?
+  promotionCodeId String
+  snapshotBookId  String
+  email           String
+  userId          String?
+  bookId          String?
+  status          PartnerClaimStatus @default(PENDING)
+  verifyTokenHash String             @unique
+  expiresAt       DateTime
+  verifiedAt      DateTime?
+  consumedAt      DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  book Book? @relation("PartnerClaimBook")
+
+  @@index([email, status])
+  @@index([promotionCodeId, status])
 }

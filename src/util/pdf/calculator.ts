@@ -1,10 +1,12 @@
+import { getBindingPriceOverrideByName } from "@/util/book/binding-rules";
+
 type CalcObject = {
   amount: number;
   bPages: number;
   cPages: number;
   format: "DIN A4" | "DIN A5";
+  bindingName?: string;
   prices: {
-    a: { min: number; max: number };
     b: { min: number; max: number };
     c: { min: number; max: number };
   };
@@ -16,8 +18,9 @@ export function calculatePrintCost({
   bPages,
   cPages,
   format = "DIN A5",
+  bindingName,
   prices,
-  percentage = {min: 75, max:200},
+  percentage = { min: 75, max: 200 },
 }: CalcObject): { single: number; total: number } {
 
   const sra3Width = 320;
@@ -49,7 +52,7 @@ export function calculatePrintCost({
   const sheetsBPerBook = Math.ceil(bPages / pagesPerSheet);
   const sheetsCPerBook = Math.ceil(cPages / pagesPerSheet);
 
-  const saturationAmount = 3000;
+  const saturationAmount = 300;
 
   const clampedAmount = Math.min(amount, saturationAmount);
 
@@ -61,7 +64,20 @@ export function calculatePrintCost({
   const interpolate = (min: number, max: number, prog: number) =>
     max - (max - min) * Math.pow(prog, gamma);
 
-  const effectiveBindPrice = interpolate(prices.a.min, prices.a.max, progress);
+  const bindingPriceOverride = bindingName
+    ? getBindingPriceOverrideByName(bindingName)
+    : null;
+  const effectiveBindPrice =
+    typeof bindingPriceOverride?.fixed === "number"
+      ? bindingPriceOverride.fixed
+      : typeof bindingPriceOverride?.min === "number" &&
+        typeof bindingPriceOverride?.max === "number"
+        ? interpolate(
+          bindingPriceOverride.min,
+          bindingPriceOverride.max,
+          progress,
+        )
+        : 0;
   const effectiveBPrice = interpolate(prices.b.min, prices.b.max, progress);
   const effectiveCPrice = interpolate(prices.c.min, prices.c.max, progress);
 

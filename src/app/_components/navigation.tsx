@@ -1,4 +1,10 @@
-import { HomeIcon, LogInIcon, LogOutIcon, LayoutDashboard } from "lucide-react";
+import {
+  HomeIcon,
+  InfoIcon,
+  LogInIcon,
+  LogOutIcon,
+  LayoutDashboard,
+} from "lucide-react";
 
 import Link from "next/link";
 import { auth } from "@/server/auth";
@@ -22,6 +28,13 @@ export default async function Navigation() {
           </span>
         </Link>
         <div className="flex gap-2">
+          <Link
+            href="/partner-info"
+            className="btn-soft flex items-center gap-2 px-3 py-2 text-sm"
+          >
+            <InfoIcon size={18} />
+            <span className="hidden sm:inline">Partner-Programm Info</span>
+          </Link>
           {session?.user && (
             <Link
               href="/dashboard"

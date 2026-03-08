@@ -1,29 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { api } from "@/trpc/react";
 import LoadingSpinner from "@/app/_components/loading-spinner";
+import Link from "next/link";
 
 type TemplateCampaignEntryProps = {
   token?: string;
+  claimToken?: string;
+  sessionEmail?: string | null;
+  isLoggedIn: boolean;
 };
 
 export default function TemplateCampaignEntry({
   token,
+  claimToken,
+  sessionEmail,
+  isLoggedIn,
 }: TemplateCampaignEntryProps) {
   const router = useRouter();
-  const { data: session } = useSession();
+  const normalizedSessionEmail = sessionEmail?.trim() ?? "";
+  const isSessionEmailLocked = normalizedSessionEmail.length > 0;
   const [promoCode, setPromoCode] = useState("");
-  const [email, setEmail] = useState(session?.user?.email ?? "");
+  const [email, setEmail] = useState(normalizedSessionEmail);
+  const hasAttemptedClaimCompletionRef = useRef(false);
 
   const {
     data: campaignData,
     isLoading,
     isError,
     error,
-  } = api.sponsor.getCampaignTemplate.useQuery(
+  } = api.partner.getCampaignTemplate.useQuery(
     {
       token: token ?? "",
     },
@@ -33,32 +41,107 @@ export default function TemplateCampaignEntry({
     },
   );
 
-  const redeemCampaign = api.sponsor.redeemCampaign.useMutation({
+  const startPartnerClaim = api.partner.startPartnerClaim.useMutation();
+  const completePartnerClaim = api.partner.completePartnerClaim.useMutation({
     onSuccess: (data) => {
+      if (!data?.bookId || !data?.partnerCheckoutToken) {
+        return;
+      }
       router.push(
-        `/config?bookId=${encodeURIComponent(data.bookId)}&st=${encodeURIComponent(data.sponsorCheckoutToken)}`,
+        `/config?bookId=${encodeURIComponent(data.bookId)}&pt=${encodeURIComponent(data.partnerCheckoutToken)}`,
       );
     },
   });
 
-  const moduleCount = useMemo(
-    () => campaignData?.template.modules.length ?? 0,
-    [campaignData?.template.modules.length],
-  );
+  const moduleCount = campaignData?.template?.modules?.length ?? 0;
 
   const isValidEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
+  const normalizedEmail = email.trim();
   const canSubmit =
     promoCode.trim().length >= 6 &&
-    isValidEmail(email) &&
-    !redeemCampaign.isPending;
+    (isSessionEmailLocked || isValidEmail(normalizedEmail)) &&
+    !startPartnerClaim.isPending;
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token || !canSubmit) {
+      return;
+    }
+
+    startPartnerClaim.mutate({
+      token,
+      promoCode: promoCode.trim().toUpperCase(),
+      email: isSessionEmailLocked ? normalizedSessionEmail : normalizedEmail,
+    });
+  };
+
+  const callbackUrl = useMemo(() => {
+    if (!claimToken) {
+      return "/template";
+    }
+    return `/template?claim=${encodeURIComponent(claimToken)}`;
+  }, [claimToken]);
+
+  useEffect(() => {
+    if (!claimToken || !isLoggedIn || hasAttemptedClaimCompletionRef.current) {
+      return;
+    }
+    hasAttemptedClaimCompletionRef.current = true;
+    void completePartnerClaim.mutateAsync({ claimToken }).catch(() => {
+      // Error state is surfaced by completePartnerClaim.error in the UI.
+    });
+  }, [claimToken, completePartnerClaim, isLoggedIn]);
+
+  useEffect(() => {
+    hasAttemptedClaimCompletionRef.current = false;
+  }, [claimToken]);
+
+  if (claimToken) {
+    if (!isLoggedIn) {
+      return (
+        <section className="w-full max-w-2xl rounded border border-white/30 bg-white/40 p-6">
+          <h1 className="text-3xl font-black uppercase">
+            Partner-Angebot bestätigen
+          </h1>
+          <p className="mt-3">
+            Bitte melden Sie sich mit derselben E-Mail-Adresse an, an die der
+            Verifizierungslink gesendet wurde.
+          </p>
+          <Link
+            href={`/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+            className="bg-pirrot-blue-500 hover:bg-pirrot-blue-600 mt-6 inline-block rounded p-3 font-bold text-white transition-colors"
+          >
+            Anmelden und fortfahren
+          </Link>
+        </section>
+      );
+    }
+
+    return (
+      <section className="w-full max-w-2xl rounded border border-white/30 bg-white/40 p-6">
+        <h1 className="text-3xl font-black uppercase">
+          Partner-Angebot wird bestätigt
+        </h1>
+        <p className="mt-3">
+          Bitte warten Sie, Sie werden gleich zur Konfiguration weitergeleitet.
+        </p>
+        {completePartnerClaim.isPending ? <LoadingSpinner /> : null}
+        {completePartnerClaim.error ? (
+          <p className="border-pirrot-red-200 bg-pirrot-red-50 text-pirrot-red-500 mt-4 rounded border p-3 text-sm">
+            {completePartnerClaim.error.message}
+          </p>
+        ) : null}
+      </section>
+    );
+  }
 
   if (!token) {
     return (
       <section className="bg-pirrot-red-100 border-pirrot-red-300 w-full max-w-2xl rounded border p-6">
-        <h2 className="text-2xl font-bold">Ungültiger Sponsoring-Link</h2>
+        <h2 className="text-2xl font-bold">Ungültiger Partner-Link</h2>
         <p className="mt-2">Der Link enthält kein gültiges Kampagnen-Token.</p>
       </section>
     );
@@ -86,22 +169,22 @@ export default function TemplateCampaignEntry({
   return (
     <section className="w-full max-w-2xl rounded border border-white/30 bg-white/40 p-6">
       <h1 className="text-3xl font-black uppercase">
-        Gesponserte Vorlage aktivieren
+        Partner-Vorlage aktivieren
       </h1>
       <p className="mt-3">
-        Geben Sie den Promo-Code ein, um die gesponserte Vorlage freizuschalten.
+        Geben Sie den Promo-Code ein, um die Partner-Vorlage freizuschalten.
       </p>
 
       <div className="border-pirrot-blue-300/30 bg-pirrot-blue-50/60 mt-6 rounded border p-4">
         <h2 className="text-xl font-bold">
-          {campaignData.template.name ?? "Gesponserter Planer"}
+          {campaignData.template.name ?? "Partner-Planer"}
         </h2>
         <p className="mt-1 text-sm">
           Module in der Basisvorlage: <b>{moduleCount}</b>
         </p>
       </div>
 
-      <div className="mt-6 flex flex-col gap-3">
+      <form className="mt-6 flex flex-col gap-3" onSubmit={handleSubmit}>
         <label htmlFor="promoCode" className="font-semibold">
           Promo-Code
         </label>
@@ -114,41 +197,47 @@ export default function TemplateCampaignEntry({
           placeholder="z. B. SP-AB12CD34"
         />
         <button
-          type="button"
+          type="submit"
           disabled={!canSubmit}
           className="bg-pirrot-blue-500 hover:bg-pirrot-blue-600 rounded p-3 font-bold text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {redeemCampaign.isPending
-            ? "Aktivierung läuft..."
-            : "Vorlage freischalten"}
+          {startPartnerClaim.isPending
+            ? "Verifizierung wird gesendet..."
+            : "Verifizierung starten"}
         </button>
-      </div>
+      </form>
 
       <div className="mt-4 flex flex-col gap-3">
         <label htmlFor="email" className="font-semibold">
-          E-Mail-Adresse {session ? "(angemeldet)" : ""}
+          E-Mail-Adresse {isLoggedIn ? "(angemeldet)" : ""}
         </label>
         <input
           id="email"
           type="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          disabled={!!session?.user?.email}
+          disabled={isSessionEmailLocked}
           className="border-pirrot-blue-300/40 w-full rounded border bg-white p-3 disabled:bg-gray-100 disabled:text-gray-500"
           placeholder="ihre@email.at"
         />
-        {session?.user?.email && (
+        {isSessionEmailLocked && (
           <p className="text-sm text-gray-600">
-            Sie sind angemeldet als {session.user.email}
+            Sie sind angemeldet als {normalizedSessionEmail}
           </p>
         )}
       </div>
 
-      {redeemCampaign.error && (
+      {startPartnerClaim.error && (
         <p className="border-pirrot-red-200 bg-pirrot-red-50 text-pirrot-red-500 mt-4 rounded border p-3 text-sm">
-          {redeemCampaign.error.message}
+          {startPartnerClaim.error.message}
         </p>
       )}
+      {startPartnerClaim.data?.verificationSent ? (
+        <p className="border-pirrot-blue-200 bg-pirrot-blue-50 text-pirrot-blue-700 mt-4 rounded border p-3 text-sm">
+          Verifizierungslink gesendet an {startPartnerClaim.data.email}. Bitte
+          E-Mail bestätigen und dann fortfahren.
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -6,7 +6,7 @@ import { configRouter } from "./routers/config";
 import { typeRouter } from "./routers/type";
 import { orderRouter } from "./routers/order";
 import { userRouter } from "./routers/user";
-import { sponsorRouter } from "./routers/sponsor";
+import { partnerRouter } from "./routers/partner";
 
 /**
  * This is the primary router for your server.
@@ -22,7 +22,7 @@ export const appRouter = createTRPCRouter({
   order: orderRouter,
   config: configRouter,
   user: userRouter,
-  sponsor: sponsorRouter,
+  partner: partnerRouter,
 });
 
 // export type definition of API

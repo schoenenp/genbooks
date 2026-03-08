@@ -5,6 +5,23 @@ import Link from "next/link"
 import { DashboardEmptyState } from "./dashboard-states"
 import { Receipt } from "lucide-react"
 
+function getOrderStatusLabel(status: string): string {
+    switch (status) {
+        case "PENDING":
+            return "Ausstehend"
+        case "SHIPPED":
+            return "Versendet"
+        case "COMPLETED":
+            return "Abgeschlossen"
+        case "CANCELED":
+            return "Storniert"
+        case "FAILED":
+            return "Fehlgeschlagen"
+        default:
+            return status
+    }
+}
+
 export default function OrdersSection () {
     const [ordersData] = api.order.initSection.useSuspenseQuery()
     const {all, latest} = ordersData
@@ -21,7 +38,7 @@ export default function OrdersSection () {
         <h3 className="text-xl font-bold">Letzte Bestellung:</h3>
         {latest ? <ul className="stagger-item">
             <li>{latest?.name}</li>
-            <li>{latest?.status}</li>
+            <li>{getOrderStatusLabel(latest.status)}</li>
             <li>{latest?.date}</li>
         </ul> : <DashboardEmptyState
           icon={Receipt}

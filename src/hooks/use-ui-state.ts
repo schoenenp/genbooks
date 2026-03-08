@@ -7,6 +7,7 @@ type ModalType =
   | "preview"
   | "summary"
   | "payment"
+  | "binding-overflow"
   | "login-prompt"
   | undefined;
 

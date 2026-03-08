@@ -18,11 +18,11 @@ export const Naming = {
     return `${truncated}-${generateShortId()}`;
   },
 
-  sponsor: (originalName: string | null): string => {
-    const baseName = originalName ?? "Sponsor";
+  partner: (originalName: string | null): string => {
+    const baseName = originalName ?? "Partner";
     const truncated =
       baseName.length > 20 ? baseName.substring(0, 20) : baseName;
-    return `S-${truncated}-${generateShortId()}`;
+    return `P-${truncated}-${generateShortId()}`;
   },
 
   file: (extension = "pdf"): string =>

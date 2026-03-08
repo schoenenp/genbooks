@@ -85,10 +85,9 @@ function toAllowedOrigin(value: string): string | null {
 function getConfiguredAuthOrigin() {
   const configuredOrigins = [
     process.env.AUTH_URL,
-    process.env.NEXTAUTH_URL,
     env.BASE_APP_URL,
+    process.env.NEXTAUTH_URL,
   ];
-
   for (const configuredOrigin of configuredOrigins) {
     if (!configuredOrigin) continue;
 

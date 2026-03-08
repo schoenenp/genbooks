@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { canToggleTemplateByRole } from "./book-template-access";
 
 describe("canToggleTemplateByRole", () => {
-  it("allows sponsor and moderator", () => {
+  it("allows partner and moderator", () => {
     expect(canToggleTemplateByRole("SPONSOR")).toBeTrue();
     expect(canToggleTemplateByRole("MODERATOR")).toBeTrue();
   });
@@ -16,4 +16,3 @@ describe("canToggleTemplateByRole", () => {
     expect(canToggleTemplateByRole("USER")).toBeFalse();
   });
 });
-

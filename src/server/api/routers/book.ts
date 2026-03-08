@@ -278,7 +278,29 @@ export const bookRouter = createTRPCRouter({
         return null;
       }
 
-      return book;
+      if (book.sourceType !== "PARTNER_TEMPLATE") {
+        return book;
+      }
+
+      const [campaign, partnerOrder] = await Promise.all([
+        book.partnerPromotionCodeId
+          ? db.campaign.findUnique({
+              where: { promotionCodeId: book.partnerPromotionCodeId },
+              select: { expiresAt: true },
+            })
+          : Promise.resolve(null),
+        db.partnerOrder.findUnique({
+          where: { bookId: book.id },
+          select: { submittedAt: true, status: true },
+        }),
+      ]);
+
+      return {
+        ...book,
+        partnerCampaignExpiresAt: campaign?.expiresAt ?? null,
+        partnerOrderSubmittedAt: partnerOrder?.submittedAt ?? null,
+        partnerOrderStatus: partnerOrder?.status ?? null,
+      };
     }),
   saveCustomDates: protectedProcedure
     .input(

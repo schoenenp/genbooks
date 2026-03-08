@@ -5,11 +5,18 @@ import { api, HydrateClient } from "@/trpc/server";
 
 import ProfileSection from "./_components/profile";
 import { redirect } from "next/navigation";
-import { BookCopy, Component, ReceiptEuro, UserIcon } from "lucide-react";
+import {
+  BookCopy,
+  Component,
+  Handshake,
+  ReceiptEuro,
+  UserIcon,
+} from "lucide-react";
 import ModulesSection from "./_components/modules";
 import Navigation from "../_components/navigation";
 import PlanerSection from "./_components/planers";
 import OrdersSection from "./_components/orders";
+import PartnerSection from "./_components/partner";
 
 export default async function Dashboard({
     searchParams,
@@ -23,7 +30,7 @@ export default async function Dashboard({
   void api.module.getUserModules.prefetch()
   void api.book.getUserBooks.prefetch()
   void api.order.initSection.prefetch()
-  void api.sponsor.getStatus.prefetch()
+  void api.partner.getStatus.prefetch()
 
   if(!session?.user) redirect("/")
   
@@ -37,6 +44,8 @@ export default async function Dashboard({
               return <ModulesSection />
           case "orders":
               return <OrdersSection />
+          case "partner":
+              return <PartnerSection />
           default:
               return <ProfileSection {...session?.user} />
       }
@@ -98,5 +107,9 @@ const DASHBOARD_LINKS:DashLink[] = [
   {
     name:"orders",
     icon: <ReceiptEuro />,
+  },
+  {
+    name:"partner",
+    icon: <Handshake />,
   },
 ]

@@ -29,14 +29,14 @@ export default function ConfigOrderForm({
   onAbortForm,
   quantity,
   format,
-  sponsorToken,
+  partnerToken,
 }: {
   bookId: string
   initialFormState?: OrderAddress
   onAbortForm: () => void
   quantity: number
   format: string
-  sponsorToken?: string
+  partnerToken?: string
 }) {
   
   const [orderFormAddress, setOrderFormAddress] = useState<OrderAddress>(
@@ -56,7 +56,7 @@ export default function ConfigOrderForm({
       isPickup,
       saveUser,
       format: format as "DIN A4" | "DIN A5",
-      sponsorToken,
+      partnerToken,
     },
   }
 

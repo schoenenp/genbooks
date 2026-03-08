@@ -17,6 +17,7 @@ type OrderOverviewProps = {
 export default function Overview({ orderId }: OrderOverviewProps) {
     const utils = api.useUtils()
     const [cancelError, setCancelError] = useState<string | null>(null)
+    const [showCancelConfirm, setShowCancelConfirm] = useState(false)
     const orderData = api.order.getByPublicId.useQuery({
         orderId
     }, {
@@ -156,6 +157,7 @@ export default function Overview({ orderId }: OrderOverviewProps) {
     const PaymentIcon = paymentConfig.icon
 
     async function handleCancelOrder(){
+        setShowCancelConfirm(false)
         await cancelOrder.mutateAsync({ orderId })
     }
 
@@ -182,6 +184,35 @@ export default function Overview({ orderId }: OrderOverviewProps) {
                         </h2>
                         
                         <div className="space-y-4">
+                            {showCancelConfirm && order.status === "PENDING" ? (
+                                <div className="rounded-lg border border-pirrot-red-200 bg-pirrot-red-50 p-4">
+                                    <p className="font-semibold text-pirrot-red-800">
+                                        Bestellung wirklich stornieren?
+                                    </p>
+                                    <p className="mt-1 text-sm text-pirrot-red-700">
+                                        Diese Aktion kann nicht rückgängig gemacht werden.
+                                    </p>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleCancelOrder}
+                                            disabled={cancelOrder.isPending}
+                                            className="btn-soft px-4 py-2 disabled:opacity-60"
+                                        >
+                                            Ja, jetzt stornieren
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowCancelConfirm(false)}
+                                            disabled={cancelOrder.isPending}
+                                            className="btn-solid px-4 py-2 disabled:opacity-60"
+                                        >
+                                            Abbrechen
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : null}
+
                             <div className="flex items-center justify-between border-b border-pirrot-blue-200/30 py-3">
                                 <span className="font-baloo text-info-700">Bestellnummer:</span>
                                 <span className="font-bold font-cairo text-info-950">#{order.id}</span>
@@ -279,7 +310,12 @@ export default function Overview({ orderId }: OrderOverviewProps) {
                 )}
                 
                 {order.status === 'PENDING' && (
-                    <button type="button" onClick={handleCancelOrder} disabled={order.status !== 'PENDING' || cancelOrder.isPending} className="btn-soft flex items-center justify-center gap-2 px-6 py-3 disabled:opacity-60">
+                    <button
+                      type="button"
+                      onClick={() => setShowCancelConfirm(true)}
+                      disabled={order.status !== 'PENDING' || cancelOrder.isPending}
+                      className="btn-soft flex items-center justify-center gap-2 px-6 py-3 disabled:opacity-60"
+                    >
                         <XCircle className="w-5 h-5" />
                         Bestellung stornieren
                     </button>

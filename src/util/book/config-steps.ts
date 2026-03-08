@@ -44,8 +44,8 @@ export const configSteps = [{
 {
     id:"POST",
     title: "Hinterer Teil | Infos & Planung II",
-    img:"sponsor",
-    desc: "Wie bereits im vorderen Teil, ist beim hinteren noch Platz um wichtige Informationen und Tools zu verstauen. Sponsoren sehen sich hier auch gerne Großflächig platziert.",
+    img:"partner",
+    desc: "Wie bereits im vorderen Teil, ist beim hinteren noch Platz um wichtige Informationen und Tools zu verstauen. Partner platzieren sich hier ebenfalls gerne großflächig.",
     modules:{
         min:0,
         max:-1,

@@ -55,8 +55,19 @@ import CustomDatesForm from "./custom-dates-form";
 import { calculatePrintCost } from "@/util/pdf/calculator";
 import ConfigOrderForm from "./config-payment-form";
 import { formatDateKeyUTC } from "@/util/date";
+import {
+  getBindingPageLimitByName,
+  getBindingLimitMessage,
+  isBindingAllowedForTotalPages,
+} from "@/util/book/binding-rules";
 
 export type ConfigBookPart = keyof ConfigModules;
+type BindingOverflowEvent = {
+  invalidBindingId: string;
+  invalidBindingName: string;
+  totalPages: number;
+  suggestedBindingIds: string[];
+};
 
 const GRID_SLICE_SIZES = {
   both: 8,
@@ -70,6 +81,58 @@ export const FILTER_TYPES = {
   BINDING: "bindung",
   CUSTOM: "custom",
 } as const;
+
+function isBindingModule(moduleItem: ModulePickerItem): boolean {
+  const normalizedType = moduleItem.type.toLowerCase();
+  const normalizedPart = moduleItem.part.toUpperCase();
+  return (
+    normalizedPart === "BINDING" ||
+    normalizedPart === "SETTINGS" ||
+    normalizedType === FILTER_TYPES.BINDING ||
+    normalizedType === "farben"
+  );
+}
+
+function getBindingRuleKey(moduleItem: Pick<ModulePickerItem, "theme" | "name">): string {
+  return moduleItem.theme?.toLocaleLowerCase() ?? moduleItem.name;
+}
+
+function getBindingRuleKeys(moduleItem: Pick<ModulePickerItem, "theme" | "name">): string[] {
+  const keys = [
+    moduleItem.theme?.toLocaleLowerCase(),
+    moduleItem.name,
+  ].filter((val): val is string => typeof val === "string" && val.trim().length > 0);
+  return Array.from(new Set(keys));
+}
+
+function getMatchedBindingRuleKey(
+  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+): string | null {
+  for (const key of getBindingRuleKeys(moduleItem)) {
+    if (getBindingPageLimitByName(key) !== null) {
+      return key;
+    }
+  }
+  return null;
+}
+
+function isBindingAllowedForModule(
+  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+  totalPages: number,
+): boolean {
+  const matchedKey = getMatchedBindingRuleKey(moduleItem);
+  if (!matchedKey) return true;
+  return isBindingAllowedForTotalPages(matchedKey, totalPages);
+}
+
+function getBindingLimitMessageForModule(
+  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+  totalPages: number,
+): string | null {
+  const matchedKey = getMatchedBindingRuleKey(moduleItem);
+  if (!matchedKey) return null;
+  return getBindingLimitMessage(matchedKey, totalPages);
+}
 
 function getGridColumns(
   isFilterOpen: boolean,
@@ -94,9 +157,9 @@ function getCurrentSlice(
 export default function BookConfig(props: {
   bookId?: string;
   isLoggedIn?: boolean;
-  sponsorToken?: string;
+  partnerToken?: string;
 }) {
-  const { bookId, isLoggedIn, sponsorToken } = props;
+  const { bookId, isLoggedIn, partnerToken } = props;
   const router = useRouter();
 
   const {
@@ -202,6 +265,8 @@ export default function BookConfig(props: {
   });
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
   const [useMobilePdfFallback, setUseMobilePdfFallback] = useState(false);
+  const [bindingOverflowEvent, setBindingOverflowEvent] =
+    useState<BindingOverflowEvent | null>(null);
 
   useEffect(() => {
     const userAgent = navigator.userAgent ?? "";
@@ -399,6 +464,75 @@ export default function BookConfig(props: {
 
   const filteredModules = modules.filter(moduleFilter);
 
+  const bindingAvailabilityById = useMemo(() => {
+    const availability = new Map<
+      string,
+      { disabled: boolean; reason?: string }
+    >();
+
+    for (const moduleItem of modules) {
+      if (!isBindingModule(moduleItem)) {
+        availability.set(moduleItem.id, { disabled: false });
+        continue;
+      }
+
+      if (totalPagesCount <= 0) {
+        availability.set(moduleItem.id, { disabled: false });
+        continue;
+      }
+
+      const isAllowed = isBindingAllowedForModule(moduleItem, totalPagesCount);
+      const reason = isAllowed
+        ? undefined
+        : getBindingLimitMessageForModule(moduleItem, totalPagesCount) ?? undefined;
+
+      availability.set(moduleItem.id, { disabled: !isAllowed, reason });
+    }
+
+    return availability;
+  }, [modules, totalPagesCount]);
+
+  const bindingOverflowSuggestions = useMemo(() => {
+    if (!bindingOverflowEvent) return [];
+    return bindingOverflowEvent.suggestedBindingIds
+      .map((id) => modules.find((m) => m.id === id))
+      .filter((m): m is (typeof modules)[number] => Boolean(m));
+  }, [bindingOverflowEvent, modules]);
+
+  function triggerBindingOverflowIfNeeded(nextTotalPagesCount: number): boolean {
+    const selectedBindingId = pickedModules.SETTINGS[0];
+    if (!selectedBindingId || nextTotalPagesCount <= 0) return false;
+
+    const selectedBinding = moduleLookupById.get(selectedBindingId);
+    if (!selectedBinding || !isBindingModule(selectedBinding)) return false;
+
+    if (isBindingAllowedForModule(selectedBinding, nextTotalPagesCount)) {
+      setBindingOverflowEvent(null);
+      return false;
+    }
+
+    const suggestedBindingIds = modules
+      .filter((moduleItem) => {
+        if (!isBindingModule(moduleItem)) return false;
+        if (moduleItem.id === selectedBinding.id) return false;
+        return isBindingAllowedForModule(moduleItem, nextTotalPagesCount);
+      })
+      .slice(0, 2)
+      .map((moduleItem) => moduleItem.id);
+
+    setPickedModules((prev) =>
+      prev.SETTINGS.length === 0 ? prev : { ...prev, SETTINGS: [] },
+    );
+    setBindingOverflowEvent({
+      invalidBindingId: selectedBinding.id,
+      invalidBindingName: selectedBinding.name,
+      totalPages: nextTotalPagesCount,
+      suggestedBindingIds,
+    });
+    setModalId("binding-overflow");
+    return true;
+  }
+
   /** HANDLERS  */
 
   const handleNameSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -472,7 +606,7 @@ export default function BookConfig(props: {
 
     const isCoverModule =
       normalizedPart === "COVER" || normalizedType === FILTER_TYPES.COVER;
-    const isBindingModule =
+    const isBindingModuleItem =
       normalizedPart === "BINDING" ||
       normalizedPart === "SETTINGS" ||
       normalizedType === FILTER_TYPES.BINDING ||
@@ -480,10 +614,29 @@ export default function BookConfig(props: {
     const isPlannerModule =
       normalizedPart === "PLANNER" || normalizedType === FILTER_TYPES.PLANNER;
 
+    if (
+      isBindingModuleItem &&
+      pickedModule &&
+      totalPagesCount > 0 &&
+      !isBindingAllowedForModule(pickedModule, totalPagesCount)
+    ) {
+      const warning =
+        getBindingLimitMessageForModule(pickedModule, totalPagesCount) ??
+        "Die gewählte Bindung ist für die aktuelle Seitenzahl nicht verfügbar.";
+      setConfigWarnings((prev) => (prev.includes(warning) ? prev : [...prev, warning]));
+      return;
+    }
+
     if (isCoverModule) {
       handleCoverModule(id);
-    } else if (isBindingModule) {
+    } else if (isBindingModuleItem) {
       handleBindingModule(id);
+      if (bindingOverflowEvent) {
+        setBindingOverflowEvent(null);
+      }
+      if (modalId === "binding-overflow") {
+        setModalId(undefined);
+      }
     } else if (isPlannerModule) {
       handlePlannerModule(id);
     } else {
@@ -548,20 +701,31 @@ export default function BookConfig(props: {
       const blob = new Blob([result.pdfFile as BlobPart], {
         type: "application/pdf",
       });
+      const selectedBindingId = pickedModules.SETTINGS[0];
+      const selectedBindingRuleKey = selectedBindingId
+        ? moduleLookupById.get(selectedBindingId)
+          ? getMatchedBindingRuleKey(moduleLookupById.get(selectedBindingId)!) ??
+            getBindingRuleKey(moduleLookupById.get(selectedBindingId)!)
+          : undefined
+        : undefined;
       const estimatedCost = calculatePrintCost({
         amount: orderAmount,
         bPages: result.details.bPages,
         cPages: result.details.cPages,
         format: pickedFormat,
+        bindingName: selectedBindingRuleKey,
         prices,
       });
 
       setPreviewPrice(estimatedCost);
       const url = URL.createObjectURL(blob);
       setPreviewFileURL(url);
-      setTotalPagesCount(
-        result.details.fullPageCount ?? result.details.pageCount ?? 0,
-      );
+      const recalculatedTotalPages = result.details.fullPageCount;
+      if (typeof recalculatedTotalPages !== "number") {
+        throw new Error("Genaue Gesamtseitenzahl konnte nicht ermittelt werden.");
+      }
+      setTotalPagesCount(recalculatedTotalPages);
+      triggerBindingOverflowIfNeeded(recalculatedTotalPages);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       const warning = handleWarningText(errorMessage);
@@ -651,19 +815,30 @@ export default function BookConfig(props: {
       const blob = new Blob([result.pdfFile as BlobPart], {
         type: "application/pdf",
       });
+      const selectedBindingId = pickedModules.SETTINGS[0];
+      const selectedBindingRuleKey = selectedBindingId
+        ? moduleLookupById.get(selectedBindingId)
+          ? getMatchedBindingRuleKey(moduleLookupById.get(selectedBindingId)!) ??
+            getBindingRuleKey(moduleLookupById.get(selectedBindingId)!)
+          : undefined
+        : undefined;
       const estimatedCost = calculatePrintCost({
         amount: orderAmount,
         bPages: result.details.bPages,
         cPages: result.details.cPages,
         format: pickedFormat,
+        bindingName: selectedBindingRuleKey,
         prices,
       });
       setPreviewPrice(estimatedCost);
       const url = URL.createObjectURL(blob);
       setPreviewFileURL(url);
-      setTotalPagesCount(
-        result.details.fullPageCount ?? result.details.pageCount ?? 0,
-      );
+      const recalculatedTotalPages = result.details.fullPageCount;
+      if (typeof recalculatedTotalPages !== "number") {
+        throw new Error("Genaue Gesamtseitenzahl konnte nicht ermittelt werden.");
+      }
+      setTotalPagesCount(recalculatedTotalPages);
+      triggerBindingOverflowIfNeeded(recalculatedTotalPages);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       const warning = handleWarningText(errorMessage);
@@ -820,11 +995,53 @@ export default function BookConfig(props: {
                   bookId={bookId}
                   quantity={orderSummary.amount}
                   format={orderSummary.format}
-                  sponsorToken={sponsorToken}
+                  partnerToken={partnerToken}
                   onAbortForm={() => setModalId("summary")}
                 />
               )}
             </div>
+          </div>
+        );
+
+      case "binding-overflow":
+        return (
+          <div className="content-card text-info-950 w-full max-w-2xl p-4">
+            <div className="flex flex-col gap-2">
+              <h3 className="text-2xl font-bold">Bindung wechseln erforderlich</h3>
+              <p>
+                Die gewählte Bindung{" "}
+                <b>{bindingOverflowEvent?.invalidBindingName ?? "Unbekannt"}</b>{" "}
+                passt nicht zur aktuellen Seitenzahl von{" "}
+                <b>{bindingOverflowEvent?.totalPages ?? totalPagesCount}</b>.
+              </p>
+              <p>Bitte wählen Sie eine passende Alternative:</p>
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {bindingOverflowSuggestions.map((bindingOption) => (
+                <button
+                  key={bindingOption.id}
+                  type="button"
+                  className="field-shell hover:bg-pirrot-blue-50 flex flex-col items-start gap-1 p-3 text-left transition-colors"
+                  onClick={() =>
+                    handlePickedItem({
+                      id: bindingOption.id,
+                      type: bindingOption.type,
+                    })
+                  }
+                >
+                  <span className="font-bold">{bindingOption.name}</span>
+                  <span className="text-xs first-letter:uppercase">
+                    {bindingOption.type}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {bindingOverflowSuggestions.length < 2 ? (
+              <p className="mt-3 text-sm">
+                Hinweis: Es sind aktuell weniger als zwei passende Bindungen
+                verfügbar.
+              </p>
+            ) : null}
           </div>
         );
       case "summary":
@@ -1198,6 +1415,28 @@ export default function BookConfig(props: {
       </div>
     );
   }
+
+  const partnerBookMeta = existingBook as typeof existingBook & {
+    partnerCampaignExpiresAt?: Date | string | null;
+    partnerOrderSubmittedAt?: Date | string | null;
+  };
+  const partnerCampaignExpiresAt =
+    existingBook.sourceType === "PARTNER_TEMPLATE" &&
+    partnerBookMeta.partnerCampaignExpiresAt
+      ? new Date(partnerBookMeta.partnerCampaignExpiresAt)
+      : null;
+  const hasPartnerOrderBeenSubmitted =
+    existingBook.sourceType === "PARTNER_TEMPLATE" &&
+    Boolean(partnerBookMeta.partnerOrderSubmittedAt);
+  const isPartnerCampaignExpired = partnerCampaignExpiresAt
+    ? partnerCampaignExpiresAt.getTime() < Date.now()
+    : false;
+  const isPartnerTemplateFlagActive =
+    existingBook.sourceType === "PARTNER_TEMPLATE" &&
+    !isPartnerCampaignExpired &&
+    !hasPartnerOrderBeenSubmitted;
+  const showPartnerTemplateBanner = Boolean(partnerToken) || isPartnerTemplateFlagActive;
+
   return (
     <>
       <div
@@ -1280,8 +1519,8 @@ export default function BookConfig(props: {
         {/* MAIN CONTENT */}
         <div className="flex w-full max-w-screen-2xl flex-[5] flex-col gap-10 overflow-y-auto">
           <div className="flex w-full flex-col gap-10 p-2 lg:p-4">
-            {/* SPONSORED TEMPLATE BANNER */}
-            {sponsorToken && (
+            {/* PARTNER TEMPLATE BANNER */}
+            {showPartnerTemplateBanner && (
               <div className="bg-pirrot-green-100 border-pirrot-green-300 flex flex-col items-start justify-between gap-4 rounded-lg border p-4 sm:flex-row sm:items-center">
                 <div className="flex items-center gap-3">
                   <div className="bg-pirrot-green-300 rounded-full p-2">
@@ -1289,7 +1528,7 @@ export default function BookConfig(props: {
                   </div>
                   <div>
                     <h3 className="text-pirrot-green-600 text-lg font-bold">
-                      Gesponserte Vorlage
+                      Partner-Vorlage
                     </h3>
                     <p className="text-pirrot-green-700 text-sm">
                       {existingBook?.modules.length ?? 0} Module inklusive •
@@ -1419,6 +1658,8 @@ export default function BookConfig(props: {
                       isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(m.id)}
                       item={m}
                       onPickedItem={handlePickedItem}
+                      isDisabled={bindingAvailabilityById.get(m.id)?.disabled}
+                      disabledReason={bindingAvailabilityById.get(m.id)?.reason}
                     />
                   ))}
               </div>
@@ -1525,6 +1766,8 @@ export default function BookConfig(props: {
                         )}
                         item={m}
                         onPickedItem={handlePickedItem}
+                        isDisabled={bindingAvailabilityById.get(m.id)?.disabled}
+                        disabledReason={bindingAvailabilityById.get(m.id)?.reason}
                       />
                     ))}
                 </div>

@@ -17,14 +17,14 @@ import { stripeClient } from "@/util/stripe";
 import { createOrderConfirmationEmail } from "@/util/order/templates/create-validation-order";
 import { formatDisplayDate } from "@/util/date";
 import { env } from "@/env";
-import {
-  createSponsorInvoicesForRedemption,
-  parseSponsorSessionMetadata,
-  retrySponsorProofInvoiceAsync,
-  toAddressParam,
-} from "@/util/sponsor/invoices";
+import { parsePartnerSessionMetadata } from "@/util/partner-program/session-metadata";
 import { logger } from "@/util/logger";
 import { enforceProcedureRateLimit } from "@/util/rate-limit";
+import { isPartnerControlledFulfillmentEnabled } from "@/util/partner-program/flags";
+import {
+  createPartnerCorrelationId,
+  recordPartnerOrderTransition,
+} from "@/util/partner-program/transitions";
 import {
   getCancellationGuardError,
   getCancellationPaymentStatus,
@@ -43,6 +43,22 @@ function mapCheckoutPaymentStatus(
     return "PENDING";
   }
   return "PENDING";
+}
+
+function getPartnerSnapshotInvoiceUrl(partnerSnapshot: unknown): string | null {
+  if (!partnerSnapshot || typeof partnerSnapshot !== "object") {
+    return null;
+  }
+
+  const snapshotRecord = partnerSnapshot as Record<string, unknown>;
+  const schoolInvoice =
+    snapshotRecord.schoolInvoice &&
+    typeof snapshotRecord.schoolInvoice === "object" &&
+    !Array.isArray(snapshotRecord.schoolInvoice)
+      ? (snapshotRecord.schoolInvoice as Record<string, unknown>)
+      : null;
+  const invoiceUrl = schoolInvoice?.hostedInvoiceUrl;
+  return typeof invoiceUrl === "string" && invoiceUrl.length > 0 ? invoiceUrl : null;
 }
 
 export const orderRouter = createTRPCRouter({
@@ -96,7 +112,7 @@ export const orderRouter = createTRPCRouter({
         return encryptPayload({ orderKey: existingBookOrder.order.orderKey });
       }
 
-      const createdOrderKey = await ctx.db.$transaction(async (tx) => {
+      const createdOrderRef = await ctx.db.$transaction(async (tx) => {
         await tx.bookOrder.update({
           where: {
             id: existingBookOrder.id,
@@ -130,7 +146,10 @@ export const orderRouter = createTRPCRouter({
         }
 
         if (currentBookOrder.order?.orderKey) {
-          return currentBookOrder.order.orderKey;
+          return {
+            orderKey: currentBookOrder.order.orderKey,
+            orderId: currentBookOrder.order.id,
+          };
         }
 
         let createdOrder = currentBookOrder.order ?? null;
@@ -177,7 +196,10 @@ export const orderRouter = createTRPCRouter({
         }
 
         if (createdOrder.orderKey) {
-          return createdOrder.orderKey;
+          return {
+            orderKey: createdOrder.orderKey,
+            orderId: createdOrder.id,
+          };
         }
 
         const newOrderKey = createOrderKey(createdOrder.id);
@@ -189,74 +211,99 @@ export const orderRouter = createTRPCRouter({
             orderKey: newOrderKey,
           },
         });
-        return newOrderKey;
+        return {
+          orderKey: newOrderKey,
+          orderId: createdOrder.id,
+        };
       });
 
-      const sponsorMetadata = parseSponsorSessionMetadata(
+      const partnerMetadata = parsePartnerSessionMetadata(
         retrievedSession.metadata,
       );
+      const partnerControlledFulfillmentEnabled =
+        isPartnerControlledFulfillmentEnabled();
 
-      if (sponsorMetadata) {
-        const schoolEmail = retrievedSession.customer_details?.email;
-        const schoolName = retrievedSession.customer_details?.name ?? "School";
-        const schoolAddress = toAddressParam(
-          retrievedSession.customer_details?.address ?? null,
-        );
-        const schoolPhone = retrievedSession.customer_details?.phone ?? undefined;
-
-        if (!schoolEmail) {
-          logger.warn("missing_school_email_for_sponsor_invoice", {
-            checkoutSessionId: retrievedSession.id,
-          });
-        } else {
-          const sponsorInvoiceInput = {
-            db: ctx.db,
-            referenceId: retrievedSession.id,
-            sponsor: sponsorMetadata,
-            school: {
-              email: schoolEmail,
-              name: schoolName,
-              address: schoolAddress ?? undefined,
-              phone: schoolPhone,
+      if (partnerMetadata && partnerControlledFulfillmentEnabled) {
+        const transitioned = await ctx.db.partnerOrder.updateMany({
+          where: {
+            bookId: existingBookOrder.bookId,
+            partnerUserId: partnerMetadata.partnerUserId,
+            status: {
+              in: ["SUBMITTED_BY_SCHOOL", "UNDER_PARTNER_REVIEW"],
             },
-            quantity: existingBookOrder.quantity,
-          } as const;
-
-          try {
-            await createSponsorInvoicesForRedemption(sponsorInvoiceInput);
-          } catch (invoiceError) {
-            logger.error("sponsor_invoice_creation_failed", {
-              referenceId: sponsorInvoiceInput.referenceId,
-              error: invoiceError,
+          },
+          data: {
+            status: "UNDER_PARTNER_REVIEW",
+            orderId: createdOrderRef.orderId,
+          },
+        });
+        if (transitioned.count === 1) {
+          const partnerOrder = await ctx.db.partnerOrder.findUnique({
+            where: { bookId: existingBookOrder.bookId },
+            select: { id: true },
+          });
+          if (partnerOrder) {
+            await recordPartnerOrderTransition({
+              db: ctx.db,
+              partnerOrderId: partnerOrder.id,
+              actorUserId: ctx.session?.user?.id ?? null,
+              fromStatus: "SUBMITTED_BY_SCHOOL",
+              toStatus: "UNDER_PARTNER_REVIEW",
+              correlationId: createPartnerCorrelationId("partner_review"),
+              payload: {
+                orderId: createdOrderRef.orderId,
+                orderKey: createdOrderRef.orderKey,
+                checkoutSessionId: retrievedSession.id,
+                flow: "checkout",
+              },
             });
-            retrySponsorProofInvoiceAsync(sponsorInvoiceInput);
           }
         }
+        logger.info("partner_order_waiting_for_partner_confirmation", {
+          orderId: createdOrderRef.orderId,
+          orderKey: createdOrderRef.orderKey,
+          checkoutSessionId: retrievedSession.id,
+          partnerUserId: partnerMetadata.partnerUserId,
+        });
+      } else if (partnerMetadata) {
+        logger.info("partner_controlled_fulfillment_disabled_fallback", {
+          partnerUserId: partnerMetadata.partnerUserId,
+          orderId: createdOrderRef.orderId,
+          orderKey: createdOrderRef.orderKey,
+        });
       }
 
       const customerEmail =
         retrievedSession.customer_details?.email ?? env.SHOP_EMAIL;
       const customerName = retrievedSession.customer_details?.name ?? "Kunde";
 
-      const html = await createOrderConfirmationEmail(
-        createdOrderKey,
-        customerName,
-      );
-
-      try {
-        await sendOrderVerification(
-          customerEmail,
-          "Bestellung bestätigt - Pirrot",
-          html,
+      if (!partnerMetadata || !partnerControlledFulfillmentEnabled) {
+        const html = await createOrderConfirmationEmail(
+          createdOrderRef.orderKey,
+          customerName,
         );
-      } catch (err) {
-        logger.error("order_confirmation_email_failed", {
-          checkoutSessionId: retrievedSession.id,
-          error: err,
+
+        try {
+          await sendOrderVerification(
+            customerEmail,
+            "Bestellung bestätigt - Pirrot",
+            html,
+          );
+        } catch (err) {
+          logger.error("order_confirmation_email_failed", {
+            checkoutSessionId: retrievedSession.id,
+            error: err,
+          });
+        }
+      } else {
+        logger.info("partner_order_confirmation_email_deferred", {
+          orderId: createdOrderRef.orderId,
+          orderKey: createdOrderRef.orderKey,
+          customerEmail,
         });
       }
 
-      return encryptPayload({ orderKey: createdOrderKey });
+      return encryptPayload({ orderKey: createdOrderRef.orderKey });
     }),
   cancelByUser: publicProcedure
     .input(
@@ -407,6 +454,11 @@ export const orderRouter = createTRPCRouter({
               payment: true,
             },
           },
+          partnerOrder: {
+            select: {
+              partnerSnapshot: true,
+            },
+          },
         },
       });
       if (!order) {
@@ -439,6 +491,9 @@ export const orderRouter = createTRPCRouter({
         const invoice = await stripeClient.invoices.retrieve(invoiceId);
         invoiceUrl = invoice.hosted_invoice_url;
       }
+      invoiceUrl ??= getPartnerSnapshotInvoiceUrl(
+        order.partnerOrder?.partnerSnapshot,
+      );
 
       const booksPrice = order.bookOrder?.payment.price ?? 0;
       const orderObject = {
@@ -587,11 +642,25 @@ export const orderRouter = createTRPCRouter({
           );
 
           if (session.payment_intent) {
+            const paymentIntentId = session.payment_intent as string;
+            const paymentIntent = await stripeClient.paymentIntents.retrieve(
+              paymentIntentId,
+            );
+            const isDestinationCharge = Boolean(
+              paymentIntent.transfer_data?.destination,
+            );
+            const hasApplicationFee =
+              (paymentIntent.application_fee_amount ?? 0) > 0;
+
             // Create refund
             const refund = await stripeClient.refunds.create(
               {
-                payment_intent: session.payment_intent as string,
+                payment_intent: paymentIntentId,
                 reason: "requested_by_customer",
+                ...(isDestinationCharge ? { reverse_transfer: true } : {}),
+                ...(isDestinationCharge && hasApplicationFee
+                  ? { refund_application_fee: true }
+                  : {}),
               },
               {
                 idempotencyKey: `refund_${payment.id}`,

@@ -53,6 +53,23 @@ const OrderList: React.FC<OrderListProps> = ({ orders = [], itemsPerPage = 10 })
     }
   };
 
+  const getStatusLabel = (status: Order["status"]) => {
+    switch (status) {
+      case "PENDING":
+        return "Ausstehend";
+      case "SHIPPED":
+        return "Versendet";
+      case "COMPLETED":
+        return "Abgeschlossen";
+      case "CANCELED":
+        return "Storniert";
+      case "FAILED":
+        return "Fehlgeschlagen";
+      default:
+        return status;
+    }
+  };
+
   if (orders.length === 0) {
     return (
       <DashboardEmptyState
@@ -111,7 +128,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders = [], itemsPerPage = 10 })
                         order.status
                       )}`}
                     >
-                      <span className="relative">{order.status}</span>
+                      <span className="relative">{getStatusLabel(order.status)}</span>
                     </span>
                   </td>
                 </tr>
@@ -133,7 +150,7 @@ const OrderList: React.FC<OrderListProps> = ({ orders = [], itemsPerPage = 10 })
                     order.status
                   )}`}
                 >
-                  {order.status}
+                  {getStatusLabel(order.status)}
                 </span>
               </div>
               <div className="border-t border-info-200 pt-2">
