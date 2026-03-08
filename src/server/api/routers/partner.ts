@@ -39,6 +39,7 @@ import {
   isPartnerControlledFulfillmentEnabled,
   isPartnerSettlementEnabled,
 } from "@/util/partner-program/flags";
+import { buildAppUrl, getAppOriginFromHeaders } from "@/util/app-origin";
 
 const STRIPE_CONNECT_PROVIDER = "stripe_connect";
 const STRIPE_GERMAN_LOCALE = "de";
@@ -306,23 +307,29 @@ async function getCanceledCampaignRedemptionsMap(
   return counts;
 }
 
-function getOnboardingUrls() {
+function getOnboardingUrls(appOrigin: string) {
   return {
-    refresh_url: `${env.BASE_APP_URL}/dashboard?view=profil&partner_refresh=1`,
-    return_url: `${env.BASE_APP_URL}/dashboard?view=profil&partner_return=1`,
+    refresh_url: buildAppUrl(
+      appOrigin,
+      "/dashboard?view=profil&partner_refresh=1",
+    ),
+    return_url: buildAppUrl(
+      appOrigin,
+      "/dashboard?view=profil&partner_return=1",
+    ),
   };
 }
 
-function getSubscriptionSuccessUrl() {
-  return `${env.BASE_APP_URL}/dashboard?view=profil&partner_sub=success`;
+function getSubscriptionSuccessUrl(appOrigin: string) {
+  return buildAppUrl(appOrigin, "/dashboard?view=profil&partner_sub=success");
 }
 
-function getSubscriptionCancelUrl() {
-  return `${env.BASE_APP_URL}/dashboard?view=profil&partner_sub=cancel`;
+function getSubscriptionCancelUrl(appOrigin: string) {
+  return buildAppUrl(appOrigin, "/dashboard?view=profil&partner_sub=cancel");
 }
 
-function getSubscriptionManageReturnUrl() {
-  return `${env.BASE_APP_URL}/dashboard?view=profil&partner_sub=manage`;
+function getSubscriptionManageReturnUrl(appOrigin: string) {
+  return buildAppUrl(appOrigin, "/dashboard?view=profil&partner_sub=manage");
 }
 
 function getConfiguredSubscriptionPriceIds(): string[] {
@@ -872,6 +879,7 @@ export const partnerRouter = createTRPCRouter({
           locales: [STRIPE_GERMAN_LOCALE],
         },
       });
+      const appOrigin = getAppOriginFromHeaders(ctx.headers);
 
       // V2 account links API for onboarding.
       const accountLink = await v2Core.accountLinks.create({
@@ -880,7 +888,7 @@ export const partnerRouter = createTRPCRouter({
           type: "account_onboarding",
           account_onboarding: {
             configurations: ["merchant", "customer"],
-            ...getOnboardingUrls(),
+            ...getOnboardingUrls(appOrigin),
           },
         },
       });
@@ -1016,13 +1024,14 @@ export const partnerRouter = createTRPCRouter({
             : {}),
         },
       });
+      const appOrigin = getAppOriginFromHeaders(ctx.headers);
 
       const checkout = await stripeClient.checkout.sessions.create({
         mode: "subscription",
         locale: STRIPE_GERMAN_LOCALE,
         customer: customer.id,
-        success_url: getSubscriptionSuccessUrl(),
-        cancel_url: getSubscriptionCancelUrl(),
+        success_url: getSubscriptionSuccessUrl(appOrigin),
+        cancel_url: getSubscriptionCancelUrl(appOrigin),
         billing_address_collection: "required",
         customer_update: {
           address: "auto",
@@ -1095,10 +1104,11 @@ export const partnerRouter = createTRPCRouter({
         message: "Kein Partner-Programm-Abo-Kunde gefunden.",
       });
     }
+    const appOrigin = getAppOriginFromHeaders(ctx.headers);
 
     const session = await stripeClient.billingPortal.sessions.create({
       customer: customer.id,
-      return_url: getSubscriptionManageReturnUrl(),
+      return_url: getSubscriptionManageReturnUrl(appOrigin),
     });
 
     return { portalUrl: session.url };
@@ -1919,9 +1929,10 @@ export const partnerRouter = createTRPCRouter({
         expiresAt: expiresAt.toISOString(),
       });
 
-      const verifyUrl = `${env.BASE_APP_URL}/template?claim=${encodeURIComponent(
-        verifyToken,
-      )}`;
+      const verifyUrl = buildAppUrl(
+        getAppOriginFromHeaders(ctx.headers),
+        `/template?claim=${encodeURIComponent(verifyToken)}`,
+      );
       const html = `
         <div style="font-family:Arial,sans-serif;line-height:1.5">
           <h2>Partner-Angebot verifizieren</h2>
@@ -3615,6 +3626,7 @@ export const partnerRouter = createTRPCRouter({
       const html = await createOrderConfirmationEmail(
         partnerOrder.order.orderKey,
         "Produktion",
+        getAppOriginFromHeaders(ctx.headers),
       );
       const releasePayloadHtml = `<hr/><h3>Finale Partnerfreigabe (Locked Snapshot)</h3><pre>${escapeHtml(JSON.stringify(lockedReleaseSnapshot, null, 2))}</pre>`;
       try {

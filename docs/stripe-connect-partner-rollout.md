@@ -14,7 +14,8 @@ Set these variables before production rollout:
 ```env
 # Existing
 STRIPE_SECRET_KEY=sk_live_xxx
-BASE_APP_URL=https://your-platform.example
+# Optional fallback if no forwarded host headers are available
+AUTH_URL=https://planer.pirrot.de
 
 # Connect subscription UI
 # Monthly and yearly recurring Stripe Price IDs

@@ -26,7 +26,6 @@ export const env = createEnv({
     AUTH_GOOGLE_SECRET:z.string(),
     STRIPE_SUCCESS_URL: z.string().url(),
     STRIPE_CANCEL_URL: z.string().url(),
-    BASE_APP_URL: z.string().url(),
     PARTNER_LINK_SECRET: z.string().optional(),
     EMAIL_SERVER_PASSWORD: z.string(),
     EMAIL_SERVER_HOST: z.string(),
@@ -93,7 +92,6 @@ export const env = createEnv({
     CANCEL_SECRET: process.env.CANCEL_SECRET,
     STRIPE_SUCCESS_URL: process.env.STRIPE_SUCCESS_URL,
     STRIPE_CANCEL_URL: process.env.STRIPE_CANCEL_URL,
-    BASE_APP_URL: process.env.BASE_APP_URL,
     PARTNER_LINK_SECRET: process.env.PARTNER_LINK_SECRET,
   },
   /**

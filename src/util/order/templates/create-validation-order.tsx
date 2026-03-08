@@ -1,15 +1,16 @@
-import { env } from "@/env";
+import { buildAppUrl, getConfiguredAppOrigin } from "@/util/app-origin";
 import { encryptPayload } from "@/util/crypto";
 import { formatDisplayDate } from "@/util/date";
 
 export const createOrderConfirmationEmail = async (
   orderKey: string,
   customerName?: string,
+  appOrigin = getConfiguredAppOrigin(),
 ) => {
   const orderDate = formatDisplayDate(new Date());
 
   const linkPayload = encryptPayload({ orderKey });
-  const orderViewLink = `${env.BASE_APP_URL}order/view?pl=${linkPayload}`;
+  const orderViewLink = buildAppUrl(appOrigin, `/order/view?pl=${linkPayload}`);
   const year = new Date().getFullYear();
 
   return `

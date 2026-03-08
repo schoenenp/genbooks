@@ -14,6 +14,7 @@ import createOrderKey, {
   sendOrderVerification,
 } from "@/util/order/functions";
 import { createOrderConfirmationEmail } from "@/util/order/templates/create-validation-order";
+import { getAppOriginFromHeaders } from "@/util/app-origin";
 import { cloneBookForOrder } from "@/util/book/clone-book";
 import {
   type PartnerCheckoutClaims,
@@ -843,9 +844,11 @@ export const configRouter = createTRPCRouter({
           });
         } else {
           try {
+            const appOrigin = getAppOriginFromHeaders(ctx.headers);
             const html = await createOrderConfirmationEmail(
               createdOrder.orderKey,
               `${orderAddress.prename} ${orderAddress.name}`.trim(),
+              appOrigin,
             );
             await sendOrderVerification(
               orderAddress.email,

@@ -39,7 +39,9 @@ declare module "next-auth" {
  * @see https://next-auth.js.org/configuration/options
  */
 const adapter = PrismaAdapter(db as never);
-const trustHost = process.env.AUTH_TRUST_HOST === "true";
+const trustHost = process.env.AUTH_TRUST_HOST
+  ? process.env.AUTH_TRUST_HOST === "true"
+  : env.NODE_ENV === "production";
 const smtpPort = env.EMAIL_SERVER_PORT;
 const smtpSecure = smtpPort === 465;
 const isProduction = env.NODE_ENV === "production";
@@ -83,11 +85,7 @@ function toAllowedOrigin(value: string): string | null {
 }
 
 function getConfiguredAuthOrigin() {
-  const configuredOrigins = [
-    process.env.AUTH_URL,
-    env.BASE_APP_URL,
-    process.env.NEXTAUTH_URL,
-  ];
+  const configuredOrigins = [process.env.AUTH_URL, process.env.NEXTAUTH_URL];
   for (const configuredOrigin of configuredOrigins) {
     if (!configuredOrigin) continue;
 

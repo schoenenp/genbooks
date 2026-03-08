@@ -17,6 +17,7 @@ import { stripeClient } from "@/util/stripe";
 import { createOrderConfirmationEmail } from "@/util/order/templates/create-validation-order";
 import { formatDisplayDate } from "@/util/date";
 import { env } from "@/env";
+import { getAppOriginFromHeaders } from "@/util/app-origin";
 import { parsePartnerSessionMetadata } from "@/util/partner-program/session-metadata";
 import { logger } from "@/util/logger";
 import { enforceProcedureRateLimit } from "@/util/rate-limit";
@@ -278,9 +279,11 @@ export const orderRouter = createTRPCRouter({
       const customerName = retrievedSession.customer_details?.name ?? "Kunde";
 
       if (!partnerMetadata || !partnerControlledFulfillmentEnabled) {
+        const appOrigin = getAppOriginFromHeaders(ctx.headers);
         const html = await createOrderConfirmationEmail(
           createdOrderRef.orderKey,
           customerName,
+          appOrigin,
         );
 
         try {
