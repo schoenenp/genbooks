@@ -293,6 +293,21 @@ export default function ProfileSection(user: SessionUser) {
   );
   const subscription = partnerStatus.data?.subscription;
   const hasActiveSubscription = subscription?.isActive ?? false;
+  const role = partnerStatus.data?.role ?? "USER";
+  const roleLabel =
+    role === "SPONSOR"
+      ? "Partner-Konto"
+      : role === "ADMIN"
+        ? "Administrator"
+        : role === "STAFF"
+          ? "Team"
+          : "Standardkonto";
+  const isConnectReady = partnerStatus.data?.onboardingComplete === true;
+  const subscriptionLabel = !partnerStatus.data?.subscription.requiredPriceConfigured
+    ? "Nicht konfiguriert"
+    : hasActiveSubscription
+      ? "Aktiv"
+      : "Inaktiv";
   const hasPartnerAccess =
     partnerStatus.data?.role === "SPONSOR" ||
     partnerStatus.data?.role === "ADMIN" ||
@@ -418,26 +433,47 @@ export default function ProfileSection(user: SessionUser) {
 
   return (
     <div className="content-card rise-in relative flex flex-1 flex-col gap-6 p-4 lg:min-h-96">
-      <h2 className="text-2xl font-bold uppercase">Profile</h2>
+      <div className="content-card border border-pirrot-blue-200 bg-gradient-to-br from-white to-pirrot-blue-50/50 p-5">
+        <h2 className="text-2xl font-black uppercase">Profil</h2>
+        <p className="text-info-700 mt-2 text-sm">
+          Persönliche Kontodaten und Ihr aktueller Partner-Status auf einen Blick.
+        </p>
 
-      <ul className="flex flex-col gap-2">
-        <li>E-Mail: {user.email}</li>
-        <li>Rolle: {partnerStatus.data?.role ?? "USER"}</li>
-        <li>
-          Stripe Connect:{" "}
-          {partnerStatus.data?.onboardingComplete
-            ? "Verbunden"
-            : "Nicht verbunden"}
-        </li>
-        <li>
-          Partner-Programm-Abo:{" "}
-          {partnerStatus.data?.subscription.requiredPriceConfigured
-            ? hasActiveSubscription
-              ? "Aktiv"
-              : "Inaktiv"
-            : "Nicht konfiguriert"}
-        </li>
-      </ul>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="field-shell rounded-lg p-3">
+            <p className="text-info-700 text-xs uppercase">E-Mail</p>
+            <p className="mt-1 text-sm font-semibold">{user.email ?? "-"}</p>
+          </div>
+          <div className="field-shell rounded-lg p-3">
+            <p className="text-info-700 text-xs uppercase">Konto-Typ</p>
+            <p className="mt-1 text-sm font-semibold">{roleLabel}</p>
+          </div>
+          <div className="field-shell rounded-lg p-3">
+            <p className="text-info-700 text-xs uppercase">Stripe Connect</p>
+            <p
+              className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                isConnectReady
+                  ? "bg-pirrot-green-100 text-pirrot-green-800"
+                  : "bg-pirrot-blue-100 text-pirrot-blue-800"
+              }`}
+            >
+              {isConnectReady ? "Verbunden" : "Nicht verbunden"}
+            </p>
+          </div>
+          <div className="field-shell rounded-lg p-3">
+            <p className="text-info-700 text-xs uppercase">Partner-Abo</p>
+            <p
+              className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                hasActiveSubscription
+                  ? "bg-pirrot-green-100 text-pirrot-green-800"
+                  : "bg-pirrot-blue-100 text-pirrot-blue-800"
+              }`}
+            >
+              {subscriptionLabel}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {hasPartnerAccess ? (
         <div className="content-card p-4">
