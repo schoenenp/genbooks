@@ -81,9 +81,16 @@ const uiGuideItems = [
   {
     icon: LayoutDashboard,
     area: "Profil",
-    title: "Partner-Bestellungen prüfen",
+    title: "Überblick für Interessenten",
     description:
-      "Hier sieht der Partner neue Bestellungen, öffnet Details und bestätigt oder lehnt ab.",
+      "Die Profilansicht erklärt das Partner-Modell, den Leistungsumfang der Plattform und die Voraussetzungen für den Einstieg.",
+  },
+  {
+    icon: Handshake,
+    area: "Partner",
+    title: "Bestellungen und Archiv steuern",
+    description:
+      "Im Partner-Bereich werden eingehende Bestellungen geprüft, bestätigt oder abgelehnt. Abgeschlossene Vorgänge landen im Archiv.",
   },
   {
     icon: Settings2,
@@ -185,7 +192,7 @@ export default async function PartnerInfoPage({
           title="UI-Leitfaden"
           subtitle="Wo Partner welche Aktion im Produkt ausführen."
         />
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-2">
           {uiGuideItems.map((item) => (
             <article key={item.title} className="content-card flex flex-col gap-3 p-4">
               <div className="inline-flex w-fit items-center gap-2 rounded-full bg-pirrot-blue-100 px-3 py-1 text-xs font-bold uppercase text-pirrot-blue-800">
@@ -208,7 +215,7 @@ export default async function PartnerInfoPage({
           <div className="grid gap-4 xl:grid-cols-2">
             <article className="content-card p-5">
               <p className="text-xs font-bold uppercase tracking-[0.08em] text-info-600">
-                Partner-Profil
+                Partner-Bereich
               </p>
               <h3 className="mt-2 text-lg font-black text-info-950">
                 Eingehende Partner-Bestellungen
@@ -267,6 +274,19 @@ export default async function PartnerInfoPage({
               </p>
             </article>
           </div>
+          <article className="content-card mt-4 p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.08em] text-info-600">
+              Profil-Übersicht
+            </p>
+            <h3 className="mt-2 text-lg font-black text-info-950">
+              Klarer Einstieg für interessierte Partner
+            </h3>
+            <p className="mt-2 text-sm text-info-700">
+              Die Profilansicht dient als allgemeiner Überblick: Rolle,
+              Partner-Abo, Connect-Status und Nutzen des Service auf einen Blick.
+              Operative Bestellungen laufen separat im Partner-Bereich.
+            </p>
+          </article>
         </section>
       ) : null}
 
