@@ -246,7 +246,7 @@ export default function PartnerInfoContent({ isDemoView }: { isDemoView: boolean
                 Partner-Bereich öffnen
                 <ArrowRight size={16} />
               </Link>
-              <Link href="/template" className="btn-soft px-4 py-2.5">
+              <Link href="/template?demo=1" className="btn-soft px-4 py-2.5">
                 Template-Entry ansehen
               </Link>
               <Link

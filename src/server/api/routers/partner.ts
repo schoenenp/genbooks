@@ -419,11 +419,11 @@ async function getLivePartnerSubscriptionState(
 
   const customerList = await stripeClient.customers.list({
     email,
-    limit: 1,
+    limit: 100,
   });
-  const customer = customerList.data[0];
+  const customers = customerList.data as Stripe.Customer[];
 
-  if (!customer) {
+  if (customers.length === 0) {
     return {
       status: null,
       priceId: null,
@@ -433,11 +433,20 @@ async function getLivePartnerSubscriptionState(
     };
   }
 
-  const subscriptions = await stripeClient.subscriptions.list({
-    customer: customer.id,
-    status: "all",
-    limit: 100,
-  });
+  const subscriptionLists: Stripe.ApiList<Stripe.Subscription>[] =
+    await Promise.all(
+      customers.map((customer) =>
+        stripeClient.subscriptions.list({
+          customer: customer.id,
+          status: "all",
+          limit: 100,
+        }),
+      ),
+    );
+
+  const subscriptions = {
+    data: subscriptionLists.flatMap((subscriptionList) => subscriptionList.data),
+  };
 
   const withPrice = subscriptions.data
     .map((subscription) => {
@@ -1341,7 +1350,7 @@ export const partnerRouter = createTRPCRouter({
 
     assertPartnerRole(user.role);
 
-    let dbCampaigns;
+    let dbCampaigns: Awaited<ReturnType<typeof findCampaignsByPartnerUserId>>;
     try {
       dbCampaigns = await findCampaignsByPartnerUserId(
         ctx.db,
@@ -3302,7 +3311,7 @@ export const partnerRouter = createTRPCRouter({
 
       const correlationId = createPartnerCorrelationId("partner_confirm");
 
-      let schoolInvoice;
+      let schoolInvoice: Awaited<ReturnType<typeof createPartnerSchoolInvoice>>;
       try {
         schoolInvoice = await createPartnerSchoolInvoice({
           partnerOrderId: partnerOrder.id,

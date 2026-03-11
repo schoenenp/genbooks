@@ -11,6 +11,7 @@ type TemplateCampaignEntryProps = {
   claimToken?: string;
   sessionEmail?: string | null;
   isLoggedIn: boolean;
+  isDemoView: boolean;
 };
 
 export default function TemplateCampaignEntry({
@@ -18,6 +19,7 @@ export default function TemplateCampaignEntry({
   claimToken,
   sessionEmail,
   isLoggedIn,
+  isDemoView,
 }: TemplateCampaignEntryProps) {
   const router = useRouter();
   const normalizedSessionEmail = sessionEmail?.trim() ?? "";
@@ -95,10 +97,6 @@ export default function TemplateCampaignEntry({
     });
   }, [claimToken, completePartnerClaim, isLoggedIn]);
 
-  useEffect(() => {
-    hasAttemptedClaimCompletionRef.current = false;
-  }, [claimToken]);
-
   if (claimToken) {
     if (!isLoggedIn) {
       return (
@@ -139,6 +137,58 @@ export default function TemplateCampaignEntry({
   }
 
   if (!token) {
+    if (isDemoView) {
+      return (
+        <section className="w-full max-w-2xl rounded border border-white/30 bg-white/40 p-6">
+          <h1 className="text-3xl font-black uppercase">
+            Template-Entry Demo-Vorschau
+          </h1>
+          <p className="mt-3 text-info-800">
+            Diese Vorschau zeigt, wie Schulen eine Partner-Vorlage aktivieren.
+            Für den echten Ablauf wird ein Kampagnen-Link mit Token benötigt.
+          </p>
+
+          <div className="border-pirrot-blue-300/30 bg-pirrot-blue-50/60 mt-6 rounded border p-4">
+            <h2 className="text-xl font-bold">Partner-Planer (Demo)</h2>
+            <p className="mt-1 text-sm">Module in der Basisvorlage: <b>8</b></p>
+          </div>
+
+          <form className="mt-6 flex flex-col gap-3">
+            <label htmlFor="promoCodeDemo" className="font-semibold">
+              Promo-Code
+            </label>
+            <input
+              id="promoCodeDemo"
+              type="text"
+              value="SP-DEMO1234"
+              readOnly
+              className="border-pirrot-blue-300/40 w-full rounded border bg-white p-3"
+            />
+            <button
+              type="button"
+              disabled
+              className="bg-pirrot-blue-500 rounded p-3 font-bold text-white opacity-60"
+            >
+              Verifizierung starten
+            </button>
+          </form>
+
+          <div className="mt-4 flex flex-col gap-3">
+            <label htmlFor="emailDemo" className="font-semibold">
+              E-Mail-Adresse
+            </label>
+            <input
+              id="emailDemo"
+              type="email"
+              value="schule@beispiel.at"
+              readOnly
+              className="border-pirrot-blue-300/40 w-full rounded border bg-white p-3"
+            />
+          </div>
+        </section>
+      );
+    }
+
     return (
       <section className="bg-pirrot-red-100 border-pirrot-red-300 w-full max-w-2xl rounded border p-6">
         <h2 className="text-2xl font-bold">Ungültiger Partner-Link</h2>
