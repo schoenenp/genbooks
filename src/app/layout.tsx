@@ -6,6 +6,7 @@ import { Baloo_2, Cairo } from "next/font/google";
 const baloo = Baloo_2({ subsets: ["latin"], variable: "--font-baloo" });
 const cairo = Cairo({ subsets: ["latin"], variable: "--font-cairo" });
 
+import { PostHogClientProvider } from "@/app/_components/posthog-provider";
 import { TRPCReactProvider } from "@/trpc/react";
 
 export const metadata: Metadata = {
@@ -20,10 +21,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${baloo.variable} ${cairo.variable}`}>
       <body>
-        <TRPCReactProvider>
-          <div id="modal-hook"></div>
-          {children}
-        </TRPCReactProvider>
+        <PostHogClientProvider>
+          <TRPCReactProvider>
+            <div id="modal-hook"></div>
+            {children}
+          </TRPCReactProvider>
+        </PostHogClientProvider>
       </body>
     </html>
   );

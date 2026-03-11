@@ -50,6 +50,8 @@ export const env = createEnv({
   client: {
     NEXT_PUBLIC_CDN_SERVER_URL: z.string(),
     NEXT_PUBLIC_STRIPE_PUSHABLE_KEY: z.string(),
+    NEXT_PUBLIC_POSTHOG_KEY: z.string().optional(),
+    NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional(),
 
   },
 
@@ -59,6 +61,8 @@ export const env = createEnv({
    */
   runtimeEnv: {
     NEXT_PUBLIC_STRIPE_PUSHABLE_KEY:process.env.NEXT_PUBLIC_STRIPE_PUSHABLE_KEY,
+    NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
+    NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
     STRIPE_SECRET_KEY:process.env.STRIPE_SECRET_KEY,
     STRIPE_CONNECT_SUBSCRIPTION_MONTHLY_PRICE_ID:
       process.env.STRIPE_CONNECT_SUBSCRIPTION_MONTHLY_PRICE_ID,

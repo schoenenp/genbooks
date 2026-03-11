@@ -17,10 +17,10 @@ function isLocalhostOrigin(value: string | undefined) {
 }
 
 function sanitizeAuthOriginEnv() {
-  const trustHostEnabled = process.env.AUTH_TRUST_HOST === "true";
   const runningInProduction = process.env.NODE_ENV === "production";
-  const shouldSanitize = runningInProduction || trustHostEnabled;
-  if (!shouldSanitize) return;
+  
+  // Only sanitize in production - local dev needs the URLs
+  if (!runningInProduction) return;
 
   if (isLocalhostOrigin(process.env.AUTH_URL)) {
     process.env.AUTH_URL = undefined;
