@@ -47,6 +47,7 @@ const ACTIVE_PARTNER_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
 const PARTNER_SUBSCRIPTION_PRICE_LABEL = "Monat/Jahr";
 
 const CAMPAIGN_KIND = "partner_campaign";
+const ADMIN_COUPON_KIND = "admin_platform_coupon";
 const CAMPAIGN_PROMO_CODE_REGEX = /^[A-Z0-9-_]{6,32}$/;
 const SECONDS_IN_DAY = 24 * 60 * 60;
 const DEFAULT_CAMPAIGN_VALID_DAYS = 90;
@@ -107,6 +108,90 @@ function assertPartnerRole(
   if (role !== "SPONSOR" && role !== "ADMIN" && role !== "STAFF") {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Partner-Konto erforderlich" });
   }
+}
+
+function assertAdminOrStaffRole(
+  role: "ADMIN" | "STAFF" | "MODERATOR" | "USER" | "SPONSOR",
+) {
+  if (role !== "ADMIN" && role !== "STAFF") {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Admin- oder Staff-Konto erforderlich" });
+  }
+}
+
+function asJsonObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
+function asNumberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function buildAdminAdjustedLineItemsSnapshot(input: {
+  lineItemsSnapshot: unknown;
+  adjustment:
+    | { type: "FIXED"; amountCents: number }
+    | { type: "PERCENT_DISCOUNT"; percent: number };
+  reason: string;
+  adjustedByUserId: string;
+}) {
+  const current = asJsonObject(input.lineItemsSnapshot);
+  const baseTotalAmount = asNumberOrZero(current.baseTotalAmount);
+  const addOnTotalAmount = asNumberOrZero(current.addOnTotalAmount);
+  const originalGrandTotalAmount = baseTotalAmount + addOnTotalAmount;
+
+  if (originalGrandTotalAmount <= 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Die Bestellung hat keinen anpassbaren Gesamtbetrag.",
+    });
+  }
+
+  const finalGrandTotalAmount =
+    input.adjustment.type === "FIXED"
+      ? input.adjustment.amountCents
+      : Math.max(
+          0,
+          Math.round(originalGrandTotalAmount * (1 - input.adjustment.percent / 100)),
+        );
+
+  if (finalGrandTotalAmount > originalGrandTotalAmount) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Der finale Betrag darf nicht groesser als der Originalbetrag sein.",
+    });
+  }
+
+  const quantityRaw = asNumberOrZero(current.quantity);
+  const quantity = quantityRaw > 0 ? quantityRaw : 1;
+  const ratio = finalGrandTotalAmount / originalGrandTotalAmount;
+  const adjustedBaseTotalAmount = Math.max(0, Math.round(baseTotalAmount * ratio));
+  const adjustedAddOnTotalAmount = Math.max(
+    0,
+    finalGrandTotalAmount - adjustedBaseTotalAmount,
+  );
+
+  return {
+    ...current,
+    baseTotalAmount: adjustedBaseTotalAmount,
+    addOnTotalAmount: adjustedAddOnTotalAmount,
+    baseUnitAmount: Math.round(adjustedBaseTotalAmount / quantity),
+    addOnUnitAmount: Math.round(adjustedAddOnTotalAmount / quantity),
+    adminSettlementAdjustment: {
+      type: input.adjustment.type,
+      value:
+        input.adjustment.type === "FIXED"
+          ? input.adjustment.amountCents
+          : input.adjustment.percent,
+      originalGrandTotalAmount,
+      finalGrandTotalAmount,
+      reason: input.reason,
+      adjustedByUserId: input.adjustedByUserId,
+      adjustedAt: new Date().toISOString(),
+    },
+  };
 }
 
 function resolveSettlementCycleWindow(input?: {
@@ -616,6 +701,13 @@ function isPartnerCampaignForUser(
     kind === CAMPAIGN_KIND &&
     ownerId === userId
   );
+}
+
+function isAdminCouponCode(
+  campaign: { metadata: Record<string, string> | null | undefined },
+): boolean {
+  const metadata = campaign.metadata ?? {};
+  return (metadata.kind ?? "") === ADMIN_COUPON_KIND;
 }
 
 async function getConnectAccountStatus(stripeAccountId: string) {
@@ -2453,6 +2545,990 @@ export const partnerRouter = createTRPCRouter({
       }));
     }),
 
+  listAdminPartnerOrders: protectedProcedure
+    .input(
+      z
+        .object({
+          statuses: z
+            .enum([
+              "SUBMITTED_BY_SCHOOL",
+              "UNDER_PARTNER_REVIEW",
+              "PARTNER_CONFIRMED",
+              "PARTNER_DECLINED",
+              "RELEASED_TO_PRODUCTION",
+              "FULFILLED",
+            ])
+            .array()
+            .optional(),
+          partnerUserId: z.string().optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { role: true },
+      });
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(user.role);
+
+      const statuses =
+        input?.statuses && input.statuses.length > 0 ? input.statuses : undefined;
+
+      const orders = await ctx.db.partnerOrder.findMany({
+        where: {
+          ...(statuses ? { status: { in: statuses } } : {}),
+          ...(input?.partnerUserId ? { partnerUserId: input.partnerUserId } : {}),
+        },
+        orderBy: {
+          submittedAt: "desc",
+        },
+        include: {
+          partnerUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          schoolUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          book: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          order: {
+            select: {
+              id: true,
+              status: true,
+              orderKey: true,
+            },
+          },
+        },
+      });
+
+      return orders.map((order) => {
+        const totals = readSettlementAmountsFromLineItems(order.lineItemsSnapshot);
+        const pricing = asJsonObject(order.lineItemsSnapshot).adminSettlementAdjustment;
+
+        return {
+          id: order.id,
+          status: order.status,
+          submittedAt: order.submittedAt,
+          reviewedAt: order.reviewedAt,
+          declineReason: order.declineReason,
+          releasedAt: order.releasedAt,
+          fulfilledAt: order.fulfilledAt,
+          partnerUser: order.partnerUser,
+          schoolUser: order.schoolUser,
+          book: order.book,
+          order: order.order,
+          lineItemsSnapshot: order.lineItemsSnapshot,
+          totals: {
+            baseTotalAmount: totals.baseTotalAmount,
+            addOnTotalAmount: totals.addOnTotalAmount,
+            grandTotalAmount: totals.baseTotalAmount + totals.addOnTotalAmount,
+          },
+          adminSettlementAdjustment:
+            pricing && typeof pricing === "object" ? pricing : null,
+        };
+      });
+    }),
+
+  listAdminStripeCoupons: protectedProcedure.query(async ({ ctx }) => {
+    const user = await ctx.db.user.findUnique({
+      where: { id: ctx.session.user.id },
+      select: { role: true },
+    });
+    if (!user) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+    }
+    assertAdminOrStaffRole(user.role);
+
+    const promotions = await stripeClient.promotionCodes.list({ limit: 100 });
+    const adminPromotions = promotions.data.filter((promotion) =>
+      isAdminCouponCode(promotion),
+    );
+
+    const couponsById = new Map<string, Stripe.Coupon>();
+    const getCouponIdFromPromotion = (promotion: Stripe.PromotionCode): string => {
+      const promotionRecord = asJsonObject(promotion);
+      const promotionNode = asJsonObject(promotionRecord.promotion);
+      const couponNode = asJsonObject(promotionNode.coupon);
+      if (typeof couponNode.id === "string" && couponNode.id.length > 0) {
+        return couponNode.id;
+      }
+      if (typeof promotionNode.coupon === "string" && promotionNode.coupon.length > 0) {
+        return promotionNode.coupon;
+      }
+      return "";
+    };
+    await Promise.all(
+      adminPromotions.map(async (promotion) => {
+        const couponId = getCouponIdFromPromotion(promotion);
+        if (!couponId || couponsById.has(couponId)) {
+          return;
+        }
+        const coupon = await stripeClient.coupons.retrieve(couponId);
+        couponsById.set(couponId, coupon);
+      }),
+    );
+
+    return adminPromotions.map((promotion) => {
+      const couponId = getCouponIdFromPromotion(promotion);
+      const coupon = couponId ? couponsById.get(couponId) : null;
+
+      return {
+        id: promotion.id,
+        code: promotion.code,
+        active: promotion.active,
+        maxRedemptions: promotion.max_redemptions,
+        timesRedeemed: promotion.times_redeemed,
+        expiresAt: promotion.expires_at,
+        createdAt: promotion.created,
+        coupon: {
+          id: coupon?.id ?? couponId,
+          percentOff: coupon?.percent_off ?? null,
+          amountOff: coupon?.amount_off ?? null,
+          currency: coupon?.currency ?? null,
+          duration: coupon?.duration ?? null,
+        },
+        metadata: promotion.metadata ?? {},
+      };
+    });
+  }),
+
+  createAdminStripeCoupon: protectedProcedure
+    .input(
+      z.object({
+        code: z.string().trim().min(6).max(32),
+        maxRedemptions: z.number().int().min(1).max(10000).optional(),
+        validForDays: z.number().int().min(1).max(365).optional(),
+        discount: z.discriminatedUnion("type", [
+          z.object({
+            type: z.literal("PERCENT"),
+            percentOff: z.number().min(1).max(100),
+          }),
+          z.object({
+            type: z.literal("AMOUNT"),
+            amountOffCents: z.number().int().min(1),
+          }),
+        ]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit(ctx, {
+        scope: "partner.createAdminStripeCoupon",
+        maxRequests: 20,
+        windowMs: 10 * 60 * 1000,
+      });
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { role: true, id: true },
+      });
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(user.role);
+
+      const code = normalizePromoCode(input.code);
+      if (!CAMPAIGN_PROMO_CODE_REGEX.test(code)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Coupon-Code Format ist ungueltig.",
+        });
+      }
+
+      const existingPromotionCodes = await stripeClient.promotionCodes.list({
+        code,
+        active: true,
+        limit: 1,
+      });
+      if (existingPromotionCodes.data.length > 0) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Coupon-Code existiert bereits.",
+        });
+      }
+
+      const redeemBy = input.validForDays
+        ? Math.floor(Date.now() / 1000) + input.validForDays * SECONDS_IN_DAY
+        : undefined;
+
+      const coupon = await stripeClient.coupons.create({
+        duration: "once",
+        ...(input.discount.type === "PERCENT"
+          ? { percent_off: input.discount.percentOff }
+          : {
+              amount_off: input.discount.amountOffCents,
+              currency: "eur",
+            }),
+        ...(input.maxRedemptions ? { max_redemptions: input.maxRedemptions } : {}),
+        ...(redeemBy ? { redeem_by: redeemBy } : {}),
+        metadata: {
+          kind: ADMIN_COUPON_KIND,
+          createdByUserId: user.id,
+        },
+      });
+
+      const promotion = await stripeClient.promotionCodes.create({
+        promotion: {
+          type: "coupon",
+          coupon: coupon.id,
+        },
+        code,
+        ...(input.maxRedemptions ? { max_redemptions: input.maxRedemptions } : {}),
+        ...(redeemBy ? { expires_at: redeemBy } : {}),
+        metadata: {
+          kind: ADMIN_COUPON_KIND,
+          createdByUserId: user.id,
+        },
+      });
+
+      return {
+        id: promotion.id,
+        code: promotion.code,
+        active: promotion.active,
+      };
+    }),
+
+  setAdminStripeCouponActive: protectedProcedure
+    .input(
+      z.object({
+        promotionCodeId: z.string().min(1),
+        active: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit(ctx, {
+        scope: "partner.setAdminStripeCouponActive",
+        maxRequests: 50,
+        windowMs: 10 * 60 * 1000,
+      });
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { role: true },
+      });
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(user.role);
+
+      const promotion = await stripeClient.promotionCodes.retrieve(
+        input.promotionCodeId,
+      );
+
+      if (!isAdminCouponCode(promotion)) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Admin-Coupon nicht gefunden.",
+        });
+      }
+
+      const updated = await stripeClient.promotionCodes.update(promotion.id, {
+        active: input.active,
+      });
+
+      return {
+        id: updated.id,
+        active: updated.active,
+      };
+    }),
+
+  listAdminPartnerCodes: protectedProcedure
+    .input(
+      z
+        .object({
+          partnerUserId: z.string().optional(),
+          active: z.boolean().optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { role: true },
+      });
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(user.role);
+
+      const campaigns = await ctx.db.campaign.findMany({
+        where: {
+          ...(input?.partnerUserId ? { partnerUserId: input.partnerUserId } : {}),
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      const partnerUsers = await ctx.db.user.findMany({
+        where: {
+          id: { in: Array.from(new Set(campaigns.map((campaign) => campaign.partnerUserId))) },
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+      });
+      const partnerUserMap = new Map(partnerUsers.map((entry) => [entry.id, entry]));
+
+      const promotions = await Promise.all(
+        campaigns.map(async (campaign) => {
+          try {
+            const promotion = await stripeClient.promotionCodes.retrieve(
+              campaign.promotionCodeId,
+            );
+            return [campaign.id, promotion] as const;
+          } catch {
+            return [campaign.id, null] as const;
+          }
+        }),
+      );
+      const promotionByCampaignId = new Map(promotions);
+
+      return campaigns
+        .map((campaign) => {
+          const promotion = promotionByCampaignId.get(campaign.id) ?? null;
+          const metadata = promotion?.metadata ?? {};
+          const partnerUser = partnerUserMap.get(campaign.partnerUserId) ?? null;
+          return {
+            id: campaign.id,
+            partnerUserId: campaign.partnerUserId,
+            partnerUser,
+            templateId: campaign.templateId,
+            snapshotBookId: campaign.snapshotBookId,
+            promotionCodeId: campaign.promotionCodeId,
+            promotionCode: promotion?.code ?? null,
+            promotionActive: promotion?.active ?? false,
+            maxRedemptions: promotion?.max_redemptions ?? campaign.maxRedemptions,
+            expiresAt: promotion?.expires_at ?? null,
+            timesRedeemed: campaign.timesRedeemed,
+            createdAt: campaign.createdAt,
+            updatedAt: campaign.updatedAt,
+            metadata,
+          };
+        })
+        .filter((entry) =>
+          input?.active === undefined ? true : entry.promotionActive === input.active,
+        );
+    }),
+
+  setAdminPartnerCodeActive: protectedProcedure
+    .input(
+      z.object({
+        campaignId: z.string().min(1),
+        active: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit(ctx, {
+        scope: "partner.setAdminPartnerCodeActive",
+        maxRequests: 50,
+        windowMs: 10 * 60 * 1000,
+      });
+
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { role: true },
+      });
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(user.role);
+
+      const campaign = await ctx.db.campaign.findUnique({
+        where: { id: input.campaignId },
+        select: { id: true, promotionCodeId: true },
+      });
+      if (!campaign) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Partner-Code nicht gefunden." });
+      }
+
+      const updated = await stripeClient.promotionCodes.update(campaign.promotionCodeId, {
+        active: input.active,
+      });
+
+      return {
+        id: campaign.id,
+        promotionCodeId: updated.id,
+        active: updated.active,
+      };
+    }),
+
+  rotateAdminPartnerCode: protectedProcedure
+    .input(
+      z.object({
+        campaignId: z.string().min(1),
+        promoCode: z.string().trim().optional(),
+        maxRedemptions: z.number().int().min(1).max(MAX_CAMPAIGN_MAX_REDEMPTIONS).optional(),
+        validForDays: z
+          .number()
+          .int()
+          .min(MIN_CAMPAIGN_VALID_DAYS)
+          .max(MAX_CAMPAIGN_VALID_DAYS)
+          .optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit(ctx, {
+        scope: "partner.rotateAdminPartnerCode",
+        maxRequests: 30,
+        windowMs: 10 * 60 * 1000,
+      });
+
+      const actor = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { role: true, id: true },
+      });
+      if (!actor) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(actor.role);
+
+      const campaign = await ctx.db.campaign.findUnique({
+        where: { id: input.campaignId },
+      });
+      if (!campaign) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Partner-Code nicht gefunden." });
+      }
+
+      const currentPromotion = await stripeClient.promotionCodes.retrieve(
+        campaign.promotionCodeId,
+      );
+      const currentMetadata = currentPromotion.metadata ?? {};
+      const partnerUserId = currentMetadata.partnerUserId ?? campaign.partnerUserId;
+      const templateId = currentMetadata.templateId ?? campaign.templateId;
+      const snapshotBookId = currentMetadata.snapshotBookId ?? campaign.snapshotBookId;
+      const partnerAccountId = currentMetadata.partnerAccountId ?? "";
+
+      const codeFromInput = input.promoCode
+        ? normalizePromoCode(input.promoCode)
+        : randomPromoCode();
+      let promoCode = codeFromInput;
+      if (!CAMPAIGN_PROMO_CODE_REGEX.test(promoCode)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Promo-Code Format ist ungueltig." });
+      }
+
+      let attempts = 0;
+      while (attempts < 5) {
+        const existingPromotionCodes = await stripeClient.promotionCodes.list({
+          code: promoCode,
+          active: true,
+          limit: 1,
+        });
+
+        if (
+          existingPromotionCodes.data.length === 0 ||
+          existingPromotionCodes.data[0]?.id === currentPromotion.id
+        ) {
+          break;
+        }
+
+        if (input.promoCode) {
+          throw new TRPCError({ code: "CONFLICT", message: "Promo-Code existiert bereits." });
+        }
+        promoCode = randomPromoCode();
+        attempts += 1;
+      }
+      if (attempts >= 5) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Es konnte kein eindeutiger Promo-Code erstellt werden.",
+        });
+      }
+
+      const desiredMaxRedemptions =
+        input.maxRedemptions ?? currentPromotion.max_redemptions ?? campaign.maxRedemptions;
+      const desiredExpiresAt =
+        input.validForDays !== undefined
+          ? Math.floor(Date.now() / 1000) + input.validForDays * SECONDS_IN_DAY
+          : (currentPromotion.expires_at ?? undefined);
+
+      const previousActiveState = currentPromotion.active;
+      if (currentPromotion.active) {
+        await stripeClient.promotionCodes.update(currentPromotion.id, { active: false });
+      }
+
+      try {
+        const coupon = await stripeClient.coupons.create({
+          duration: "once",
+          percent_off: 100,
+          max_redemptions: desiredMaxRedemptions,
+          ...(desiredExpiresAt ? { redeem_by: desiredExpiresAt } : {}),
+          metadata: {
+            kind: CAMPAIGN_KIND,
+            partnerUserId,
+            templateId,
+            snapshotBookId,
+            partnerAccountId,
+            rotatedByUserId: actor.id,
+          },
+        });
+
+        const nextPromotion = await stripeClient.promotionCodes.create({
+          promotion: {
+            type: "coupon",
+            coupon: coupon.id,
+          },
+          code: promoCode,
+          max_redemptions: desiredMaxRedemptions,
+          ...(desiredExpiresAt ? { expires_at: desiredExpiresAt } : {}),
+          metadata: {
+            kind: CAMPAIGN_KIND,
+            partnerUserId,
+            templateId,
+            snapshotBookId,
+            partnerAccountId,
+            rotatedByUserId: actor.id,
+          },
+        });
+
+        await ctx.db.campaign.update({
+          where: { id: campaign.id },
+          data: {
+            promotionCodeId: nextPromotion.id,
+            maxRedemptions: desiredMaxRedemptions,
+            expiresAt: desiredExpiresAt ? new Date(desiredExpiresAt * 1000) : null,
+          },
+        });
+
+        return {
+          campaignId: campaign.id,
+          promotionCodeId: nextPromotion.id,
+          promoCode: nextPromotion.code,
+          active: nextPromotion.active,
+          maxRedemptions: nextPromotion.max_redemptions,
+          expiresAt: nextPromotion.expires_at,
+        };
+      } catch (error) {
+        if (previousActiveState) {
+          try {
+            await stripeClient.promotionCodes.update(currentPromotion.id, { active: true });
+          } catch {
+            logger.error("partner_admin_rotate_code_reactivate_failed", {
+              campaignId: campaign.id,
+              promotionCodeId: currentPromotion.id,
+            });
+          }
+        }
+        throw error;
+      }
+    }),
+
+  listAdminUsersOverview: protectedProcedure.query(async ({ ctx }) => {
+    const user = await ctx.db.user.findUnique({
+      where: { id: ctx.session.user.id },
+      select: { role: true },
+    });
+    if (!user) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+    }
+    assertAdminOrStaffRole(user.role);
+
+    const users = await ctx.db.user.findMany({
+      take: 250,
+      orderBy: {
+        email: "asc",
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        accounts: {
+          select: {
+            provider: true,
+            providerAccountId: true,
+          },
+        },
+        _count: {
+          select: {
+            books: true,
+            orders: true,
+            modules: true,
+            partnerOrdersAsPartner: true,
+            partnerOrdersAsSchool: true,
+          },
+        },
+      },
+    });
+
+    const campaigns = await ctx.db.campaign.findMany({
+      select: {
+        partnerUserId: true,
+      },
+    });
+    const campaignsByPartner = campaigns.reduce(
+      (acc, campaign) => {
+        acc.set(campaign.partnerUserId, (acc.get(campaign.partnerUserId) ?? 0) + 1);
+        return acc;
+      },
+      new Map<string, number>(),
+    );
+
+    const roleCounts = users.reduce(
+      (acc, item) => {
+        acc[item.role] = (acc[item.role] ?? 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    return {
+      totalUsers: users.length,
+      roleCounts,
+      users: users.map((entry) => ({
+        ...entry,
+        campaignCount: campaignsByPartner.get(entry.id) ?? 0,
+      })),
+    };
+  }),
+
+  setAdminUserRole: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+        role: z.enum(["ADMIN", "STAFF", "MODERATOR", "USER", "SPONSOR"]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit(ctx, {
+        scope: "partner.setAdminUserRole",
+        maxRequests: 25,
+        windowMs: 10 * 60 * 1000,
+      });
+
+      const actor = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { id: true, role: true },
+      });
+      if (!actor) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(actor.role);
+
+      if (actor.role !== "ADMIN" && input.role === "ADMIN") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Nur Admin darf die Rolle ADMIN vergeben.",
+        });
+      }
+
+      const target = await ctx.db.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true, role: true },
+      });
+      if (!target) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden." });
+      }
+
+      if (actor.role !== "ADMIN" && target.role === "ADMIN") {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Nur Admin darf andere Admin-Rollen aendern.",
+        });
+      }
+
+      const updated = await ctx.db.user.update({
+        where: { id: input.userId },
+        data: { role: input.role },
+        select: {
+          id: true,
+          role: true,
+        },
+      });
+
+      return updated;
+    }),
+
+  getAdminSalesOverview: protectedProcedure
+    .input(
+      z
+        .object({
+          cycleYear: z.number().int().min(2024).max(2100).optional(),
+          cycleMonth: z.number().int().min(1).max(12).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { role: true },
+      });
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(user.role);
+
+      const { cycleYear, cycleMonth, cycleStart, cycleEnd } =
+        resolveSettlementCycleWindow(input);
+
+      const orders = await ctx.db.partnerOrder.findMany({
+        where: {
+          submittedAt: {
+            gte: cycleStart,
+            lt: cycleEnd,
+          },
+        },
+        select: {
+          id: true,
+          partnerUserId: true,
+          status: true,
+          lineItemsSnapshot: true,
+        },
+      });
+
+      const totals = buildSettlementSummary(orders);
+      const byStatus = orders.reduce(
+        (acc, order) => {
+          acc[order.status] = (acc[order.status] ?? 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
+      const partnerOrderCount = orders.reduce(
+        (acc, order) => {
+          acc.set(order.partnerUserId, (acc.get(order.partnerUserId) ?? 0) + 1);
+          return acc;
+        },
+        new Map<string, number>(),
+      );
+
+      const partnerIds = Array.from(partnerOrderCount.keys());
+      const partners = await ctx.db.user.findMany({
+        where: { id: { in: partnerIds } },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
+      const partnerMap = new Map(partners.map((entry) => [entry.id, entry]));
+
+      const topPartners = Array.from(partnerOrderCount.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([partnerUserId, orderCount]) => ({
+          partnerUserId,
+          orderCount,
+          partner: partnerMap.get(partnerUserId) ?? null,
+        }));
+
+      const adjustedOrderCount = orders.filter((order) => {
+        const adjustment = asJsonObject(order.lineItemsSnapshot).adminSettlementAdjustment;
+        return Boolean(adjustment && typeof adjustment === "object");
+      }).length;
+
+      return {
+        cycleYear,
+        cycleMonth,
+        cycleStart,
+        cycleEnd,
+        orderCount: orders.length,
+        adjustedOrderCount,
+        totals,
+        byStatus,
+        topPartners,
+      };
+    }),
+
+  getAdminPlannerModuleOverview: protectedProcedure.query(async ({ ctx }) => {
+    const user = await ctx.db.user.findUnique({
+      where: { id: ctx.session.user.id },
+      select: { role: true },
+    });
+    if (!user) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+    }
+    assertAdminOrStaffRole(user.role);
+
+    const [
+      totalTemplates,
+      featuredTemplates,
+      totalPlanners,
+      totalModules,
+      visibilityBuckets,
+      typeGroups,
+      moduleTypes,
+    ] = await Promise.all([
+      ctx.db.book.count({ where: { deletedAt: null, isTemplate: true } }),
+      ctx.db.book.count({ where: { deletedAt: null, isTemplate: true, isFeatured: true } }),
+      ctx.db.book.count({ where: { deletedAt: null, isTemplate: false } }),
+      ctx.db.module.count({ where: { deletedAt: null } }),
+      ctx.db.module.groupBy({
+        by: ["visible"],
+        where: { deletedAt: null },
+        _count: { _all: true },
+      }),
+      ctx.db.module.groupBy({
+        by: ["typeId"],
+        where: { deletedAt: null },
+        _count: { _all: true },
+      }),
+      ctx.db.moduleType.findMany({
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+        },
+      }),
+    ]);
+
+    const typeNameMap = new Map(moduleTypes.map((entry) => [entry.id, entry.name]));
+    const modulesByType = typeGroups
+      .map((entry) => ({
+        typeId: entry.typeId,
+        typeName: typeNameMap.get(entry.typeId) ?? entry.typeId,
+        count: entry._count._all,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    const visibility = visibilityBuckets.reduce(
+      (acc, entry) => {
+        acc[entry.visible] = entry._count._all;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+
+    return {
+      totalTemplates,
+      featuredTemplates,
+      totalPlanners,
+      totalModules,
+      visibility,
+      modulesByType,
+    };
+  }),
+
+  adjustPartnerOrderAmount: protectedProcedure
+    .input(
+      z.object({
+        partnerOrderId: z.string(),
+        reason: z.string().trim().min(3).max(500),
+        adjustment: z.discriminatedUnion("type", [
+          z.object({
+            type: z.literal("FIXED"),
+            amountCents: z.number().int().min(0),
+          }),
+          z.object({
+            type: z.literal("PERCENT_DISCOUNT"),
+            percent: z.number().min(0).max(100),
+          }),
+        ]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit(ctx, {
+        scope: "partner.adjustPartnerOrderAmount",
+        maxRequests: 50,
+        windowMs: 10 * 60 * 1000,
+      });
+
+      const actor = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { id: true, role: true },
+      });
+      if (!actor) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(actor.role);
+
+      const partnerOrder = await ctx.db.partnerOrder.findUnique({
+        where: { id: input.partnerOrderId },
+        select: {
+          id: true,
+          status: true,
+          updatedAt: true,
+          lineItemsSnapshot: true,
+          partnerSnapshot: true,
+        },
+      });
+
+      if (!partnerOrder) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Partner-Bestellung nicht gefunden.",
+        });
+      }
+
+      if (
+        partnerOrder.status !== "SUBMITTED_BY_SCHOOL" &&
+        partnerOrder.status !== "UNDER_PARTNER_REVIEW"
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Betragsanpassung ist nur vor der Partner-Bestaetigung moeglich.",
+        });
+      }
+
+      const nextLineItemsSnapshot = buildAdminAdjustedLineItemsSnapshot({
+        lineItemsSnapshot: partnerOrder.lineItemsSnapshot,
+        adjustment: input.adjustment,
+        reason: input.reason,
+        adjustedByUserId: actor.id,
+      });
+
+      const currentPartnerSnapshot = asJsonObject(partnerOrder.partnerSnapshot);
+      const nextPartnerSnapshot = {
+        ...currentPartnerSnapshot,
+        adminSettlementAdjustment: nextLineItemsSnapshot.adminSettlementAdjustment,
+      };
+
+      const updated = await ctx.db.partnerOrder.updateMany({
+        where: {
+          id: partnerOrder.id,
+          status: partnerOrder.status,
+          updatedAt: partnerOrder.updatedAt,
+        },
+        data: {
+          lineItemsSnapshot: nextLineItemsSnapshot,
+          partnerSnapshot: nextPartnerSnapshot,
+        },
+      });
+
+      if (updated.count !== 1) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Partner-Bestellung wurde zwischenzeitlich geaendert. Bitte neu laden.",
+        });
+      }
+
+      const correlationId = createPartnerCorrelationId("partner_adjust_amount");
+      await recordPartnerOrderTransition({
+        db: ctx.db,
+        partnerOrderId: partnerOrder.id,
+        actorUserId: actor.id,
+        fromStatus: partnerOrder.status,
+        toStatus: partnerOrder.status,
+        correlationId,
+        payload: {
+          reason: input.reason,
+          adjustment: input.adjustment,
+          adminSettlementAdjustment: nextLineItemsSnapshot.adminSettlementAdjustment,
+        },
+      });
+
+      return {
+        adjusted: true,
+        adminSettlementAdjustment: nextLineItemsSnapshot.adminSettlementAdjustment,
+      };
+    }),
+
   getPartnerOrderMetrics: protectedProcedure.query(async ({ ctx }) => {
     const user = await ctx.db.user.findUnique({
       where: { id: ctx.session.user.id },
@@ -3248,6 +4324,142 @@ export const partnerRouter = createTRPCRouter({
       return { paid: true };
     }),
 
+  adminConfirmPartnerOrder: protectedProcedure
+    .input(
+      z.object({
+        partnerOrderId: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit(ctx, {
+        scope: "partner.adminConfirmPartnerOrder",
+        maxRequests: 20,
+        windowMs: 10 * 60 * 1000,
+      });
+
+      const actor = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { id: true, role: true },
+      });
+      if (!actor) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(actor.role);
+
+      const partnerOrder = await ctx.db.partnerOrder.findFirst({
+        where: {
+          id: input.partnerOrderId,
+          status: {
+            in: ["SUBMITTED_BY_SCHOOL", "UNDER_PARTNER_REVIEW"],
+          },
+        },
+        include: {
+          order: {
+            select: {
+              orderKey: true,
+            },
+          },
+          partnerUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      if (!partnerOrder) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Partner-Bestellung konnte nicht bestaetigt werden.",
+        });
+      }
+      if (!canTransitionPartnerOrderStatus(partnerOrder.status, "PARTNER_CONFIRMED")) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Ungueltiger Statuswechsel fuer Partner-Bestellung.",
+        });
+      }
+
+      const correlationId = createPartnerCorrelationId("partner_admin_confirm");
+      let schoolInvoice: Awaited<ReturnType<typeof createPartnerSchoolInvoice>>;
+      try {
+        schoolInvoice = await createPartnerSchoolInvoice({
+          partnerOrderId: partnerOrder.id,
+          partnerUserId: partnerOrder.partnerUser.id,
+          partnerName: partnerOrder.partnerUser.name ?? "Partner",
+          partnerEmail: partnerOrder.partnerUser.email ?? null,
+          schoolSnapshot: partnerOrder.schoolSnapshot,
+          lineItemsSnapshot: partnerOrder.lineItemsSnapshot,
+          orderKey: partnerOrder.order?.orderKey ?? null,
+        });
+      } catch (error) {
+        logger.error("partner_school_invoice_create_failed", {
+          partnerOrderId: partnerOrder.id,
+          actorUserId: actor.id,
+          correlationId,
+          error,
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Schulrechnung konnte nicht erstellt werden.",
+        });
+      }
+
+      const updated = await ctx.db.partnerOrder.updateMany({
+        where: {
+          id: partnerOrder.id,
+          status: partnerOrder.status,
+          updatedAt: partnerOrder.updatedAt,
+        },
+        data: {
+          status: "PARTNER_CONFIRMED",
+          reviewedAt: new Date(),
+          reviewedByUserId: actor.id,
+          partnerSnapshot: {
+            ...asJsonObject(partnerOrder.partnerSnapshot),
+            partnerUserId: partnerOrder.partnerUser.id,
+            partnerName: partnerOrder.partnerUser.name,
+            partnerEmail: partnerOrder.partnerUser.email,
+            confirmedAt: new Date().toISOString(),
+            confirmedByPlatformUserId: actor.id,
+            invoiceIssuer: schoolInvoice.issuerSnapshot,
+            schoolInvoice: {
+              invoiceId: schoolInvoice.invoiceId,
+              hostedInvoiceUrl: schoolInvoice.hostedInvoiceUrl,
+              issuedAt: schoolInvoice.issuedAt,
+            },
+          },
+        },
+      });
+
+      if (updated.count !== 1) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message:
+            "Partner-Bestellung wurde zwischenzeitlich geaendert. Bitte Ansicht aktualisieren.",
+        });
+      }
+
+      await recordPartnerOrderTransition({
+        db: ctx.db,
+        partnerOrderId: partnerOrder.id,
+        actorUserId: actor.id,
+        fromStatus: partnerOrder.status,
+        toStatus: "PARTNER_CONFIRMED",
+        correlationId,
+        payload: {
+          schoolInvoiceId: schoolInvoice.invoiceId,
+          hostedInvoiceUrl: schoolInvoice.hostedInvoiceUrl,
+          invoiceIssuer: schoolInvoice.issuerSnapshot,
+          confirmedByPlatformUserId: actor.id,
+        },
+      });
+
+      return { confirmed: true };
+    }),
+
   confirmPartnerOrder: protectedProcedure
     .input(
       z.object({
@@ -3704,6 +4916,135 @@ export const partnerRouter = createTRPCRouter({
         partnerUserId: ctx.session.user.id,
         dispatchKey,
         correlationId,
+      });
+
+      return { released: true, orderKey: partnerOrder.order.orderKey };
+    }),
+
+  adminReleasePartnerOrderToProduction: protectedProcedure
+    .input(
+      z.object({
+        partnerOrderId: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit(ctx, {
+        scope: "partner.adminReleasePartnerOrderToProduction",
+        maxRequests: 20,
+        windowMs: 10 * 60 * 1000,
+      });
+      const actor = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { id: true, role: true },
+      });
+      if (!actor) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertAdminOrStaffRole(actor.role);
+      if (!isPartnerControlledFulfillmentEnabled()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Partner review flow is currently disabled.",
+        });
+      }
+
+      const partnerOrder = await ctx.db.partnerOrder.findFirst({
+        where: {
+          id: input.partnerOrderId,
+        },
+        include: {
+          order: {
+            select: {
+              id: true,
+              orderKey: true,
+            },
+          },
+          book: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          schoolUser: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (!partnerOrder) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Partner-Bestellung nicht gefunden." });
+      }
+
+      if (
+        partnerOrder.status === "RELEASED_TO_PRODUCTION" ||
+        partnerOrder.status === "FULFILLED"
+      ) {
+        return { released: true, alreadyReleased: true };
+      }
+
+      if (partnerOrder.status !== "PARTNER_CONFIRMED") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Bestellung muss zuerst bestaetigt werden.",
+        });
+      }
+
+      if (!partnerOrder.order?.orderKey) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Bestellung ist noch nicht fuer die Produktion vorbereitet.",
+        });
+      }
+
+      const correlationId = createPartnerCorrelationId("partner_admin_release");
+      const releaseAt = new Date();
+      const releaseTransition = await ctx.db.partnerOrder.updateMany({
+        where: {
+          id: partnerOrder.id,
+          status: "PARTNER_CONFIRMED",
+        },
+        data: {
+          status: "RELEASED_TO_PRODUCTION",
+          releasedAt: releaseAt,
+        },
+      });
+
+      if (releaseTransition.count !== 1) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Partner-Bestellung konnte nicht freigegeben werden.",
+        });
+      }
+
+      await recordPartnerOrderTransition({
+        db: ctx.db,
+        partnerOrderId: partnerOrder.id,
+        actorUserId: actor.id,
+        fromStatus: "PARTNER_CONFIRMED",
+        toStatus: "RELEASED_TO_PRODUCTION",
+        correlationId,
+        payload: {
+          orderKey: partnerOrder.order.orderKey,
+          releasedByPlatformUserId: actor.id,
+        },
+      });
+
+      await ctx.db.partnerNotification.create({
+        data: {
+          partnerUserId: partnerOrder.partnerUserId,
+          partnerOrderId: partnerOrder.id,
+          type: "PARTNER_ORDER_RELEASED",
+          payload: {
+            orderKey: partnerOrder.order.orderKey,
+            bookId: partnerOrder.book.id,
+            bookName: partnerOrder.book.name,
+            releasedByPlatformUserId: actor.id,
+          },
+        },
       });
 
       return { released: true, orderKey: partnerOrder.order.orderKey };

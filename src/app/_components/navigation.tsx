@@ -4,6 +4,7 @@ import {
   LogInIcon,
   LogOutIcon,
   LayoutDashboard,
+  Shield,
 } from "lucide-react";
 
 import Link from "next/link";
@@ -44,6 +45,16 @@ export default async function Navigation() {
               <span className="hidden sm:inline">Dashboard</span>
             </Link>
           )}
+          {session?.user &&
+          (session.user.role === "ADMIN" || session.user.role === "STAFF") ? (
+            <Link
+              href="/admin"
+              className="btn-soft flex items-center gap-2 px-3 py-2 text-sm"
+            >
+              <Shield size={18} />
+              <span className="hidden sm:inline">Admin</span>
+            </Link>
+            ) : null}
           {session?.user ? (
             <Link
               href="/auth/signout"
