@@ -421,7 +421,7 @@ async function getLivePartnerSubscriptionState(
     email,
     limit: 100,
   });
-  const customers = customerList.data as Stripe.Customer[];
+  const customers = customerList.data;
 
   if (customers.length === 0) {
     return {
