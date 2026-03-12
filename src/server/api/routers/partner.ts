@@ -103,18 +103,29 @@ function randomPromoCode(prefix = "SP"): string {
 }
 
 function assertPartnerRole(
-  role: "ADMIN" | "STAFF" | "MODERATOR" | "USER" | "SPONSOR",
+  role: "ADMIN" | "STAFF" | "MODERATOR" | "USER" | "SPONSOR" | "PARTNER",
 ) {
-  if (role !== "SPONSOR" && role !== "ADMIN" && role !== "STAFF") {
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "Partner-Konto erforderlich" });
+  if (
+    role !== "PARTNER" &&
+    role !== "SPONSOR" &&
+    role !== "ADMIN" &&
+    role !== "STAFF"
+  ) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Partner-Konto erforderlich",
+    });
   }
 }
 
 function assertAdminOrStaffRole(
-  role: "ADMIN" | "STAFF" | "MODERATOR" | "USER" | "SPONSOR",
+  role: "ADMIN" | "STAFF" | "MODERATOR" | "USER" | "SPONSOR" | "PARTNER",
 ) {
   if (role !== "ADMIN" && role !== "STAFF") {
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "Admin- oder Staff-Konto erforderlich" });
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Admin- oder Staff-Konto erforderlich",
+    });
   }
 }
 
@@ -154,20 +165,26 @@ function buildAdminAdjustedLineItemsSnapshot(input: {
       ? input.adjustment.amountCents
       : Math.max(
           0,
-          Math.round(originalGrandTotalAmount * (1 - input.adjustment.percent / 100)),
+          Math.round(
+            originalGrandTotalAmount * (1 - input.adjustment.percent / 100),
+          ),
         );
 
   if (finalGrandTotalAmount > originalGrandTotalAmount) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Der finale Betrag darf nicht groesser als der Originalbetrag sein.",
+      message:
+        "Der finale Betrag darf nicht groesser als der Originalbetrag sein.",
     });
   }
 
   const quantityRaw = asNumberOrZero(current.quantity);
   const quantity = quantityRaw > 0 ? quantityRaw : 1;
   const ratio = finalGrandTotalAmount / originalGrandTotalAmount;
-  const adjustedBaseTotalAmount = Math.max(0, Math.round(baseTotalAmount * ratio));
+  const adjustedBaseTotalAmount = Math.max(
+    0,
+    Math.round(baseTotalAmount * ratio),
+  );
   const adjustedAddOnTotalAmount = Math.max(
     0,
     finalGrandTotalAmount - adjustedBaseTotalAmount,
@@ -234,7 +251,9 @@ function readSettlementAmountsFromLineItems(lineItemsSnapshot: unknown): {
 function buildSettlementSummary(orders: Array<{ lineItemsSnapshot: unknown }>) {
   const totals = orders.reduce(
     (acc, order) => {
-      const amounts = readSettlementAmountsFromLineItems(order.lineItemsSnapshot);
+      const amounts = readSettlementAmountsFromLineItems(
+        order.lineItemsSnapshot,
+      );
       acc.baseTotalAmount += amounts.baseTotalAmount;
       acc.addOnTotalAmount += amounts.addOnTotalAmount;
       return acc;
@@ -260,7 +279,7 @@ function isUnknownPartnerUserIdArgumentError(error: unknown): boolean {
       : "";
   return (
     message.includes("Unknown argument `partnerUserId`") ||
-    message.includes("Unknown argument \"partnerUserId\"")
+    message.includes('Unknown argument "partnerUserId"')
   );
 }
 
@@ -308,18 +327,18 @@ async function createCampaignRecord(
     if (!isUnknownPartnerUserIdArgumentError(error)) {
       throw error;
     }
-    await (db.campaign as unknown as { create: (args: unknown) => Promise<unknown> }).create(
-      {
-        data: {
-          sponsorUserId: input.userId,
-          templateId: input.templateId,
-          snapshotBookId: input.snapshotBookId,
-          promotionCodeId: input.promotionCodeId,
-          maxRedemptions: input.maxRedemptions,
-          expiresAt: input.expiresAt,
-        },
+    await (
+      db.campaign as unknown as { create: (args: unknown) => Promise<unknown> }
+    ).create({
+      data: {
+        sponsorUserId: input.userId,
+        templateId: input.templateId,
+        snapshotBookId: input.snapshotBookId,
+        promotionCodeId: input.promotionCodeId,
+        maxRedemptions: input.maxRedemptions,
+        expiresAt: input.expiresAt,
       },
-    );
+    });
   }
 }
 
@@ -333,11 +352,15 @@ async function findCampaignsByPartnerUserId(db: PrismaClient, userId: string) {
       throw error;
     }
     return await (
-      db.campaign as unknown as { findMany: (args: unknown) => Promise<Array<{
-        promotionCodeId: string;
-        timesRedeemed: number;
-        maxRedemptions: number;
-      }>> }
+      db.campaign as unknown as {
+        findMany: (args: unknown) => Promise<
+          Array<{
+            promotionCodeId: string;
+            timesRedeemed: number;
+            maxRedemptions: number;
+          }>
+        >;
+      }
     ).findMany({
       where: { sponsorUserId: userId },
     });
@@ -349,7 +372,9 @@ function hasPartnerOrderModel(db: PrismaClient): boolean {
 }
 
 function hasPartnerNotificationModel(db: PrismaClient): boolean {
-  return Boolean((db as unknown as Record<string, unknown>).partnerNotification);
+  return Boolean(
+    (db as unknown as Record<string, unknown>).partnerNotification,
+  );
 }
 
 async function getCanceledCampaignRedemptionsMap(
@@ -418,10 +443,13 @@ function getSubscriptionManageReturnUrl(appOrigin: string) {
 }
 
 function getConfiguredSubscriptionPriceIds(): string[] {
-  const monthlyPriceId = env.STRIPE_CONNECT_SUBSCRIPTION_MONTHLY_PRICE_ID?.trim();
+  const monthlyPriceId =
+    env.STRIPE_CONNECT_SUBSCRIPTION_MONTHLY_PRICE_ID?.trim();
   const yearlyPriceId = env.STRIPE_CONNECT_SUBSCRIPTION_YEARLY_PRICE_ID?.trim();
 
-  return [...new Set([monthlyPriceId, yearlyPriceId].filter(Boolean) as string[])];
+  return [
+    ...new Set([monthlyPriceId, yearlyPriceId].filter(Boolean) as string[]),
+  ];
 }
 
 function getConfiguredSubscriptionPriceIdsOrThrow(): string[] {
@@ -530,7 +558,9 @@ async function getLivePartnerSubscriptionState(
     );
 
   const subscriptions = {
-    data: subscriptionLists.flatMap((subscriptionList) => subscriptionList.data),
+    data: subscriptionLists.flatMap(
+      (subscriptionList) => subscriptionList.data,
+    ),
   };
 
   const withPrice = subscriptions.data
@@ -543,8 +573,11 @@ async function getLivePartnerSubscriptionState(
       };
     })
     .filter(
-      (entry): entry is { subscription: Stripe.Subscription; priceId: string } =>
-        typeof entry.priceId === "string" && requiredPriceIds.includes(entry.priceId),
+      (
+        entry,
+      ): entry is { subscription: Stripe.Subscription; priceId: string } =>
+        typeof entry.priceId === "string" &&
+        requiredPriceIds.includes(entry.priceId),
     );
 
   if (withPrice.length === 0) {
@@ -570,7 +603,9 @@ async function getLivePartnerSubscriptionState(
 
   const selected =
     activeCandidate ??
-    candidatePool.sort((a, b) => b.subscription.created - a.subscription.created)[0];
+    candidatePool.sort(
+      (a, b) => b.subscription.created - a.subscription.created,
+    )[0];
 
   const selectedSubscription = selected?.subscription;
   if (!selectedSubscription) {
@@ -586,10 +621,11 @@ async function getLivePartnerSubscriptionState(
   return {
     status: selectedSubscription.status ?? null,
     priceId: selected.priceId,
-    currentPeriodEnd: asNumber(
-      (selectedSubscription as unknown as Record<string, unknown>)
-        .current_period_end,
-    ) ?? null,
+    currentPeriodEnd:
+      asNumber(
+        (selectedSubscription as unknown as Record<string, unknown>)
+          .current_period_end,
+      ) ?? null,
     cancelAtPeriodEnd: selectedSubscription.cancel_at_period_end ?? false,
     latestSubscriptionId: selectedSubscription.id ?? null,
   };
@@ -624,7 +660,10 @@ async function findOrCreatePlatformCustomer(params: {
 function parseCampaignClaims(token: string): PartnerCampaignLinkClaims {
   const claims = verifyPartnerToken(token);
   if (claims.kind !== "campaign_link") {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid campaign link token" });
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Invalid campaign link token",
+    });
   }
   return claims;
 }
@@ -697,15 +736,12 @@ function isPartnerCampaignForUser(
   const metadata = campaign.metadata ?? {};
   const kind = metadata.kind ?? "";
   const ownerId = metadata.partnerUserId ?? "";
-  return (
-    kind === CAMPAIGN_KIND &&
-    ownerId === userId
-  );
+  return kind === CAMPAIGN_KIND && ownerId === userId;
 }
 
-function isAdminCouponCode(
-  campaign: { metadata: Record<string, string> | null | undefined },
-): boolean {
+function isAdminCouponCode(campaign: {
+  metadata: Record<string, string> | null | undefined;
+}): boolean {
   const metadata = campaign.metadata ?? {};
   return (metadata.kind ?? "") === ADMIN_COUPON_KIND;
 }
@@ -754,7 +790,8 @@ export const partnerRouter = createTRPCRouter({
     let effectiveRole = user.role;
     const mappedAccountId = user.accounts[0]?.providerAccountId;
     const configuredSubscriptionPriceIds = getConfiguredSubscriptionPriceIds();
-    const configuredSubscriptionPriceId = configuredSubscriptionPriceIds[0] ?? null;
+    const configuredSubscriptionPriceId =
+      configuredSubscriptionPriceIds[0] ?? null;
     const configuredSubscriptionPriceOptions =
       configuredSubscriptionPriceIds.length > 0
         ? await getConfiguredSubscriptionPriceOptions(
@@ -772,13 +809,13 @@ export const partnerRouter = createTRPCRouter({
       | undefined;
     let subscription:
       | {
-        requiredPriceConfigured: boolean;
-        configuredPriceId: string | null;
-        configuredPriceIds: string[];
-        configuredPriceOptions: PartnerSubscriptionPriceOption[];
-        status: string | null;
-        priceId: string | null;
-        currentPeriodEnd: number | null;
+          requiredPriceConfigured: boolean;
+          configuredPriceId: string | null;
+          configuredPriceIds: string[];
+          configuredPriceOptions: PartnerSubscriptionPriceOption[];
+          status: string | null;
+          priceId: string | null;
+          currentPeriodEnd: number | null;
           cancelAtPeriodEnd: boolean;
           latestSubscriptionId: string | null;
           isActive: boolean;
@@ -798,12 +835,12 @@ export const partnerRouter = createTRPCRouter({
         capabilitiesStatus,
       };
 
-      if (status.onboardingComplete && effectiveRole !== "SPONSOR") {
+      if (status.onboardingComplete && effectiveRole !== "PARTNER") {
         await ctx.db.user.update({
           where: { id: user.id },
-          data: { role: "SPONSOR" },
+          data: { role: "PARTNER" },
         });
-        effectiveRole = "SPONSOR";
+        effectiveRole = "PARTNER";
       }
 
       const storedSubscription = await getLivePartnerSubscriptionState(
@@ -840,7 +877,7 @@ export const partnerRouter = createTRPCRouter({
 
     return {
       role: effectiveRole,
-      isPartner: effectiveRole === "SPONSOR",
+      isPartner: effectiveRole === "PARTNER",
       hasConnectAccount: Boolean(mappedAccountId),
       onboardingComplete: stripeAccount?.onboardingComplete ?? false,
       readyToProcessPayments: stripeAccount?.readyToProcessPayments ?? false,
@@ -855,7 +892,8 @@ export const partnerRouter = createTRPCRouter({
         currentPeriodEnd:
           subscription?.currentPeriodEnd ?? storedSubscription.currentPeriodEnd,
         cancelAtPeriodEnd:
-          subscription?.cancelAtPeriodEnd ?? storedSubscription.cancelAtPeriodEnd,
+          subscription?.cancelAtPeriodEnd ??
+          storedSubscription.cancelAtPeriodEnd,
         latestSubscriptionId:
           subscription?.latestSubscriptionId ??
           storedSubscription.latestSubscriptionId,
@@ -906,7 +944,8 @@ export const partnerRouter = createTRPCRouter({
       ) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Aktives Partner-Programm-Abo erforderlich, bevor Stripe Connect gestartet werden kann.",
+          message:
+            "Aktives Partner-Programm-Abo erforderlich, bevor Stripe Connect gestartet werden kann.",
         });
       }
 
@@ -1038,10 +1077,10 @@ export const partnerRouter = createTRPCRouter({
 
     const status = await getConnectAccountStatus(stripeAccountId);
 
-    if (status.onboardingComplete && user.role !== "SPONSOR") {
+    if (status.onboardingComplete && user.role !== "PARTNER") {
       await ctx.db.user.update({
         where: { id: user.id },
-        data: { role: "SPONSOR" },
+        data: { role: "PARTNER" },
       });
     }
 
@@ -1049,7 +1088,7 @@ export const partnerRouter = createTRPCRouter({
       onboardingComplete: status.onboardingComplete,
       readyToProcessPayments: status.readyToProcessPayments,
       requirementsStatus: status.requirementsStatus,
-      role: status.onboardingComplete ? "SPONSOR" : user.role,
+      role: status.onboardingComplete ? "PARTNER" : user.role,
       stripeAccountId: getV2EntityId(status.account) ?? stripeAccountId,
     };
   }),
@@ -1082,7 +1121,8 @@ export const partnerRouter = createTRPCRouter({
       if (!user.email) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "E-Mail-Adresse ist für das Partner-Programm-Abo erforderlich.",
+          message:
+            "E-Mail-Adresse ist für das Partner-Programm-Abo erforderlich.",
         });
       }
 
@@ -1300,7 +1340,10 @@ export const partnerRouter = createTRPCRouter({
       });
 
       if (!template) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Template not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Template not found",
+        });
       }
 
       const snapshot = await ctx.db.book.create({
@@ -1595,7 +1638,10 @@ export const partnerRouter = createTRPCRouter({
         input.campaignId,
       );
       if (!isPartnerCampaignForUser(campaign, ctx.session.user.id)) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Campaign not found",
+        });
       }
 
       const nextExpiresAt =
@@ -1763,11 +1809,13 @@ export const partnerRouter = createTRPCRouter({
         (sum, campaign) => sum + campaign.timesRedeemed,
         0,
       );
-      const canceledRedemptions = Array.from(canceledByCampaign.values()).reduce(
-        (sum, count) => sum + count,
+      const canceledRedemptions = Array.from(
+        canceledByCampaign.values(),
+      ).reduce((sum, count) => sum + count, 0);
+      const totalRedemptions = Math.max(
         0,
+        grossRedemptions - canceledRedemptions,
       );
-      const totalRedemptions = Math.max(0, grossRedemptions - canceledRedemptions);
 
       const remainingRedemptions = dbCampaigns.reduce((sum, campaign) => {
         const canceledForCampaign =
@@ -1777,7 +1825,8 @@ export const partnerRouter = createTRPCRouter({
           campaign.timesRedeemed - canceledForCampaign,
         );
         return (
-          sum + Math.max(campaign.maxRedemptions - activeRedemptionsForCampaign, 0)
+          sum +
+          Math.max(campaign.maxRedemptions - activeRedemptionsForCampaign, 0)
         );
       }, 0);
 
@@ -1852,7 +1901,10 @@ export const partnerRouter = createTRPCRouter({
       const metadata = campaign.metadata ?? {};
 
       if (metadata.kind !== CAMPAIGN_KIND) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Campaign not found",
+        });
       }
 
       if (
@@ -2286,7 +2338,8 @@ export const partnerRouter = createTRPCRouter({
           where: { id: claim.id },
           select: { bookId: true },
         });
-        const existingBookId = refreshedClaim?.bookId ?? existingBook?.id ?? null;
+        const existingBookId =
+          refreshedClaim?.bookId ?? existingBook?.id ?? null;
 
         if (!existingBookId) {
           logger.error("partner_claim_complete_race_without_book", {
@@ -2352,9 +2405,11 @@ export const partnerRouter = createTRPCRouter({
 
   listPartnerNotifications: protectedProcedure
     .input(
-      z.object({
-        limit: z.number().int().min(1).max(100).default(25),
-      }).optional(),
+      z
+        .object({
+          limit: z.number().int().min(1).max(100).default(25),
+        })
+        .optional(),
     )
     .query(async ({ ctx, input }) => {
       const user = await ctx.db.user.findUnique({
@@ -2403,32 +2458,34 @@ export const partnerRouter = createTRPCRouter({
       }));
     }),
 
-  getUnreadPartnerNotificationCount: protectedProcedure.query(async ({ ctx }) => {
-    const user = await ctx.db.user.findUnique({
-      where: { id: ctx.session.user.id },
-      select: { role: true },
-    });
-    if (!user) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
-    }
-    assertPartnerRole(user.role);
-
-    if (!hasPartnerNotificationModel(ctx.db)) {
-      logger.warn("partner_notification_model_missing_unread_count", {
-        userId: ctx.session.user.id,
+  getUnreadPartnerNotificationCount: protectedProcedure.query(
+    async ({ ctx }) => {
+      const user = await ctx.db.user.findUnique({
+        where: { id: ctx.session.user.id },
+        select: { role: true },
       });
-      return { count: 0 };
-    }
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+      assertPartnerRole(user.role);
 
-    const count = await ctx.db.partnerNotification.count({
-      where: {
-        partnerUserId: ctx.session.user.id,
-        readAt: null,
-      },
-    });
+      if (!hasPartnerNotificationModel(ctx.db)) {
+        logger.warn("partner_notification_model_missing_unread_count", {
+          userId: ctx.session.user.id,
+        });
+        return { count: 0 };
+      }
 
-    return { count };
-  }),
+      const count = await ctx.db.partnerNotification.count({
+        where: {
+          partnerUserId: ctx.session.user.id,
+          readAt: null,
+        },
+      });
+
+      return { count };
+    },
+  ),
 
   markPartnerNotificationRead: protectedProcedure
     .input(
@@ -2462,19 +2519,21 @@ export const partnerRouter = createTRPCRouter({
 
   listIncomingPartnerOrders: protectedProcedure
     .input(
-      z.object({
-        statuses: z
-          .enum([
-            "SUBMITTED_BY_SCHOOL",
-            "UNDER_PARTNER_REVIEW",
-            "PARTNER_CONFIRMED",
-            "PARTNER_DECLINED",
-            "RELEASED_TO_PRODUCTION",
-            "FULFILLED",
-          ])
-          .array()
-          .optional(),
-      }).optional(),
+      z
+        .object({
+          statuses: z
+            .enum([
+              "SUBMITTED_BY_SCHOOL",
+              "UNDER_PARTNER_REVIEW",
+              "PARTNER_CONFIRMED",
+              "PARTNER_DECLINED",
+              "RELEASED_TO_PRODUCTION",
+              "FULFILLED",
+            ])
+            .array()
+            .optional(),
+        })
+        .optional(),
     )
     .query(async ({ ctx, input }) => {
       const user = await ctx.db.user.findUnique({
@@ -2496,7 +2555,10 @@ export const partnerRouter = createTRPCRouter({
       const statuses =
         input?.statuses && input.statuses.length > 0
           ? input.statuses
-          : (["SUBMITTED_BY_SCHOOL", "UNDER_PARTNER_REVIEW"] satisfies PartnerOrderStatus[]);
+          : ([
+              "SUBMITTED_BY_SCHOOL",
+              "UNDER_PARTNER_REVIEW",
+            ] satisfies PartnerOrderStatus[]);
 
       const orders = await ctx.db.partnerOrder.findMany({
         where: {
@@ -2575,12 +2637,16 @@ export const partnerRouter = createTRPCRouter({
       assertAdminOrStaffRole(user.role);
 
       const statuses =
-        input?.statuses && input.statuses.length > 0 ? input.statuses : undefined;
+        input?.statuses && input.statuses.length > 0
+          ? input.statuses
+          : undefined;
 
       const orders = await ctx.db.partnerOrder.findMany({
         where: {
           ...(statuses ? { status: { in: statuses } } : {}),
-          ...(input?.partnerUserId ? { partnerUserId: input.partnerUserId } : {}),
+          ...(input?.partnerUserId
+            ? { partnerUserId: input.partnerUserId }
+            : {}),
         },
         orderBy: {
           submittedAt: "desc",
@@ -2617,8 +2683,12 @@ export const partnerRouter = createTRPCRouter({
       });
 
       return orders.map((order) => {
-        const totals = readSettlementAmountsFromLineItems(order.lineItemsSnapshot);
-        const pricing = asJsonObject(order.lineItemsSnapshot).adminSettlementAdjustment;
+        const totals = readSettlementAmountsFromLineItems(
+          order.lineItemsSnapshot,
+        );
+        const pricing = asJsonObject(
+          order.lineItemsSnapshot,
+        ).adminSettlementAdjustment;
 
         return {
           id: order.id,
@@ -2660,14 +2730,19 @@ export const partnerRouter = createTRPCRouter({
     );
 
     const couponsById = new Map<string, Stripe.Coupon>();
-    const getCouponIdFromPromotion = (promotion: Stripe.PromotionCode): string => {
+    const getCouponIdFromPromotion = (
+      promotion: Stripe.PromotionCode,
+    ): string => {
       const promotionRecord = asJsonObject(promotion);
       const promotionNode = asJsonObject(promotionRecord.promotion);
       const couponNode = asJsonObject(promotionNode.coupon);
       if (typeof couponNode.id === "string" && couponNode.id.length > 0) {
         return couponNode.id;
       }
-      if (typeof promotionNode.coupon === "string" && promotionNode.coupon.length > 0) {
+      if (
+        typeof promotionNode.coupon === "string" &&
+        promotionNode.coupon.length > 0
+      ) {
         return promotionNode.coupon;
       }
       return "";
@@ -2772,7 +2847,9 @@ export const partnerRouter = createTRPCRouter({
               amount_off: input.discount.amountOffCents,
               currency: "eur",
             }),
-        ...(input.maxRedemptions ? { max_redemptions: input.maxRedemptions } : {}),
+        ...(input.maxRedemptions
+          ? { max_redemptions: input.maxRedemptions }
+          : {}),
         ...(redeemBy ? { redeem_by: redeemBy } : {}),
         metadata: {
           kind: ADMIN_COUPON_KIND,
@@ -2786,7 +2863,9 @@ export const partnerRouter = createTRPCRouter({
           coupon: coupon.id,
         },
         code,
-        ...(input.maxRedemptions ? { max_redemptions: input.maxRedemptions } : {}),
+        ...(input.maxRedemptions
+          ? { max_redemptions: input.maxRedemptions }
+          : {}),
         ...(redeemBy ? { expires_at: redeemBy } : {}),
         metadata: {
           kind: ADMIN_COUPON_KIND,
@@ -2865,7 +2944,9 @@ export const partnerRouter = createTRPCRouter({
 
       const campaigns = await ctx.db.campaign.findMany({
         where: {
-          ...(input?.partnerUserId ? { partnerUserId: input.partnerUserId } : {}),
+          ...(input?.partnerUserId
+            ? { partnerUserId: input.partnerUserId }
+            : {}),
         },
         orderBy: {
           createdAt: "desc",
@@ -2874,7 +2955,11 @@ export const partnerRouter = createTRPCRouter({
 
       const partnerUsers = await ctx.db.user.findMany({
         where: {
-          id: { in: Array.from(new Set(campaigns.map((campaign) => campaign.partnerUserId))) },
+          id: {
+            in: Array.from(
+              new Set(campaigns.map((campaign) => campaign.partnerUserId)),
+            ),
+          },
         },
         select: {
           id: true,
@@ -2883,7 +2968,9 @@ export const partnerRouter = createTRPCRouter({
           role: true,
         },
       });
-      const partnerUserMap = new Map(partnerUsers.map((entry) => [entry.id, entry]));
+      const partnerUserMap = new Map(
+        partnerUsers.map((entry) => [entry.id, entry]),
+      );
 
       const promotions = await Promise.all(
         campaigns.map(async (campaign) => {
@@ -2903,7 +2990,8 @@ export const partnerRouter = createTRPCRouter({
         .map((campaign) => {
           const promotion = promotionByCampaignId.get(campaign.id) ?? null;
           const metadata = promotion?.metadata ?? {};
-          const partnerUser = partnerUserMap.get(campaign.partnerUserId) ?? null;
+          const partnerUser =
+            partnerUserMap.get(campaign.partnerUserId) ?? null;
           return {
             id: campaign.id,
             partnerUserId: campaign.partnerUserId,
@@ -2913,7 +3001,8 @@ export const partnerRouter = createTRPCRouter({
             promotionCodeId: campaign.promotionCodeId,
             promotionCode: promotion?.code ?? null,
             promotionActive: promotion?.active ?? false,
-            maxRedemptions: promotion?.max_redemptions ?? campaign.maxRedemptions,
+            maxRedemptions:
+              promotion?.max_redemptions ?? campaign.maxRedemptions,
             expiresAt: promotion?.expires_at ?? null,
             timesRedeemed: campaign.timesRedeemed,
             createdAt: campaign.createdAt,
@@ -2922,7 +3011,9 @@ export const partnerRouter = createTRPCRouter({
           };
         })
         .filter((entry) =>
-          input?.active === undefined ? true : entry.promotionActive === input.active,
+          input?.active === undefined
+            ? true
+            : entry.promotionActive === input.active,
         );
     }),
 
@@ -2954,12 +3045,18 @@ export const partnerRouter = createTRPCRouter({
         select: { id: true, promotionCodeId: true },
       });
       if (!campaign) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Partner-Code nicht gefunden." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Partner-Code nicht gefunden.",
+        });
       }
 
-      const updated = await stripeClient.promotionCodes.update(campaign.promotionCodeId, {
-        active: input.active,
-      });
+      const updated = await stripeClient.promotionCodes.update(
+        campaign.promotionCodeId,
+        {
+          active: input.active,
+        },
+      );
 
       return {
         id: campaign.id,
@@ -2973,7 +3070,12 @@ export const partnerRouter = createTRPCRouter({
       z.object({
         campaignId: z.string().min(1),
         promoCode: z.string().trim().optional(),
-        maxRedemptions: z.number().int().min(1).max(MAX_CAMPAIGN_MAX_REDEMPTIONS).optional(),
+        maxRedemptions: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAX_CAMPAIGN_MAX_REDEMPTIONS)
+          .optional(),
         validForDays: z
           .number()
           .int()
@@ -3002,16 +3104,21 @@ export const partnerRouter = createTRPCRouter({
         where: { id: input.campaignId },
       });
       if (!campaign) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Partner-Code nicht gefunden." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Partner-Code nicht gefunden.",
+        });
       }
 
       const currentPromotion = await stripeClient.promotionCodes.retrieve(
         campaign.promotionCodeId,
       );
       const currentMetadata = currentPromotion.metadata ?? {};
-      const partnerUserId = currentMetadata.partnerUserId ?? campaign.partnerUserId;
+      const partnerUserId =
+        currentMetadata.partnerUserId ?? campaign.partnerUserId;
       const templateId = currentMetadata.templateId ?? campaign.templateId;
-      const snapshotBookId = currentMetadata.snapshotBookId ?? campaign.snapshotBookId;
+      const snapshotBookId =
+        currentMetadata.snapshotBookId ?? campaign.snapshotBookId;
       const partnerAccountId = currentMetadata.partnerAccountId ?? "";
 
       const codeFromInput = input.promoCode
@@ -3019,7 +3126,10 @@ export const partnerRouter = createTRPCRouter({
         : randomPromoCode();
       let promoCode = codeFromInput;
       if (!CAMPAIGN_PROMO_CODE_REGEX.test(promoCode)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Promo-Code Format ist ungueltig." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Promo-Code Format ist ungueltig.",
+        });
       }
 
       let attempts = 0;
@@ -3038,7 +3148,10 @@ export const partnerRouter = createTRPCRouter({
         }
 
         if (input.promoCode) {
-          throw new TRPCError({ code: "CONFLICT", message: "Promo-Code existiert bereits." });
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Promo-Code existiert bereits.",
+          });
         }
         promoCode = randomPromoCode();
         attempts += 1;
@@ -3051,7 +3164,9 @@ export const partnerRouter = createTRPCRouter({
       }
 
       const desiredMaxRedemptions =
-        input.maxRedemptions ?? currentPromotion.max_redemptions ?? campaign.maxRedemptions;
+        input.maxRedemptions ??
+        currentPromotion.max_redemptions ??
+        campaign.maxRedemptions;
       const desiredExpiresAt =
         input.validForDays !== undefined
           ? Math.floor(Date.now() / 1000) + input.validForDays * SECONDS_IN_DAY
@@ -3059,7 +3174,9 @@ export const partnerRouter = createTRPCRouter({
 
       const previousActiveState = currentPromotion.active;
       if (currentPromotion.active) {
-        await stripeClient.promotionCodes.update(currentPromotion.id, { active: false });
+        await stripeClient.promotionCodes.update(currentPromotion.id, {
+          active: false,
+        });
       }
 
       try {
@@ -3101,7 +3218,9 @@ export const partnerRouter = createTRPCRouter({
           data: {
             promotionCodeId: nextPromotion.id,
             maxRedemptions: desiredMaxRedemptions,
-            expiresAt: desiredExpiresAt ? new Date(desiredExpiresAt * 1000) : null,
+            expiresAt: desiredExpiresAt
+              ? new Date(desiredExpiresAt * 1000)
+              : null,
           },
         });
 
@@ -3116,7 +3235,9 @@ export const partnerRouter = createTRPCRouter({
       } catch (error) {
         if (previousActiveState) {
           try {
-            await stripeClient.promotionCodes.update(currentPromotion.id, { active: true });
+            await stripeClient.promotionCodes.update(currentPromotion.id, {
+              active: true,
+            });
           } catch {
             logger.error("partner_admin_rotate_code_reactivate_failed", {
               campaignId: campaign.id,
@@ -3171,13 +3292,13 @@ export const partnerRouter = createTRPCRouter({
         partnerUserId: true,
       },
     });
-    const campaignsByPartner = campaigns.reduce(
-      (acc, campaign) => {
-        acc.set(campaign.partnerUserId, (acc.get(campaign.partnerUserId) ?? 0) + 1);
-        return acc;
-      },
-      new Map<string, number>(),
-    );
+    const campaignsByPartner = campaigns.reduce((acc, campaign) => {
+      acc.set(
+        campaign.partnerUserId,
+        (acc.get(campaign.partnerUserId) ?? 0) + 1,
+      );
+      return acc;
+    }, new Map<string, number>());
 
     const roleCounts = users.reduce(
       (acc, item) => {
@@ -3201,7 +3322,14 @@ export const partnerRouter = createTRPCRouter({
     .input(
       z.object({
         userId: z.string().min(1),
-        role: z.enum(["ADMIN", "STAFF", "MODERATOR", "USER", "SPONSOR"]),
+        role: z.enum([
+          "ADMIN",
+          "STAFF",
+          "MODERATOR",
+          "USER",
+          "SPONSOR",
+          "PARTNER",
+        ]),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -3232,7 +3360,10 @@ export const partnerRouter = createTRPCRouter({
         select: { id: true, role: true },
       });
       if (!target) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Benutzer nicht gefunden." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Benutzer nicht gefunden.",
+        });
       }
 
       if (actor.role !== "ADMIN" && target.role === "ADMIN") {
@@ -3300,13 +3431,10 @@ export const partnerRouter = createTRPCRouter({
         {} as Record<string, number>,
       );
 
-      const partnerOrderCount = orders.reduce(
-        (acc, order) => {
-          acc.set(order.partnerUserId, (acc.get(order.partnerUserId) ?? 0) + 1);
-          return acc;
-        },
-        new Map<string, number>(),
-      );
+      const partnerOrderCount = orders.reduce((acc, order) => {
+        acc.set(order.partnerUserId, (acc.get(order.partnerUserId) ?? 0) + 1);
+        return acc;
+      }, new Map<string, number>());
 
       const partnerIds = Array.from(partnerOrderCount.keys());
       const partners = await ctx.db.user.findMany({
@@ -3329,7 +3457,9 @@ export const partnerRouter = createTRPCRouter({
         }));
 
       const adjustedOrderCount = orders.filter((order) => {
-        const adjustment = asJsonObject(order.lineItemsSnapshot).adminSettlementAdjustment;
+        const adjustment = asJsonObject(
+          order.lineItemsSnapshot,
+        ).adminSettlementAdjustment;
         return Boolean(adjustment && typeof adjustment === "object");
       }).length;
 
@@ -3366,7 +3496,9 @@ export const partnerRouter = createTRPCRouter({
       moduleTypes,
     ] = await Promise.all([
       ctx.db.book.count({ where: { deletedAt: null, isTemplate: true } }),
-      ctx.db.book.count({ where: { deletedAt: null, isTemplate: true, isFeatured: true } }),
+      ctx.db.book.count({
+        where: { deletedAt: null, isTemplate: true, isFeatured: true },
+      }),
       ctx.db.book.count({ where: { deletedAt: null, isTemplate: false } }),
       ctx.db.module.count({ where: { deletedAt: null } }),
       ctx.db.module.groupBy({
@@ -3388,7 +3520,9 @@ export const partnerRouter = createTRPCRouter({
       }),
     ]);
 
-    const typeNameMap = new Map(moduleTypes.map((entry) => [entry.id, entry.name]));
+    const typeNameMap = new Map(
+      moduleTypes.map((entry) => [entry.id, entry.name]),
+    );
     const modulesByType = typeGroups
       .map((entry) => ({
         typeId: entry.typeId,
@@ -3472,7 +3606,8 @@ export const partnerRouter = createTRPCRouter({
       ) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Betragsanpassung ist nur vor der Partner-Bestaetigung moeglich.",
+          message:
+            "Betragsanpassung ist nur vor der Partner-Bestaetigung moeglich.",
         });
       }
 
@@ -3486,7 +3621,8 @@ export const partnerRouter = createTRPCRouter({
       const currentPartnerSnapshot = asJsonObject(partnerOrder.partnerSnapshot);
       const nextPartnerSnapshot = {
         ...currentPartnerSnapshot,
-        adminSettlementAdjustment: nextLineItemsSnapshot.adminSettlementAdjustment,
+        adminSettlementAdjustment:
+          nextLineItemsSnapshot.adminSettlementAdjustment,
       };
 
       const updated = await ctx.db.partnerOrder.updateMany({
@@ -3504,7 +3640,8 @@ export const partnerRouter = createTRPCRouter({
       if (updated.count !== 1) {
         throw new TRPCError({
           code: "CONFLICT",
-          message: "Partner-Bestellung wurde zwischenzeitlich geaendert. Bitte neu laden.",
+          message:
+            "Partner-Bestellung wurde zwischenzeitlich geaendert. Bitte neu laden.",
         });
       }
 
@@ -3519,13 +3656,15 @@ export const partnerRouter = createTRPCRouter({
         payload: {
           reason: input.reason,
           adjustment: input.adjustment,
-          adminSettlementAdjustment: nextLineItemsSnapshot.adminSettlementAdjustment,
+          adminSettlementAdjustment:
+            nextLineItemsSnapshot.adminSettlementAdjustment,
         },
       });
 
       return {
         adjusted: true,
-        adminSettlementAdjustment: nextLineItemsSnapshot.adminSettlementAdjustment,
+        adminSettlementAdjustment:
+          nextLineItemsSnapshot.adminSettlementAdjustment,
       };
     }),
 
@@ -3595,7 +3734,10 @@ export const partnerRouter = createTRPCRouter({
       pendingReviewAgeHours: oldestPending?.submittedAt
         ? Math.max(
             0,
-            Math.floor((Date.now() - oldestPending.submittedAt.getTime()) / (1000 * 60 * 60)),
+            Math.floor(
+              (Date.now() - oldestPending.submittedAt.getTime()) /
+                (1000 * 60 * 60),
+            ),
           )
         : 0,
       confirmedVsDeclinedRatio:
@@ -4108,7 +4250,8 @@ export const partnerRouter = createTRPCRouter({
       if (eligibleOrders.length === 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Keine abrechenbaren Partner-Bestellungen im gewählten Zeitraum.",
+          message:
+            "Keine abrechenbaren Partner-Bestellungen im gewählten Zeitraum.",
         });
       }
 
@@ -4375,7 +4518,12 @@ export const partnerRouter = createTRPCRouter({
           message: "Partner-Bestellung konnte nicht bestaetigt werden.",
         });
       }
-      if (!canTransitionPartnerOrderStatus(partnerOrder.status, "PARTNER_CONFIRMED")) {
+      if (
+        !canTransitionPartnerOrderStatus(
+          partnerOrder.status,
+          "PARTNER_CONFIRMED",
+        )
+      ) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Ungueltiger Statuswechsel fuer Partner-Bestellung.",
@@ -4514,7 +4662,12 @@ export const partnerRouter = createTRPCRouter({
           message: "Partner-Bestellung konnte nicht bestätigt werden.",
         });
       }
-      if (!canTransitionPartnerOrderStatus(partnerOrder.status, "PARTNER_CONFIRMED")) {
+      if (
+        !canTransitionPartnerOrderStatus(
+          partnerOrder.status,
+          "PARTNER_CONFIRMED",
+        )
+      ) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Ungültiger Statuswechsel für Partner-Bestellung.",
@@ -4653,7 +4806,9 @@ export const partnerRouter = createTRPCRouter({
           message: "Partner-Bestellung konnte nicht abgelehnt werden.",
         });
       }
-      if (!canTransitionPartnerOrderStatus(current.status, "PARTNER_DECLINED")) {
+      if (
+        !canTransitionPartnerOrderStatus(current.status, "PARTNER_DECLINED")
+      ) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Ungültiger Statuswechsel für Partner-Bestellung.",
@@ -4976,7 +5131,10 @@ export const partnerRouter = createTRPCRouter({
       });
 
       if (!partnerOrder) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Partner-Bestellung nicht gefunden." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Partner-Bestellung nicht gefunden.",
+        });
       }
 
       if (

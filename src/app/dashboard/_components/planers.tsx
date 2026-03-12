@@ -82,6 +82,17 @@ export default function PlanerSection() {
       setPendingToggleBookId(null);
     },
   });
+  const togglePublic = api.book.togglePublic.useMutation({
+    onMutate: ({ bookId }) => {
+      setPendingToggleBookId(bookId);
+    },
+    onSuccess: async () => {
+      await utils.book.getUserBooks.invalidate();
+    },
+    onSettled: () => {
+      setPendingToggleBookId(null);
+    },
+  });
 
   function handleDeleteBook(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
@@ -94,11 +105,16 @@ export default function PlanerSection() {
     toggleTemplate.mutate({ bookId: id, isTemplate: checked });
   };
 
+  const handleTogglePublic = (id: string, checked: boolean) => {
+    togglePublic.mutate({ bookId: id, isPublic: checked });
+  };
+
   const isStaff =
     userData?.role === "ADMIN" ||
     userData?.role === "STAFF" ||
     userData?.role === "MODERATOR" ||
-    userData?.role === "SPONSOR";
+    userData?.role === "SPONSOR" ||
+    userData?.role === "PARTNER";
   const partnerClaimsData = useMemo(
     () => partnerClaims.data ?? [],
     [partnerClaims.data],
@@ -180,7 +196,10 @@ export default function PlanerSection() {
             <p className="font-semibold">Aktion erforderlich</p>
             <ul className="mt-2 flex flex-col gap-1 text-xs">
               {pendingPartnerClaims.map((claim) => (
-                <li key={claim.id} className="flex flex-wrap items-center gap-2">
+                <li
+                  key={claim.id}
+                  className="flex flex-wrap items-center gap-2"
+                >
                   <span
                     className={`rounded px-2 py-0.5 font-semibold ${getPartnerClaimStatusClass(claim.status)}`}
                   >
@@ -232,7 +251,12 @@ export default function PlanerSection() {
                 key={book.id}
                 style={{ animationDelay: `${index * 60}ms` }}
               >
-                <Link className="font-bold text-info-900 hover:text-pirrot-blue-700" href={`/config?bookId=${book.id}`}>{book.name}</Link>
+                <Link
+                  className="text-info-900 hover:text-pirrot-blue-700 font-bold"
+                  href={`/config?bookId=${book.id}`}
+                >
+                  {book.name}
+                </Link>
 
                 {/* Template Toggle */}
                 {isStaff && (
@@ -248,14 +272,35 @@ export default function PlanerSection() {
                       disabled={isTogglingThisBook}
                     />
                     {isTogglingThisBook && (
-                      <LoaderCircle className="size-4 animate-spin text-info-700" />
+                      <LoaderCircle className="text-info-700 size-4 animate-spin" />
+                    )}
+                  </div>
+                )}
+
+                {/* Public Toggle - only show for templates */}
+                {isStaff && (book as any).isTemplate && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="text-pirrot-blue-950 text-xs font-bold uppercase">
+                      Öffentlich
+                    </span>
+                    <ToggleSwitch
+                      /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+                      checked={(book as any).isPublic}
+                      /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+                      onChange={(checked) =>
+                        handleTogglePublic(book.id, checked)
+                      }
+                      disabled={isTogglingThisBook}
+                    />
+                    {isTogglingThisBook && (
+                      <LoaderCircle className="text-info-700 size-4 animate-spin" />
                     )}
                   </div>
                 )}
 
                 <div className="mt-auto flex gap-2">
                   <Link
-                    className="flex justify-center items-center btn-soft rounded-md px-3 text-xs uppercase"
+                    className="btn-soft flex items-center justify-center rounded-md px-3 text-xs uppercase"
                     href={`/config?bookId=${book.id}`}
                   >
                     Bearbeiten

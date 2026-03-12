@@ -20,9 +20,7 @@ import {
   type PartnerCheckoutClaims,
   verifyPartnerToken,
 } from "@/util/partner-link";
-import {
-  type PartnerSessionMetadata,
-} from "@/util/partner-program/session-metadata";
+import { type PartnerSessionMetadata } from "@/util/partner-program/session-metadata";
 import { logger } from "@/util/logger";
 import { pickModulePdfFile } from "@/util/module-files";
 import { enforceProcedureRateLimit } from "@/util/rate-limit";
@@ -246,6 +244,7 @@ export const configRouter = createTRPCRouter({
           sessionUserId,
           bookSourceType: existingBook.sourceType,
           partnerClaimUserId: existingBook.partnerClaim?.userId,
+          isPublic: existingBook.isPublic,
         })
       ) {
         throw new TRPCError({ code: "UNAUTHORIZED" });
@@ -318,23 +317,24 @@ export const configRouter = createTRPCRouter({
           name: string;
           theme: string | null;
         }) =>
-          [
-            moduleItem.theme?.toLocaleLowerCase(),
-            moduleItem.name,
-          ].filter((val): val is string => Boolean(val && val.trim().length > 0));
+          [moduleItem.theme?.toLocaleLowerCase(), moduleItem.name].filter(
+            (val): val is string => Boolean(val && val.trim().length > 0),
+          );
 
         const getMatchedBindingRuleKey = (moduleItem: {
           name: string;
           theme: string | null;
         }) =>
           getBindingRuleKeyCandidates(moduleItem).find(
-            (candidate) => getBindingLimitMessage(candidate, pageCounts.fullPageCount) !== null,
+            (candidate) =>
+              getBindingLimitMessage(candidate, pageCounts.fullPageCount) !==
+              null,
           );
 
         const selectedBindingRuleKey = bindingModules[0]
-          ? getMatchedBindingRuleKey(bindingModules[0].module) ??
+          ? (getMatchedBindingRuleKey(bindingModules[0].module) ??
             bindingModules[0].module.theme?.toLocaleLowerCase() ??
-            bindingModules[0].module.name
+            bindingModules[0].module.name)
           : undefined;
 
         for (const moduleItem of bindingModules) {
@@ -404,9 +404,7 @@ export const configRouter = createTRPCRouter({
         );
         const campaignMetadata = campaign.metadata ?? {};
 
-        if (
-          campaignMetadata.kind !== "partner_campaign"
-        ) {
+        if (campaignMetadata.kind !== "partner_campaign") {
           throw new TRPCError({
             code: "NOT_FOUND",
             message: "Partner-Kampagne nicht gefunden",
@@ -420,7 +418,10 @@ export const configRouter = createTRPCRouter({
             message: "Promo code is no longer active",
           });
         }
-        if (campaign.expires_at && campaign.expires_at < Math.floor(Date.now() / 1000)) {
+        if (
+          campaign.expires_at &&
+          campaign.expires_at < Math.floor(Date.now() / 1000)
+        ) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Promo code has expired",
@@ -438,7 +439,8 @@ export const configRouter = createTRPCRouter({
         if (
           campaignPartnerUserId !== effectivePartnerClaims.partnerUserId ||
           campaignMetadata.templateId !== effectivePartnerClaims.templateId ||
-          campaignMetadata.snapshotBookId !== effectivePartnerClaims.snapshotBookId
+          campaignMetadata.snapshotBookId !==
+            effectivePartnerClaims.snapshotBookId
         ) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -498,7 +500,9 @@ export const configRouter = createTRPCRouter({
           ...new Set(
             additionalModules
               .map((moduleItem) => moduleItem.module?.name?.trim())
-              .filter((name): name is string => Boolean(name && name.length > 0)),
+              .filter((name): name is string =>
+                Boolean(name && name.length > 0),
+              ),
           ),
         ];
 
@@ -724,7 +728,8 @@ export const configRouter = createTRPCRouter({
         checkoutMetadata.partnerAddOnTotalAmount = String(
           partnerMetadata.partnerAddOnTotalAmount,
         );
-        checkoutMetadata.partnerAddOnModules = partnerMetadata.partnerAddOnModules;
+        checkoutMetadata.partnerAddOnModules =
+          partnerMetadata.partnerAddOnModules;
       }
 
       let partneredPaymentIntentData:
@@ -748,7 +753,9 @@ export const configRouter = createTRPCRouter({
             ? { application_fee_amount: configuredApplicationFeeCents }
             : {}),
         };
-        checkoutMetadata.partnerAppFeeCents = String(configuredApplicationFeeCents);
+        checkoutMetadata.partnerAppFeeCents = String(
+          configuredApplicationFeeCents,
+        );
       }
 
       if (unitAmountCents <= 0) {
@@ -863,7 +870,9 @@ export const configRouter = createTRPCRouter({
           }
         }
 
-        const orderPayload = encryptPayload({ orderKey: createdOrder.orderKey });
+        const orderPayload = encryptPayload({
+          orderKey: createdOrder.orderKey,
+        });
         return {
           redirect_url: `/payment/success?order_ref=${encodeURIComponent(
             orderPayload,
@@ -953,12 +962,9 @@ export const configRouter = createTRPCRouter({
 
       let checkout;
       try {
-        checkout = await stripeClient.checkout.sessions.create(
-          sessionParams,
-          {
-            idempotencyKey: `checkout_session_${createdPayment.id}`,
-          },
-        );
+        checkout = await stripeClient.checkout.sessions.create(sessionParams, {
+          idempotencyKey: `checkout_session_${createdPayment.id}`,
+        });
       } catch {
         await db.payment
           .update({
@@ -1029,6 +1035,7 @@ export const configRouter = createTRPCRouter({
             sessionUserId,
             bookSourceType: existingBook.sourceType,
             partnerClaimUserId: existingBook.partnerClaim?.userId,
+            isPublic: existingBook.isPublic,
           });
 
       if (!canAccessExistingBook) {
@@ -1067,7 +1074,11 @@ export const configRouter = createTRPCRouter({
 
       const userId = sessionUserId;
       const existingBookModuleIds = Array.from(
-        new Set((existingBook?.modules ?? []).map((moduleItem) => moduleItem.moduleId)),
+        new Set(
+          (existingBook?.modules ?? []).map(
+            (moduleItem) => moduleItem.moduleId,
+          ),
+        ),
       );
 
       const combinedModules = await db.module.findMany({

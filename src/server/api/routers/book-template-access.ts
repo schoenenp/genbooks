@@ -5,7 +5,7 @@ export function canToggleTemplateByRole(role: UserRole): boolean {
     role === "ADMIN" ||
     role === "STAFF" ||
     role === "MODERATOR" ||
-    role === "SPONSOR"
+    role === "SPONSOR" ||
+    role === "PARTNER"
   );
 }
-

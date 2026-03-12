@@ -247,6 +247,41 @@ export const bookRouter = createTRPCRouter({
         data: { isTemplate },
       });
     }),
+  togglePublic: protectedProcedure
+    .input(
+      z.object({
+        bookId: z.string(),
+        isPublic: z.boolean(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { bookId, isPublic } = input;
+      const user = ctx.session.user;
+      const targetBook = await ctx.db.book.findFirst({
+        where: { id: bookId, deletedAt: null },
+        select: { id: true, createdById: true, isTemplate: true },
+      });
+
+      if (!targetBook) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Book not found" });
+      }
+
+      if (!targetBook.isTemplate) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only templates can be made public",
+        });
+      }
+
+      if (!canToggleTemplateByRole(user.role)) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      return ctx.db.book.update({
+        where: { id: bookId },
+        data: { isPublic },
+      });
+    }),
   getById: publicProcedure
     .input(
       z.object({
@@ -279,6 +314,10 @@ export const bookRouter = createTRPCRouter({
       }
 
       if (book.sourceType !== "PARTNER_TEMPLATE") {
+        return book;
+      }
+
+      if (book.isPublic) {
         return book;
       }
 
@@ -416,7 +455,10 @@ export const bookRouter = createTRPCRouter({
       });
 
       if (!template) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Template not found" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Template not found",
+        });
       }
 
       return ctx.db.book.create({

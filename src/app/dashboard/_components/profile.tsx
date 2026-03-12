@@ -87,9 +87,9 @@ function formatSubscriptionOption(option: {
   const amount =
     typeof option.unitAmount === "number" && option.currency
       ? new Intl.NumberFormat("de-DE", {
-        style: "currency",
-        currency: option.currency.toUpperCase(),
-      }).format(option.unitAmount / 100)
+          style: "currency",
+          currency: option.currency.toUpperCase(),
+        }).format(option.unitAmount / 100)
       : "Preis";
 
   const intervalLabel =
@@ -136,7 +136,7 @@ function SubscriptionLockedSection(props: {
       <div
         className={
           props.locked
-            ? "pointer-events-none select-none blur-[2px] opacity-60"
+            ? "pointer-events-none opacity-60 blur-[2px] select-none"
             : undefined
         }
       >
@@ -169,7 +169,9 @@ export default function ProfileSection(user: SessionUser) {
   const [campaignUpdateNotice, setCampaignUpdateNotice] =
     useState<CampaignUpdateNotice | null>(null);
   const [campaignLinkCopyFeedback, setCampaignLinkCopyFeedback] = useState("");
-  const [copyingCampaignId, setCopyingCampaignId] = useState<string | null>(null);
+  const [copyingCampaignId, setCopyingCampaignId] = useState<string | null>(
+    null,
+  );
   const searchParams = useSearchParams();
   const utils = api.useUtils();
 
@@ -216,11 +218,13 @@ export default function ProfileSection(user: SessionUser) {
       },
     });
 
-  const openSubscriptionPortal = api.partner.openSubscriptionPortal.useMutation({
-    onSuccess: (data) => {
-      window.location.href = data.portalUrl;
+  const openSubscriptionPortal = api.partner.openSubscriptionPortal.useMutation(
+    {
+      onSuccess: (data) => {
+        window.location.href = data.portalUrl;
+      },
     },
-  });
+  );
 
   const updateCampaign = api.partner.updateCampaign.useMutation({
     onMutate: () => {
@@ -234,15 +238,15 @@ export default function ProfileSection(user: SessionUser) {
       setCampaignUpdateNotice(
         isRotatedCampaign
           ? {
-            variant: "rotated",
-            message:
-              "Kampagne wurde mit neuen Limits neu erstellt. Bitte den neuen Link verwenden.",
-            token: data.token,
-          }
+              variant: "rotated",
+              message:
+                "Kampagne wurde mit neuen Limits neu erstellt. Bitte den neuen Link verwenden.",
+              token: data.token,
+            }
           : {
-            variant: "updated",
-            message: "Kampagnen-Einstellungen wurden gespeichert.",
-          },
+              variant: "updated",
+              message: "Kampagnen-Einstellungen wurden gespeichert.",
+            },
       );
     },
   });
@@ -295,7 +299,7 @@ export default function ProfileSection(user: SessionUser) {
   const hasActiveSubscription = subscription?.isActive ?? false;
   const role = partnerStatus.data?.role ?? "USER";
   const roleLabel =
-    role === "SPONSOR"
+    role === "PARTNER" || role === "SPONSOR"
       ? "Partner-Konto"
       : role === "ADMIN"
         ? "Administrator"
@@ -303,12 +307,14 @@ export default function ProfileSection(user: SessionUser) {
           ? "Team"
           : "Standardkonto";
   const isConnectReady = partnerStatus.data?.onboardingComplete === true;
-  const subscriptionLabel = !partnerStatus.data?.subscription.requiredPriceConfigured
+  const subscriptionLabel = !partnerStatus.data?.subscription
+    .requiredPriceConfigured
     ? "Nicht konfiguriert"
     : hasActiveSubscription
       ? "Aktiv"
       : "Inaktiv";
   const hasPartnerAccess =
+    partnerStatus.data?.role === "PARTNER" ||
     partnerStatus.data?.role === "SPONSOR" ||
     partnerStatus.data?.role === "ADMIN" ||
     partnerStatus.data?.role === "STAFF";
@@ -389,7 +395,9 @@ export default function ProfileSection(user: SessionUser) {
   }, [campaignItems]);
   const maxTopCampaignRedeemed = Math.max(
     1,
-    ...campaignOverview.topCampaigns.map((campaign) => campaign.redemptionValue),
+    ...campaignOverview.topCampaigns.map(
+      (campaign) => campaign.redemptionValue,
+    ),
   );
 
   const setCampaignEditField = (
@@ -433,10 +441,11 @@ export default function ProfileSection(user: SessionUser) {
 
   return (
     <div className="content-card rise-in relative flex flex-1 flex-col gap-6 p-4 lg:min-h-96">
-      <div className="content-card border border-pirrot-blue-200 bg-gradient-to-br from-white to-pirrot-blue-50/50 p-5">
+      <div className="content-card border-pirrot-blue-200 to-pirrot-blue-50/50 border bg-gradient-to-br from-white p-5">
         <h2 className="text-2xl font-black uppercase">Profil</h2>
         <p className="text-info-700 mt-2 text-sm">
-          Persönliche Kontodaten und Ihr aktueller Partner-Status auf einen Blick.
+          Persönliche Kontodaten und Ihr aktueller Partner-Status auf einen
+          Blick.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -479,9 +488,13 @@ export default function ProfileSection(user: SessionUser) {
         <div className="content-card p-4">
           <h3 className="text-xl font-bold">Partner-Bereich</h3>
           <p className="text-info-700 mt-2 text-sm">
-            Eingehende Partner-Bestellungen und Archiv finden Sie jetzt im eigenen Bereich.
+            Eingehende Partner-Bestellungen und Archiv finden Sie jetzt im
+            eigenen Bereich.
           </p>
-          <a href="/dashboard?view=partner" className="btn-soft mt-3 inline-flex px-3 py-2 text-sm">
+          <a
+            href="/dashboard?view=partner"
+            className="btn-soft mt-3 inline-flex px-3 py-2 text-sm"
+          >
             Zum Partner-Bereich
           </a>
         </div>
@@ -519,7 +532,7 @@ export default function ProfileSection(user: SessionUser) {
                   Laufzeit bis:{" "}
                   {formatUnixDate(
                     partnerStatus.data?.subscription.currentPeriodEnd ??
-                    undefined,
+                      undefined,
                   )}
                 </p>
                 <button
@@ -587,7 +600,10 @@ export default function ProfileSection(user: SessionUser) {
               </p>
               <>
                 <div className="flex flex-col gap-1">
-                  <label htmlFor="connect-country" className="text-sm font-semibold">
+                  <label
+                    htmlFor="connect-country"
+                    className="text-sm font-semibold"
+                  >
                     Land für Stripe Connect
                   </label>
                   <select
@@ -612,7 +628,9 @@ export default function ProfileSection(user: SessionUser) {
                 </div>
                 <button
                   type="button"
-                  disabled={startOnboarding.isPending || finalizeOnboarding.isPending}
+                  disabled={
+                    startOnboarding.isPending || finalizeOnboarding.isPending
+                  }
                   onClick={() =>
                     startOnboarding.mutate({
                       country: connectCountry,
@@ -641,10 +659,11 @@ export default function ProfileSection(user: SessionUser) {
       ) : (
         <div className="flex flex-col gap-6">
           <div
-            className={`field-shell p-4 ${hasActiveSubscription
+            className={`field-shell p-4 ${
+              hasActiveSubscription
                 ? "bg-pirrot-green-100/30"
                 : "bg-pirrot-blue-100/30"
-              }`}
+            }`}
           >
             <h3 className="text-xl font-bold">
               {hasActiveSubscription
@@ -687,7 +706,7 @@ export default function ProfileSection(user: SessionUser) {
                   Laufzeit bis:{" "}
                   {formatUnixDate(
                     partnerStatus.data?.subscription.currentPeriodEnd ??
-                    undefined,
+                      undefined,
                   )}
                 </p>
                 <button
@@ -843,8 +862,7 @@ export default function ProfileSection(user: SessionUser) {
                   </div>
                   <div className="field-shell flex flex-col gap-1 p-3 text-sm">
                     <p className="text-info-700 inline-flex items-center gap-2">
-                      <TrendingUp size={14} />
-                      Ø Einlösungen je Kampagne
+                      <TrendingUp size={14} />Ø Einlösungen je Kampagne
                     </p>
                     <p className="text-2xl font-black">
                       {(
@@ -873,7 +891,9 @@ export default function ProfileSection(user: SessionUser) {
                 </div>
 
                 <div className="field-shell flex flex-col gap-3 p-3 text-sm">
-                  <p className="font-semibold">Top-Kampagnen nach Einlösungen</p>
+                  <p className="font-semibold">
+                    Top-Kampagnen nach Einlösungen
+                  </p>
                   {campaignOverview.topCampaigns.length === 0 ? (
                     <p className="text-info-700 text-xs">
                       Noch keine Einlösungen vorhanden.
@@ -884,14 +904,17 @@ export default function ProfileSection(user: SessionUser) {
                         const barPercent = Math.max(
                           8,
                           Math.round(
-                            (campaign.redemptionValue / maxTopCampaignRedeemed) *
-                            100,
+                            (campaign.redemptionValue /
+                              maxTopCampaignRedeemed) *
+                              100,
                           ),
                         );
                         return (
                           <div key={campaign.id} className="space-y-1">
                             <div className="flex items-center justify-between text-xs">
-                              <span className="font-semibold">{campaign.code}</span>
+                              <span className="font-semibold">
+                                {campaign.code}
+                              </span>
                               <span className="text-info-700">
                                 {campaign.redemptionValue} aktive Einlösungen
                               </span>
@@ -921,7 +944,10 @@ export default function ProfileSection(user: SessionUser) {
                   ) : (
                     <ul className="grid gap-2 md:grid-cols-2">
                       {campaignOverview.expiringSoon.map((campaign) => (
-                        <li key={campaign.id} className="bg-white/55 rounded p-2">
+                        <li
+                          key={campaign.id}
+                          className="rounded bg-white/55 p-2"
+                        >
                           <p className="font-semibold">{campaign.code}</p>
                           <p className="text-info-700 text-xs">
                             {campaign.daysToExpire === 0
@@ -931,7 +957,7 @@ export default function ProfileSection(user: SessionUser) {
                           <p className="text-info-700 text-xs">
                             Einlösungen: {campaign.timesRedeemed}
                             {typeof campaign.activeRedemptions === "number" &&
-                              typeof campaign.canceledRedemptions === "number"
+                            typeof campaign.canceledRedemptions === "number"
                               ? ` (aktiv ${campaign.activeRedemptions}, storniert ${campaign.canceledRedemptions})`
                               : ""}
                             {typeof campaign.maxRedemptions === "number"
@@ -1116,10 +1142,11 @@ export default function ProfileSection(user: SessionUser) {
             )}
             {campaignUpdateNotice && (
               <div
-                className={`rounded border p-3 text-sm ${campaignUpdateNotice.variant === "rotated"
+                className={`rounded border p-3 text-sm ${
+                  campaignUpdateNotice.variant === "rotated"
                     ? "border-pirrot-green-300/50 bg-pirrot-green-100/50"
                     : "border-pirrot-blue-300/50 bg-pirrot-blue-100/50"
-                  }`}
+                }`}
               >
                 <p>
                   <b>
@@ -1179,7 +1206,7 @@ export default function ProfileSection(user: SessionUser) {
                       {campaign.maxRedemptions ?? "Unbegrenzt"}
                     </p>
                     {typeof campaign.activeRedemptions === "number" &&
-                      typeof campaign.canceledRedemptions === "number" ? (
+                    typeof campaign.canceledRedemptions === "number" ? (
                       <p>
                         <b>Aktiv:</b> {campaign.activeRedemptions}{" "}
                         <b className="ml-2">Storniert:</b>{" "}
@@ -1302,15 +1329,15 @@ export default function ProfileSection(user: SessionUser) {
                               maxRedemptions:
                                 Number.parseInt(
                                   campaignEdits[campaign.id]?.maxRedemptions ??
-                                  String(campaign.maxRedemptions ?? 1),
+                                    String(campaign.maxRedemptions ?? 1),
                                   10,
                                 ) || 1,
                               validForDays:
                                 Number.parseInt(
                                   campaignEdits[campaign.id]?.validForDays ??
-                                  inferValidDaysFromExpiresAt(
-                                    campaign.expiresAt,
-                                  ),
+                                    inferValidDaysFromExpiresAt(
+                                      campaign.expiresAt,
+                                    ),
                                   10,
                                 ) || 1,
                             })

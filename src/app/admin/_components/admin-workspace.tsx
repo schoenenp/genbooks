@@ -70,7 +70,7 @@ function getStatusColor(status: string): string {
 function Toast(props: { message: string; type: "success" | "error" }) {
   return (
     <div
-      className={`fixed bottom-4 right-4 z-50 animate-slide-up rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
+      className={`animate-slide-up fixed right-4 bottom-4 z-50 rounded-lg px-4 py-3 text-sm font-medium shadow-lg ${
         props.type === "success"
           ? "bg-emerald-600 text-white"
           : "bg-red-600 text-white"
@@ -82,7 +82,10 @@ function Toast(props: { message: string; type: "success" | "error" }) {
 }
 
 function FeedbackToast() {
-  const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+  const [message, setMessage] = useState<{
+    text: string;
+    type: "success" | "error";
+  } | null>(null);
 
   const clearMessage = useCallback(() => {
     setTimeout(() => setMessage(null), 3000);
@@ -90,18 +93,22 @@ function FeedbackToast() {
 
   return (
     <>
-      <MutationFeedbackBridge onMessage={(msg) => {
-        setMessage(msg);
-        clearMessage();
-      }} />
+      <MutationFeedbackBridge
+        onMessage={(msg) => {
+          setMessage(msg);
+          clearMessage();
+        }}
+      />
       {message && <Toast message={message.text} type={message.type} />}
     </>
   );
 }
 
-function MutationFeedbackBridge(props: { onMessage: (msg: { text: string; type: "success" | "error" }) => void }) {
+function MutationFeedbackBridge(props: {
+  onMessage: (msg: { text: string; type: "success" | "error" }) => void;
+}) {
   const utils = api.useUtils();
-  
+
   api.partner.adjustPartnerOrderAmount.useMutation({
     onSuccess: async () => {
       await utils.partner.listAdminPartnerOrders.invalidate();
@@ -187,7 +194,9 @@ function MutationFeedbackBridge(props: { onMessage: (msg: { text: string; type: 
 
 function StripeCouponsPanel() {
   const [code, setCode] = useState("SPRING40");
-  const [discountType, setDiscountType] = useState<"PERCENT" | "AMOUNT">("PERCENT");
+  const [discountType, setDiscountType] = useState<"PERCENT" | "AMOUNT">(
+    "PERCENT",
+  );
   const [percentOff, setPercentOff] = useState("40");
   const [amountOff, setAmountOff] = useState("10");
   const [maxRedemptions, setMaxRedemptions] = useState("100");
@@ -208,7 +217,10 @@ function StripeCouponsPanel() {
       discount:
         discountType === "PERCENT"
           ? { type: "PERCENT", percentOff: Number(percentOff) }
-          : { type: "AMOUNT", amountOffCents: Math.round(Number(amountOff) * 100) },
+          : {
+              type: "AMOUNT",
+              amountOffCents: Math.round(Number(amountOff) * 100),
+            },
     });
     setCode("");
   };
@@ -226,7 +238,7 @@ function StripeCouponsPanel() {
             Aktualisieren
           </button>
         </div>
-        <p className="mt-1 text-xs text-info-700">
+        <p className="text-info-700 mt-1 text-xs">
           Eigene Plattform-Coupons für Aktionen und Deals erstellen.
         </p>
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -301,7 +313,7 @@ function StripeCouponsPanel() {
       <div className="content-card overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-info-50 text-xs uppercase text-info-700">
+            <thead className="bg-info-50 text-info-700 text-xs uppercase">
               <tr>
                 <th className="px-4 py-3 font-semibold">Code</th>
                 <th className="px-4 py-3 font-semibold">Rabatt</th>
@@ -311,7 +323,7 @@ function StripeCouponsPanel() {
                 <th className="px-4 py-3 font-semibold">Aktion</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-info-100">
+            <tbody className="divide-info-100 divide-y">
               {coupons.isLoading ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center">
@@ -320,7 +332,10 @@ function StripeCouponsPanel() {
                 </tr>
               ) : coupons.data?.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-info-600">
+                  <td
+                    colSpan={6}
+                    className="text-info-600 px-4 py-8 text-center"
+                  >
                     Keine Coupons vorhanden
                   </td>
                 </tr>
@@ -337,7 +352,9 @@ function StripeCouponsPanel() {
                     </td>
                     <td className="px-4 py-3">
                       {coupon.timesRedeemed}
-                      {coupon.maxRedemptions ? ` / ${coupon.maxRedemptions}` : ""}
+                      {coupon.maxRedemptions
+                        ? ` / ${coupon.maxRedemptions}`
+                        : ""}
                     </td>
                     <td className="px-4 py-3">
                       {coupon.expiresAt
@@ -382,16 +399,18 @@ function StripeCouponsPanel() {
 }
 
 function PartnerCodesPanel() {
-  const [activeFilter, setActiveFilter] = useState<"all" | "active" | "inactive">("all");
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<
+    "all" | "active" | "inactive"
+  >("all");
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(
+    null,
+  );
   const [rotateCode, setRotateCode] = useState("");
   const [rotateMaxRedemptions, setRotateMaxRedemptions] = useState("10");
   const [rotateValidForDays, setRotateValidForDays] = useState("90");
 
   const campaigns = api.partner.listAdminPartnerCodes.useQuery(
-    activeFilter === "all"
-      ? undefined
-      : { active: activeFilter === "active" },
+    activeFilter === "all" ? undefined : { active: activeFilter === "active" },
     { staleTime: 30000 },
   );
 
@@ -399,7 +418,8 @@ function PartnerCodesPanel() {
   const rotate = api.partner.rotateAdminPartnerCode.useMutation();
 
   const selected = useMemo(
-    () => campaigns.data?.find((item) => item.id === selectedCampaignId) ?? null,
+    () =>
+      campaigns.data?.find((item) => item.id === selectedCampaignId) ?? null,
     [campaigns.data, selectedCampaignId],
   );
 
@@ -448,10 +468,12 @@ function PartnerCodesPanel() {
               <LoadingSpinner />
             </div>
           ) : campaigns.data?.length === 0 ? (
-            <div className="p-8 text-center text-info-600">Keine Partner-Codes vorhanden</div>
+            <div className="text-info-600 p-8 text-center">
+              Keine Partner-Codes vorhanden
+            </div>
           ) : (
             <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-info-50 text-xs uppercase text-info-700">
+              <thead className="bg-info-50 text-info-700 sticky top-0 text-xs uppercase">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Code</th>
                   <th className="px-4 py-3 font-semibold">Partner</th>
@@ -459,23 +481,26 @@ function PartnerCodesPanel() {
                   <th className="px-4 py-3 font-semibold">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-info-100">
+              <tbody className="divide-info-100 divide-y">
                 {campaigns.data!.map((campaign) => (
                   <tr
                     key={campaign.id}
-                    className={`cursor-pointer hover:bg-info-50/50 ${
-                      selectedCampaignId === campaign.id ? "bg-pirrot-blue-50" : ""
+                    className={`hover:bg-info-50/50 cursor-pointer ${
+                      selectedCampaignId === campaign.id
+                        ? "bg-pirrot-blue-50"
+                        : ""
                     }`}
                     onClick={() => setSelectedCampaignId(campaign.id)}
                   >
                     <td className="px-4 py-3 font-medium">
                       {campaign.promotionCode ?? campaign.promotionCodeId}
                     </td>
-                    <td className="px-4 py-3 text-info-700">
+                    <td className="text-info-700 px-4 py-3">
                       {campaign.partnerUser?.email?.slice(0, 20) ?? "-"}
                     </td>
                     <td className="px-4 py-3">
-                      {campaign.timesRedeemed} / {campaign.maxRedemptions ?? "-"}
+                      {campaign.timesRedeemed} /{" "}
+                      {campaign.maxRedemptions ?? "-"}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -499,13 +524,17 @@ function PartnerCodesPanel() {
           {selected ? (
             <div className="space-y-3">
               <h4 className="text-sm font-black uppercase">Code Verwaltung</h4>
-              <div className="rounded bg-info-50 p-3">
-                <p className="text-xs text-info-700">Code</p>
+              <div className="bg-info-50 rounded p-3">
+                <p className="text-info-700 text-xs">Code</p>
                 <p className="font-semibold">{selected.promotionCode ?? "-"}</p>
-                <p className="mt-2 text-xs text-info-700">Partner</p>
-                <p className="font-semibold">{selected.partnerUser?.email ?? "-"}</p>
-                <p className="mt-2 text-xs text-info-700">Erstellt</p>
-                <p className="font-semibold">{formatDate(selected.createdAt)}</p>
+                <p className="text-info-700 mt-2 text-xs">Partner</p>
+                <p className="font-semibold">
+                  {selected.partnerUser?.email ?? "-"}
+                </p>
+                <p className="text-info-700 mt-2 text-xs">Erstellt</p>
+                <p className="font-semibold">
+                  {formatDate(selected.createdAt)}
+                </p>
               </div>
 
               <button
@@ -522,8 +551,10 @@ function PartnerCodesPanel() {
                 {selected.promotionActive ? "Deaktivieren" : "Aktivieren"}
               </button>
 
-              <div className="border-t border-info-200 pt-3">
-                <p className="text-xs font-semibold uppercase text-info-700">Code rotieren</p>
+              <div className="border-info-200 border-t pt-3">
+                <p className="text-info-700 text-xs font-semibold uppercase">
+                  Code rotieren
+                </p>
                 <input
                   value={rotateCode}
                   onChange={(e) => setRotateCode(e.target.value.toUpperCase())}
@@ -549,7 +580,8 @@ function PartnerCodesPanel() {
                   onClick={() =>
                     rotate.mutate({
                       campaignId: selected.id,
-                      promoCode: rotateCode.trim().length > 0 ? rotateCode : undefined,
+                      promoCode:
+                        rotateCode.trim().length > 0 ? rotateCode : undefined,
                       maxRedemptions: Number(rotateMaxRedemptions),
                       validForDays: Number(rotateValidForDays),
                     })
@@ -560,7 +592,9 @@ function PartnerCodesPanel() {
               </div>
             </div>
           ) : (
-            <p className="text-sm text-info-700">Bitte links einen Partner-Code auswählen.</p>
+            <p className="text-info-700 text-sm">
+              Bitte links einen Partner-Code auswählen.
+            </p>
           )}
         </div>
       </div>
@@ -594,11 +628,16 @@ function PartnerUsersPanel() {
     <section className="space-y-4">
       <div className="content-card flex items-center justify-between p-4">
         <div>
-          <h3 className="text-lg font-black uppercase">Partner und User Übersicht</h3>
+          <h3 className="text-lg font-black uppercase">
+            Partner und User Übersicht
+          </h3>
           {users.data ? (
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
               {Object.entries(users.data.roleCounts).map(([role, count]) => (
-                <span key={role} className="rounded bg-white/70 px-2 py-1 font-semibold">
+                <span
+                  key={role}
+                  className="rounded bg-white/70 px-2 py-1 font-semibold"
+                >
                   {role}: {count}
                 </span>
               ))}
@@ -624,11 +663,11 @@ function PartnerUsersPanel() {
         {users.isLoading ? (
           <LoadingSpinner />
         ) : filteredUsers.length === 0 ? (
-          <p className="text-center text-info-600">Keine Benutzer gefunden</p>
+          <p className="text-info-600 text-center">Keine Benutzer gefunden</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-info-50 text-xs uppercase text-info-700">
+              <thead className="bg-info-50 text-info-700 text-xs uppercase">
                 <tr>
                   <th className="px-4 py-3 font-semibold">E-Mail</th>
                   <th className="px-4 py-3 font-semibold">Name</th>
@@ -637,13 +676,17 @@ function PartnerUsersPanel() {
                   <th className="px-4 py-3 font-semibold">Aktion</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-info-100">
+              <tbody className="divide-info-100 divide-y">
                 {filteredUsers.map((entry) => {
                   const nextRole = roleDraft[entry.id] ?? entry.role;
                   return (
                     <tr key={entry.id} className="hover:bg-info-50/50">
-                      <td className="px-4 py-3 font-medium">{entry.email ?? "-"}</td>
-                      <td className="px-4 py-3 text-info-700">{entry.name ?? "-"}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {entry.email ?? "-"}
+                      </td>
+                      <td className="text-info-700 px-4 py-3">
+                        {entry.name ?? "-"}
+                      </td>
                       <td className="px-4 py-3">
                         <select
                           value={nextRole}
@@ -655,26 +698,43 @@ function PartnerUsersPanel() {
                           }
                           className="field-shell px-2 py-1 text-xs"
                         >
-                          {["ADMIN", "STAFF", "MODERATOR", "USER", "SPONSOR"].map((role) => (
+                          {[
+                            "ADMIN",
+                            "STAFF",
+                            "MODERATOR",
+                            "USER",
+                            "SPONSOR",
+                            "PARTNER",
+                          ].map((role) => (
                             <option key={role} value={role}>
                               {role}
                             </option>
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-3 text-xs text-info-700">
+                      <td className="text-info-700 px-4 py-3 text-xs">
                         <div>Kampagnen: {entry.campaignCount}</div>
-                        <div>Partner-Orders: {entry._count.partnerOrdersAsPartner}</div>
+                        <div>
+                          Partner-Orders: {entry._count.partnerOrdersAsPartner}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <button
                           type="button"
                           className="btn-soft px-3 py-1.5 text-xs"
-                          disabled={setRole.isPending || nextRole === entry.role}
+                          disabled={
+                            setRole.isPending || nextRole === entry.role
+                          }
                           onClick={() =>
                             setRole.mutate({
                               userId: entry.id,
-                              role: nextRole as "ADMIN" | "STAFF" | "MODERATOR" | "USER" | "SPONSOR",
+                              role: nextRole as
+                                | "ADMIN"
+                                | "STAFF"
+                                | "MODERATOR"
+                                | "USER"
+                                | "SPONSOR"
+                                | "PARTNER",
                             })
                           }
                         >
@@ -748,11 +808,15 @@ function SalesPanel() {
               </div>
               <div className="flex justify-between">
                 <span className="text-info-700">Angepasste Bestellungen</span>
-                <span className="font-semibold">{sales.data.adjustedOrderCount}</span>
+                <span className="font-semibold">
+                  {sales.data.adjustedOrderCount}
+                </span>
               </div>
-              <div className="flex justify-between border-t border-info-200 pt-2">
+              <div className="border-info-200 flex justify-between border-t pt-2">
                 <span className="text-info-700">Umsatz gesamt</span>
-                <span className="font-bold">{formatEuro(sales.data.totals.grandTotalAmount)}</span>
+                <span className="font-bold">
+                  {formatEuro(sales.data.totals.grandTotalAmount)}
+                </span>
               </div>
             </div>
           ) : null}
@@ -774,29 +838,35 @@ function SalesPanel() {
           ) : null}
         </div>
 
-        <div className="content-card lg:col-span-2 p-4">
+        <div className="content-card p-4 lg:col-span-2">
           <h4 className="text-sm font-black uppercase">Top Partner</h4>
           {sales.data?.topPartners && sales.data.topPartners.length > 0 ? (
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-info-50 text-xs uppercase text-info-700">
+                <thead className="bg-info-50 text-info-700 text-xs uppercase">
                   <tr>
                     <th className="px-4 py-2 font-semibold">Partner</th>
                     <th className="px-4 py-2 font-semibold">Bestellungen</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-info-100">
+                <tbody className="divide-info-100 divide-y">
                   {sales.data.topPartners.map((entry) => (
                     <tr key={entry.partnerUserId}>
-                      <td className="px-4 py-2">{entry.partner?.email ?? entry.partnerUserId}</td>
-                      <td className="px-4 py-2 font-medium">{entry.orderCount}</td>
+                      <td className="px-4 py-2">
+                        {entry.partner?.email ?? entry.partnerUserId}
+                      </td>
+                      <td className="px-4 py-2 font-medium">
+                        {entry.orderCount}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="mt-3 text-info-600">Keine Daten für diesen Zeitraum</p>
+            <p className="text-info-600 mt-3">
+              Keine Daten für diesen Zeitraum
+            </p>
           )}
         </div>
       </div>
@@ -805,9 +875,12 @@ function SalesPanel() {
 }
 
 function PlannerModulesPanel() {
-  const overview = api.partner.getAdminPlannerModuleOverview.useQuery(undefined, {
-    staleTime: 60000,
-  });
+  const overview = api.partner.getAdminPlannerModuleOverview.useQuery(
+    undefined,
+    {
+      staleTime: 60000,
+    },
+  );
 
   return (
     <section className="space-y-4">
@@ -831,19 +904,27 @@ function PlannerModulesPanel() {
             <div className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-info-700">Templates</span>
-                <span className="font-semibold">{overview.data.totalTemplates}</span>
+                <span className="font-semibold">
+                  {overview.data.totalTemplates}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-info-700">Featured Templates</span>
-                <span className="font-semibold">{overview.data.featuredTemplates}</span>
+                <span className="font-semibold">
+                  {overview.data.featuredTemplates}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-info-700">Planer gesamt</span>
-                <span className="font-semibold">{overview.data.totalPlanners}</span>
+                <span className="font-semibold">
+                  {overview.data.totalPlanners}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-info-700">Module gesamt</span>
-                <span className="font-semibold">{overview.data.totalModules}</span>
+                <span className="font-semibold">
+                  {overview.data.totalModules}
+                </span>
               </div>
             </div>
           ) : null}
@@ -865,18 +946,18 @@ function PlannerModulesPanel() {
           ) : null}
         </div>
 
-        <div className="content-card lg:col-span-2 p-4">
+        <div className="content-card p-4 lg:col-span-2">
           <h4 className="text-sm font-black uppercase">Module nach Typ</h4>
           {overview.data && overview.data.modulesByType.length > 0 ? (
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-info-50 text-xs uppercase text-info-700">
+                <thead className="bg-info-50 text-info-700 text-xs uppercase">
                   <tr>
                     <th className="px-4 py-2 font-semibold">Typ</th>
                     <th className="px-4 py-2 font-semibold">Anzahl</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-info-100">
+                <tbody className="divide-info-100 divide-y">
                   {overview.data.modulesByType.map((entry) => (
                     <tr key={entry.typeId}>
                       <td className="px-4 py-2">{entry.typeName}</td>
@@ -887,7 +968,7 @@ function PlannerModulesPanel() {
               </table>
             </div>
           ) : (
-            <p className="mt-3 text-info-600">Keine Module vorhanden</p>
+            <p className="text-info-600 mt-3">Keine Module vorhanden</p>
           )}
         </div>
       </div>
@@ -904,7 +985,9 @@ function FulfillmentPanel() {
     | "RELEASED_TO_PRODUCTION"
     | "FULFILLED"
   >("SUBMITTED_BY_SCHOOL");
-  const [adjustMode, setAdjustMode] = useState<"FIXED" | "PERCENT_DISCOUNT">("PERCENT_DISCOUNT");
+  const [adjustMode, setAdjustMode] = useState<"FIXED" | "PERCENT_DISCOUNT">(
+    "PERCENT_DISCOUNT",
+  );
   const [percentValue, setPercentValue] = useState("40");
   const [fixedValue, setFixedValue] = useState("600");
   const [reason, setReason] = useState("Partner Deal");
@@ -917,22 +1000,27 @@ function FulfillmentPanel() {
 
   const adjustOrder = api.partner.adjustPartnerOrderAmount.useMutation();
   const confirmOrder = api.partner.adminConfirmPartnerOrder.useMutation();
-  const releaseOrder = api.partner.adminReleasePartnerOrderToProduction.useMutation();
+  const releaseOrder =
+    api.partner.adminReleasePartnerOrderToProduction.useMutation();
 
   const selectedOrder = useMemo(
     () => orders.data?.find((order) => order.id === selectedOrderId) ?? null,
     [orders.data, selectedOrderId],
   );
 
-  const isBusy = adjustOrder.isPending || confirmOrder.isPending || releaseOrder.isPending;
+  const isBusy =
+    adjustOrder.isPending || confirmOrder.isPending || releaseOrder.isPending;
 
   return (
     <section className="space-y-4">
       <div className="content-card flex items-center justify-between p-4">
         <div>
-          <h3 className="text-lg font-black uppercase">Fulfillment Bestellungen</h3>
-          <p className="mt-1 text-xs text-info-700">
-            Admin und Staff können Beträge anpassen, bestätigen und an die Produktion freigeben.
+          <h3 className="text-lg font-black uppercase">
+            Fulfillment Bestellungen
+          </h3>
+          <p className="text-info-700 mt-1 text-xs">
+            Admin und Staff können Beträge anpassen, bestätigen und an die
+            Produktion freigeben.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {[
@@ -961,7 +1049,7 @@ function FulfillmentPanel() {
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
                   activeStatus === status
                     ? "bg-pirrot-blue-100 text-pirrot-blue-900"
-                    : "bg-white/60 text-info-800"
+                    : "text-info-800 bg-white/60"
                 }`}
               >
                 {getStatusLabel(status)}
@@ -985,10 +1073,12 @@ function FulfillmentPanel() {
               <LoadingSpinner />
             </div>
           ) : orders.data?.length === 0 ? (
-            <div className="p-8 text-center text-info-600">Keine Bestellungen in diesem Status</div>
+            <div className="text-info-600 p-8 text-center">
+              Keine Bestellungen in diesem Status
+            </div>
           ) : (
             <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-info-50 text-xs uppercase text-info-700">
+              <thead className="bg-info-50 text-info-700 sticky top-0 text-xs uppercase">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Buch</th>
                   <th className="px-4 py-3 font-semibold">Partner</th>
@@ -996,11 +1086,11 @@ function FulfillmentPanel() {
                   <th className="px-4 py-3 font-semibold">Betrag</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-info-100">
+              <tbody className="divide-info-100 divide-y">
                 {orders.data!.map((order) => (
                   <tr
                     key={order.id}
-                    className={`cursor-pointer hover:bg-info-50/50 ${
+                    className={`hover:bg-info-50/50 cursor-pointer ${
                       selectedOrderId === order.id ? "bg-pirrot-blue-50" : ""
                     }`}
                     onClick={() => setSelectedOrderId(order.id)}
@@ -1008,7 +1098,7 @@ function FulfillmentPanel() {
                     <td className="px-4 py-3 font-medium">
                       {order.book?.name ?? "Partner-Bestellung"}
                     </td>
-                    <td className="px-4 py-3 text-info-700">
+                    <td className="text-info-700 px-4 py-3">
                       {order.partnerUser?.email?.slice(0, 25) ?? "-"}
                     </td>
                     <td className="px-4 py-3">
@@ -1031,14 +1121,23 @@ function FulfillmentPanel() {
         <div className="content-card p-4">
           {selectedOrder ? (
             <div className="space-y-3">
-              <h4 className="text-sm font-black uppercase">Bestellung steuern</h4>
-              <div className="rounded bg-info-50 p-3">
-                <p className="text-xs text-info-700">Aktueller Betrag</p>
-                <p className="text-xl font-bold">{formatEuro(selectedOrder.totals.grandTotalAmount)}</p>
+              <h4 className="text-sm font-black uppercase">
+                Bestellung steuern
+              </h4>
+              <div className="bg-info-50 rounded p-3">
+                <p className="text-info-700 text-xs">Aktueller Betrag</p>
+                <p className="text-xl font-bold">
+                  {formatEuro(selectedOrder.totals.grandTotalAmount)}
+                </p>
                 {selectedOrder.adminSettlementAdjustment && (
                   <p className="mt-1 text-xs text-emerald-700">
-                    Angepasst: {formatEuro(
-                      (selectedOrder.adminSettlementAdjustment as { finalGrandTotalAmount?: number }).finalGrandTotalAmount ?? 0,
+                    Angepasst:{" "}
+                    {formatEuro(
+                      (
+                        selectedOrder.adminSettlementAdjustment as {
+                          finalGrandTotalAmount?: number;
+                        }
+                      ).finalGrandTotalAmount ?? 0,
                     )}
                   </p>
                 )}
@@ -1133,9 +1232,13 @@ function FulfillmentPanel() {
                   type="button"
                   disabled={isBusy}
                   className="btn-soft w-full px-3 py-2 disabled:opacity-60"
-                  onClick={() => confirmOrder.mutate({ partnerOrderId: selectedOrder.id })}
+                  onClick={() =>
+                    confirmOrder.mutate({ partnerOrderId: selectedOrder.id })
+                  }
                 >
-                  {confirmOrder.isPending ? "Bestätige..." : "Als Plattform bestätigen"}
+                  {confirmOrder.isPending
+                    ? "Bestätige..."
+                    : "Als Plattform bestätigen"}
                 </button>
               ) : null}
 
@@ -1144,14 +1247,20 @@ function FulfillmentPanel() {
                   type="button"
                   disabled={isBusy}
                   className="btn-soft w-full px-3 py-2 disabled:opacity-60"
-                  onClick={() => releaseOrder.mutate({ partnerOrderId: selectedOrder.id })}
+                  onClick={() =>
+                    releaseOrder.mutate({ partnerOrderId: selectedOrder.id })
+                  }
                 >
-                  {releaseOrder.isPending ? "Freigabe..." : "Für Produktion freigeben"}
+                  {releaseOrder.isPending
+                    ? "Freigabe..."
+                    : "Für Produktion freigeben"}
                 </button>
               ) : null}
             </div>
           ) : (
-            <p className="text-sm text-info-700">Bitte links eine Bestellung auswählen.</p>
+            <p className="text-info-700 text-sm">
+              Bitte links eine Bestellung auswählen.
+            </p>
           )}
         </div>
       </div>
@@ -1181,7 +1290,7 @@ export default function AdminWorkspace() {
               className={`rounded-lg px-3 py-2 text-xs font-bold uppercase ${
                 view === entry.id
                   ? "bg-pirrot-blue-100 text-pirrot-blue-900"
-                  : "bg-white/60 text-info-800"
+                  : "text-info-800 bg-white/60"
               }`}
               onClick={() => setView(entry.id as AdminView)}
             >

@@ -3,8 +3,19 @@ export function canAccessBookForSetupOrder(params: {
   sessionUserId?: string;
   bookSourceType?: "STANDARD" | "PARTNER_TEMPLATE";
   partnerClaimUserId?: string | null;
+  isPublic?: boolean;
 }): boolean {
-  const { bookOwnerId, sessionUserId, bookSourceType, partnerClaimUserId } = params;
+  const {
+    bookOwnerId,
+    sessionUserId,
+    bookSourceType,
+    partnerClaimUserId,
+    isPublic,
+  } = params;
+
+  if (isPublic) {
+    return true;
+  }
 
   if (bookSourceType === "PARTNER_TEMPLATE") {
     if (!sessionUserId) {

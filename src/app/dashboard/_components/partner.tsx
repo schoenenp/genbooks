@@ -71,6 +71,7 @@ export default function PartnerSection() {
   const utils = api.useUtils();
   const partnerStatus = api.partner.getStatus.useQuery();
   const canManagePartnerOrders =
+    partnerStatus.data?.role === "PARTNER" ||
     partnerStatus.data?.role === "SPONSOR" ||
     partnerStatus.data?.role === "ADMIN" ||
     partnerStatus.data?.role === "STAFF";
@@ -123,8 +124,8 @@ export default function PartnerSection() {
     },
   });
 
-  const releasePartnerOrder = api.partner.releasePartnerOrderToProduction.useMutation(
-    {
+  const releasePartnerOrder =
+    api.partner.releasePartnerOrderToProduction.useMutation({
       onMutate: ({ partnerOrderId }) => {
         setPendingPartnerOrderId(partnerOrderId);
       },
@@ -136,8 +137,7 @@ export default function PartnerSection() {
       onSettled: () => {
         setPendingPartnerOrderId(null);
       },
-    },
-  );
+    });
 
   const declinePartnerOrder = api.partner.declinePartnerOrder.useMutation({
     onMutate: ({ partnerOrderId }) => {
@@ -156,16 +156,18 @@ export default function PartnerSection() {
       setPendingPartnerOrderId(null);
     },
   });
-  const markPartnerNotificationRead = api.partner.markPartnerNotificationRead.useMutation(
-    {
+  const markPartnerNotificationRead =
+    api.partner.markPartnerNotificationRead.useMutation({
       onSuccess: async () => {
         await utils.partner.getUnreadPartnerNotificationCount.invalidate();
         await utils.partner.listPartnerNotifications.invalidate();
       },
-    },
-  );
+    });
 
-  const allOrders = useMemo(() => partnerOrders.data ?? [], [partnerOrders.data]);
+  const allOrders = useMemo(
+    () => partnerOrders.data ?? [],
+    [partnerOrders.data],
+  );
 
   const incomingOrders = useMemo(
     () =>
@@ -206,7 +208,8 @@ export default function PartnerSection() {
       <div className="content-card p-4">
         <h3 className="text-xl font-bold">Partner</h3>
         <p className="text-info-700 mt-2 text-sm">
-          Dieser Bereich ist nur für Partner-, Admin- oder Staff-Konten sichtbar.
+          Dieser Bereich ist nur für Partner-, Admin- oder Staff-Konten
+          sichtbar.
         </p>
       </div>
     );
@@ -224,13 +227,15 @@ export default function PartnerSection() {
     return (
       <li key={order.id} className="field-shell flex flex-col gap-2 p-3">
         {isSchoolCanceled || isPartnerDeclined ? (
-          <div className="rounded border border-pirrot-red-400 bg-pirrot-red-50 px-2 py-1 text-xs font-semibold text-pirrot-red-700">
+          <div className="border-pirrot-red-400 bg-pirrot-red-50 text-pirrot-red-700 rounded border px-2 py-1 text-xs font-semibold">
             {isSchoolCanceled
               ? "Storniert: Die Bestellung wurde von der Schule storniert (abgeschlossen)."
               : "Abgelehnt: Diese Partner-Bestellung wurde abgelehnt."}
           </div>
         ) : null}
-        <p className="font-semibold">{order.book?.name ?? "Partner-Bestellung"}</p>
+        <p className="font-semibold">
+          {order.book?.name ?? "Partner-Bestellung"}
+        </p>
         <p className="text-info-700 text-xs">
           Status: {getPartnerOrderStatusLabel(order.status)}
         </p>
@@ -267,7 +272,9 @@ export default function PartnerSection() {
               </p>
             ) : selectedPartnerOrder.data ? (
               (() => {
-                const lineItems = asRecord(selectedPartnerOrder.data.lineItemsSnapshot);
+                const lineItems = asRecord(
+                  selectedPartnerOrder.data.lineItemsSnapshot,
+                );
                 const quantity =
                   typeof lineItems?.quantity === "number"
                     ? lineItems.quantity
@@ -284,7 +291,11 @@ export default function PartnerSection() {
                     </p>
                     <p>
                       Zusatzmodule:{" "}
-                      <b>{addOnModules && addOnModules.length > 0 ? addOnModules : "-"}</b>
+                      <b>
+                        {addOnModules && addOnModules.length > 0
+                          ? addOnModules
+                          : "-"}
+                      </b>
                     </p>
                     <p>
                       Buch-ID: <b>{selectedPartnerOrder.data.book.id}</b>
@@ -305,11 +316,13 @@ export default function PartnerSection() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => confirmPartnerOrder.mutate({ partnerOrderId: order.id })}
+            onClick={() =>
+              confirmPartnerOrder.mutate({ partnerOrderId: order.id })
+            }
             disabled={
               isSchoolCanceled ||
-              order.status !== "SUBMITTED_BY_SCHOOL" &&
-                order.status !== "UNDER_PARTNER_REVIEW"
+              (order.status !== "SUBMITTED_BY_SCHOOL" &&
+                order.status !== "UNDER_PARTNER_REVIEW")
                 ? true
                 : pendingPartnerOrderId === order.id
             }
@@ -319,7 +332,9 @@ export default function PartnerSection() {
           </button>
           <button
             type="button"
-            onClick={() => releasePartnerOrder.mutate({ partnerOrderId: order.id })}
+            onClick={() =>
+              releasePartnerOrder.mutate({ partnerOrderId: order.id })
+            }
             disabled={
               isSchoolCanceled ||
               order.status !== "PARTNER_CONFIRMED" ||
@@ -375,10 +390,12 @@ export default function PartnerSection() {
       <div className="content-card p-4">
         <h2 className="text-2xl font-bold uppercase">Partner</h2>
         <p className="text-info-700 mt-2 text-sm">
-          Verwalten Sie eingehende Partner-Bestellungen und abgeschlossene Vorgänge getrennt.
+          Verwalten Sie eingehende Partner-Bestellungen und abgeschlossene
+          Vorgänge getrennt.
         </p>
         <p className="text-info-700 mt-1 text-sm">
-          Ungelesene Hinweise: <b>{unreadPartnerNotifications.data?.count ?? 0}</b>
+          Ungelesene Hinweise:{" "}
+          <b>{unreadPartnerNotifications.data?.count ?? 0}</b>
         </p>
       </div>
 
@@ -395,7 +412,9 @@ export default function PartnerSection() {
                 <li
                   key={notification.id}
                   className={`field-shell flex flex-col gap-2 p-3 ${
-                    isUnread ? "border-pirrot-blue-300 bg-pirrot-blue-50/40" : ""
+                    isUnread
+                      ? "border-pirrot-blue-300 bg-pirrot-blue-50/40"
+                      : ""
                   }`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -443,7 +462,9 @@ export default function PartnerSection() {
                         Als gelesen markieren
                       </button>
                     ) : (
-                      <span className="text-info-700 text-xs">Bereits gelesen</span>
+                      <span className="text-info-700 text-xs">
+                        Bereits gelesen
+                      </span>
                     )}
                   </div>
                 </li>
@@ -456,13 +477,13 @@ export default function PartnerSection() {
       </div>
 
       <div className="content-card flex flex-col gap-3 p-4">
-        <h3 className="text-xl font-bold">
-          Eingang ({incomingOrders.length})
-        </h3>
+        <h3 className="text-xl font-bold">Eingang ({incomingOrders.length})</h3>
         {partnerOrders.isLoading ? (
           <LoadingSpinner />
         ) : incomingOrders.length > 0 ? (
-          <ul className="flex flex-col gap-2 text-sm">{incomingOrders.map(renderOrderCard)}</ul>
+          <ul className="flex flex-col gap-2 text-sm">
+            {incomingOrders.map(renderOrderCard)}
+          </ul>
         ) : (
           <p className="text-info-700 text-sm">
             Keine offenen Partner-Bestellungen vorhanden.
@@ -475,7 +496,9 @@ export default function PartnerSection() {
         {partnerOrders.isLoading ? (
           <LoadingSpinner />
         ) : archivedOrders.length > 0 ? (
-          <ul className="flex flex-col gap-2 text-sm">{archivedOrders.map(renderOrderCard)}</ul>
+          <ul className="flex flex-col gap-2 text-sm">
+            {archivedOrders.map(renderOrderCard)}
+          </ul>
         ) : (
           <p className="text-info-700 text-sm">
             Noch keine abgeschlossenen Partner-Bestellungen.
