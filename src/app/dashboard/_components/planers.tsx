@@ -278,7 +278,7 @@ export default function PlanerSection() {
                 )}
 
                 {/* Public Toggle - only show for templates */}
-                {isStaff && (book as any).isTemplate && (
+                {isStaff && book.isTemplate && (
                   <div className="mt-1 flex items-center gap-2">
                     <span className="text-pirrot-blue-950 text-xs font-bold uppercase">
                       Öffentlich
