@@ -30,7 +30,10 @@ import { api } from "@/trpc/react";
 import LoadingSpinner from "./loading-spinner";
 import ModuleItem, { type ModulePickerItem } from "./module-item";
 import ModuleChanger, { type ColorCode, type ModuleId } from "./module-changer";
-import { processPdfModules, processPdfModulesPreview } from "@/util/pdf/converter";
+import {
+  processPdfModules,
+  processPdfModulesPreview,
+} from "@/util/pdf/converter";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
@@ -93,15 +96,18 @@ function isBindingModule(moduleItem: ModulePickerItem): boolean {
   );
 }
 
-function getBindingRuleKey(moduleItem: Pick<ModulePickerItem, "theme" | "name">): string {
+function getBindingRuleKey(
+  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+): string {
   return moduleItem.theme?.toLocaleLowerCase() ?? moduleItem.name;
 }
 
-function getBindingRuleKeys(moduleItem: Pick<ModulePickerItem, "theme" | "name">): string[] {
-  const keys = [
-    moduleItem.theme?.toLocaleLowerCase(),
-    moduleItem.name,
-  ].filter((val): val is string => typeof val === "string" && val.trim().length > 0);
+function getBindingRuleKeys(
+  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+): string[] {
+  const keys = [moduleItem.theme?.toLocaleLowerCase(), moduleItem.name].filter(
+    (val): val is string => typeof val === "string" && val.trim().length > 0,
+  );
   return Array.from(new Set(keys));
 }
 
@@ -274,9 +280,10 @@ export default function BookConfig(props: {
     const touchPoints = navigator.maxTouchPoints ?? 0;
     const isiPadOS = platform === "MacIntel" && touchPoints > 1;
     const isiOS = /iPad|iPhone|iPod/i.test(userAgent) || isiPadOS;
-    const isMobileDevice = /Android|webOS|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(
-      userAgent,
-    );
+    const isMobileDevice =
+      /Android|webOS|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(
+        userAgent,
+      );
 
     setUseMobilePdfFallback(isiOS || isMobileDevice);
   }, []);
@@ -450,12 +457,12 @@ export default function BookConfig(props: {
       const matchesFilters = !hasFilters
         ? true
         : filterValues.every((val) => {
-          const normalizedVal = val?.trim().toLowerCase() ?? "";
-          if (!normalizedVal) return true;
-          return searchableFields.some(
-            (field) => modFields[field] === normalizedVal,
-          );
-        });
+            const normalizedVal = val?.trim().toLowerCase() ?? "";
+            if (!normalizedVal) return true;
+            return searchableFields.some(
+              (field) => modFields[field] === normalizedVal,
+            );
+          });
 
       return matchesSearch && matchesFilters;
     },
@@ -484,7 +491,8 @@ export default function BookConfig(props: {
       const isAllowed = isBindingAllowedForModule(moduleItem, totalPagesCount);
       const reason = isAllowed
         ? undefined
-        : getBindingLimitMessageForModule(moduleItem, totalPagesCount) ?? undefined;
+        : (getBindingLimitMessageForModule(moduleItem, totalPagesCount) ??
+          undefined);
 
       availability.set(moduleItem.id, { disabled: !isAllowed, reason });
     }
@@ -499,7 +507,9 @@ export default function BookConfig(props: {
       .filter((m): m is (typeof modules)[number] => Boolean(m));
   }, [bindingOverflowEvent, modules]);
 
-  function triggerBindingOverflowIfNeeded(nextTotalPagesCount: number): boolean {
+  function triggerBindingOverflowIfNeeded(
+    nextTotalPagesCount: number,
+  ): boolean {
     const selectedBindingId = pickedModules.SETTINGS[0];
     if (!selectedBindingId || nextTotalPagesCount <= 0) return false;
 
@@ -623,7 +633,9 @@ export default function BookConfig(props: {
       const warning =
         getBindingLimitMessageForModule(pickedModule, totalPagesCount) ??
         "Die gewählte Bindung ist für die aktuelle Seitenzahl nicht verfügbar.";
-      setConfigWarnings((prev) => (prev.includes(warning) ? prev : [...prev, warning]));
+      setConfigWarnings((prev) =>
+        prev.includes(warning) ? prev : [...prev, warning],
+      );
       return;
     }
 
@@ -704,8 +716,9 @@ export default function BookConfig(props: {
       const selectedBindingId = pickedModules.SETTINGS[0];
       const selectedBindingRuleKey = selectedBindingId
         ? moduleLookupById.get(selectedBindingId)
-          ? getMatchedBindingRuleKey(moduleLookupById.get(selectedBindingId)!) ??
-            getBindingRuleKey(moduleLookupById.get(selectedBindingId)!)
+          ? (getMatchedBindingRuleKey(
+              moduleLookupById.get(selectedBindingId)!,
+            ) ?? getBindingRuleKey(moduleLookupById.get(selectedBindingId)!))
           : undefined
         : undefined;
       const estimatedCost = calculatePrintCost({
@@ -722,7 +735,9 @@ export default function BookConfig(props: {
       setPreviewFileURL(url);
       const recalculatedTotalPages = result.details.fullPageCount;
       if (typeof recalculatedTotalPages !== "number") {
-        throw new Error("Genaue Gesamtseitenzahl konnte nicht ermittelt werden.");
+        throw new Error(
+          "Genaue Gesamtseitenzahl konnte nicht ermittelt werden.",
+        );
       }
       setTotalPagesCount(recalculatedTotalPages);
       triggerBindingOverflowIfNeeded(recalculatedTotalPages);
@@ -737,8 +752,8 @@ export default function BookConfig(props: {
     // MAKE MORE HERE
   }
 
-  function handleModuleDetailBG(modType: string) {
-    let moduleTypeBgClass;
+  function handleModuleDetailBG(modType: string): string {
+    let moduleTypeBgClass: string;
     switch (modType) {
       case "bindung":
         moduleTypeBgClass = "bg-warning-300/20";
@@ -818,8 +833,9 @@ export default function BookConfig(props: {
       const selectedBindingId = pickedModules.SETTINGS[0];
       const selectedBindingRuleKey = selectedBindingId
         ? moduleLookupById.get(selectedBindingId)
-          ? getMatchedBindingRuleKey(moduleLookupById.get(selectedBindingId)!) ??
-            getBindingRuleKey(moduleLookupById.get(selectedBindingId)!)
+          ? (getMatchedBindingRuleKey(
+              moduleLookupById.get(selectedBindingId)!,
+            ) ?? getBindingRuleKey(moduleLookupById.get(selectedBindingId)!))
           : undefined
         : undefined;
       const estimatedCost = calculatePrintCost({
@@ -835,7 +851,9 @@ export default function BookConfig(props: {
       setPreviewFileURL(url);
       const recalculatedTotalPages = result.details.fullPageCount;
       if (typeof recalculatedTotalPages !== "number") {
-        throw new Error("Genaue Gesamtseitenzahl konnte nicht ermittelt werden.");
+        throw new Error(
+          "Genaue Gesamtseitenzahl konnte nicht ermittelt werden.",
+        );
       }
       setTotalPagesCount(recalculatedTotalPages);
       triggerBindingOverflowIfNeeded(recalculatedTotalPages);
@@ -926,18 +944,18 @@ export default function BookConfig(props: {
               initialFormState={
                 existingBook
                   ? {
-                    id: existingBook.id,
-                    name: existingBook.bookTitle,
-                    sub: existingBook.subTitle,
-                    country: existingBook.country,
-                    region: existingBook?.region,
-                    period: {
-                      start: existingBook.planStart
-                        .toISOString()
-                        .slice(0, 16),
-                      end: existingBook?.planEnd?.toISOString().slice(0, 16),
-                    },
-                  }
+                      id: existingBook.id,
+                      name: existingBook.bookTitle,
+                      sub: existingBook.subTitle,
+                      country: existingBook.country,
+                      region: existingBook?.region,
+                      period: {
+                        start: existingBook.planStart
+                          .toISOString()
+                          .slice(0, 16),
+                        end: existingBook?.planEnd?.toISOString().slice(0, 16),
+                      },
+                    }
                   : undefined
               }
             />
@@ -1007,7 +1025,9 @@ export default function BookConfig(props: {
         return (
           <div className="content-card text-info-950 w-full max-w-2xl p-4">
             <div className="flex flex-col gap-2">
-              <h3 className="text-2xl font-bold">Bindung wechseln erforderlich</h3>
+              <h3 className="text-2xl font-bold">
+                Bindung wechseln erforderlich
+              </h3>
               <p>
                 Die gewählte Bindung{" "}
                 <b>{bindingOverflowEvent?.invalidBindingName ?? "Unbekannt"}</b>{" "}
@@ -1044,7 +1064,7 @@ export default function BookConfig(props: {
             ) : null}
           </div>
         );
-      case "summary":
+      case "summary": {
         function handleFinishOrder(event: React.MouseEvent<HTMLButtonElement>) {
           event.preventDefault();
           event.stopPropagation();
@@ -1133,30 +1153,28 @@ export default function BookConfig(props: {
                     <ul className="border-info-950/5 bg-pirrot-blue-950/5 max-h-68 flex-1 space-y-2 overflow-y-auto rounded border-b p-1 py-2">
                       {orderSummary.pickedModuleDetails?.planner.length ===
                         0 && (
-                          <li className="text-gray-500 italic">
-                            Keine Module ausgewählt.
-                          </li>
-                        )}
-                      {orderSummary.pickedModuleDetails?.planner.map(
-                        (mod, idx) => (
-                          <li
-                            key={idx}
-                            className="border-info-950/10 flex flex-wrap items-center gap-2 border-b py-2"
-                          >
-                            <span className="font-semibold">{mod.name}</span>
-                            <span
-                              className={`text-xs first-letter:uppercase ${handleModuleDetailBG(mod.type)} rounded-lg px-2 py-0.5`}
-                            >
-                              {mod.type}
-                            </span>
-                            {mod.theme && (
-                              <span className="field-shell rounded-lg px-2 py-0.5 text-xs first-letter:uppercase">
-                                {mod.theme}
-                              </span>
-                            )}
-                          </li>
-                        ),
+                        <li className="text-gray-500 italic">
+                          Keine Module ausgewählt.
+                        </li>
                       )}
+                      {orderSummary.pickedModuleDetails?.planner.map((mod) => (
+                        <li
+                          key={mod.id}
+                          className="border-info-950/10 flex flex-wrap items-center gap-2 border-b py-2"
+                        >
+                          <span className="font-semibold">{mod.name}</span>
+                          <span
+                            className={`text-xs first-letter:uppercase ${handleModuleDetailBG(mod.type)} rounded-lg px-2 py-0.5`}
+                          >
+                            {mod.type}
+                          </span>
+                          {mod.theme && (
+                            <span className="field-shell rounded-lg px-2 py-0.5 text-xs first-letter:uppercase">
+                              {mod.theme}
+                            </span>
+                          )}
+                        </li>
+                      ))}
                     </ul>
                     <div className="flex flex-col gap-4">
                       <div className="field-shell flex aspect-square w-32 flex-col gap-4 p-2">
@@ -1254,7 +1272,7 @@ export default function BookConfig(props: {
               {/* RIGHT: PDF Preview */}
               <div className="hidden flex-1 items-center justify-center p-1 lg:flex">
                 {previewFileURL ? (
-                  <div className="flex h-full max-h-[85vh] w-full min-h-0 flex-col gap-2">
+                  <div className="flex h-full max-h-[85vh] min-h-0 w-full flex-col gap-2">
                     {renderPreviewDisclaimer()}
                     {useMobilePdfFallback ? (
                       renderMobilePdfFallback("min-h-0 flex-1")
@@ -1288,6 +1306,7 @@ export default function BookConfig(props: {
             </div>
           </div>
         );
+      }
 
       case "preview":
         return (
@@ -1302,7 +1321,7 @@ export default function BookConfig(props: {
                 <XIcon className="size-6" />
               </button>
             </div>
-            <div className="flex h-[85vh] w-full min-h-0 flex-col gap-2 p-1">
+            <div className="flex h-[85vh] min-h-0 w-full flex-col gap-2 p-1">
               {previewFileURL ? (
                 <>
                   {renderPreviewDisclaimer()}
@@ -1341,17 +1360,17 @@ export default function BookConfig(props: {
           <div className="content-card text-info-950 z-[69] w-full max-w-xl p-3">
             <form onSubmit={handleNameSubmit}>
               <div className="flex flex-col gap-2">
-                <label className="form-label">Projektname</label>
+                <label htmlFor="project-name" className="form-label">
+                  Projektname
+                </label>
                 <div className="flex gap-2">
                   <input
+                    id="project-name"
                     className="field-shell w-full px-3 py-2.5"
                     onChange={(e) => setNameInput(e.target.value)}
                     value={nameInput ?? ""}
                   />
-                  <button
-                    type="submit"
-                    className="btn-solid rounded p-2"
-                  >
+                  <button type="submit" className="btn-solid rounded p-2">
                     <CheckIcon className="size-6" />
                   </button>
                   <button
@@ -1435,7 +1454,8 @@ export default function BookConfig(props: {
     existingBook.sourceType === "PARTNER_TEMPLATE" &&
     !isPartnerCampaignExpired &&
     !hasPartnerOrderBeenSubmitted;
-  const showPartnerTemplateBanner = Boolean(partnerToken) || isPartnerTemplateFlagActive;
+  const showPartnerTemplateBanner =
+    Boolean(partnerToken) || isPartnerTemplateFlagActive;
 
   return (
     <>
@@ -1444,7 +1464,7 @@ export default function BookConfig(props: {
       >
         {/* LEFT SIDEBAR */}
         <div
-          className={`${isFilterOpen ? "sticky top-0 md:w-xs" : ""} border-pirrot-blue-950/10 relative flex flex-col gap-2 overflow-y-auto border-b bg-pirrot-blue-100/65 backdrop-blur-sm md:h-screen lg:border-r`}
+          className={`${isFilterOpen ? "sticky top-0 md:w-xs" : ""} border-pirrot-blue-950/10 bg-pirrot-blue-100/65 relative flex flex-col gap-2 overflow-y-auto border-b backdrop-blur-sm md:h-screen lg:border-r`}
         >
           <div className="p-2">
             <Filter
@@ -1470,10 +1490,10 @@ export default function BookConfig(props: {
               <div>
                 <h3 className="px-1">Aktive Filter:</h3>
                 <div className="flex w-full max-w-xl flex-wrap gap-1 p-1 lg:max-w-xs">
-                  {filterValues.map((f, i) => (
+                  {filterValues.map((f) => (
                     <button
                       type="button"
-                      key={i}
+                      key={f}
                       className="field-shell cursor-pointer truncate rounded-full px-3 py-1.5 text-center text-sm first-letter:uppercase"
                       onClick={() => handleFilterValues(f)}
                     >
@@ -1485,10 +1505,10 @@ export default function BookConfig(props: {
               <div className="w-full">
                 <h3 className="px-1">Nach Kategorie:</h3>
                 <div className="flex w-full max-w-xl flex-wrap gap-1 p-1 lg:max-w-xs">
-                  {existingTypes.map((t, i) => (
+                  {existingTypes.map((t) => (
                     <button
                       type="button"
-                      key={i}
+                      key={t.id}
                       className="field-shell cursor-pointer truncate rounded-full px-3 py-1.5 text-center text-sm first-letter:uppercase"
                       onClick={() => handleFilterValues(t.name)}
                     >
@@ -1500,10 +1520,10 @@ export default function BookConfig(props: {
               <div className="w-full">
                 <h3 className="px-1">Themes:</h3>
                 <div className="flex flex-wrap gap-1 p-1">
-                  {uniqueThemes.map((t, i) => (
+                  {uniqueThemes.map((t) => (
                     <button
                       type="button"
-                      key={i}
+                      key={t}
                       className="field-shell cursor-pointer truncate rounded-full px-3 py-1.5 text-center text-sm first-letter:uppercase"
                       onClick={() => handleFilterValues(t ?? "")}
                     >
@@ -1585,6 +1605,7 @@ export default function BookConfig(props: {
 
               <div className="flex w-full justify-between gap-2 lg:gap-4">
                 <button
+                  type="button"
                   onClick={() => setIsFilterOpen((prev) => !prev)}
                   className="btn-soft text-pirrot-blue-950 p-2"
                 >
@@ -1603,6 +1624,7 @@ export default function BookConfig(props: {
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => setIsBookInfoOpen((prev) => !prev)}
                   className="btn-soft text-pirrot-blue-950 p-2"
                 >
@@ -1625,8 +1647,10 @@ export default function BookConfig(props: {
               </div>
               <div className="flex items-center justify-between py-4 lg:py-8">
                 <div className="flex flex-col gap-2 p-1">
-                  <h3 className="text-2xl font-bold lg:text-3xl">Die neuesten Module</h3>
-                  <p className="w-full max-w-2xl text-info-800">
+                  <h3 className="text-2xl font-bold lg:text-3xl">
+                    Die neuesten Module
+                  </h3>
+                  <p className="text-info-800 w-full max-w-2xl">
                     Hallo! Willkommen bei unserem Buchkonfigurator. Hier können
                     Sie Ihr ganz persönliches Buch nach Ihren Wünschen
                     gestalten. Lassen Sie Ihrer Kreativität freien Lauf und
@@ -1655,7 +1679,9 @@ export default function BookConfig(props: {
                   .map((m) => (
                     <ModuleItem
                       key={m.id}
-                      isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(m.id)}
+                      isPicked={pickedModules[
+                        getBookPart(m.type, m.part)
+                      ]?.includes(m.id)}
                       item={m}
                       onPickedItem={handlePickedItem}
                       isDisabled={bindingAvailabilityById.get(m.id)?.disabled}
@@ -1681,7 +1707,7 @@ export default function BookConfig(props: {
               bgColor="bg-pirrot-blue-300/10"
               iconColor="text-pirrot-blue-300"
               filter={(m) => m.part === "COVER"}
-              slice={{ start: 10, end: 20 }}
+              slice={{ start: 0, end: 10 }}
             />
 
             {/* CUSTOM MODULES */}
@@ -1689,10 +1715,10 @@ export default function BookConfig(props: {
             <div className="flex flex-col gap-4 py-6 lg:py-8">
               <div className="flex flex-col-reverse items-center justify-between py-4 lg:flex-row lg:py-8">
                 <div className="flex flex-col gap-2 p-1">
-                  <h3 className="text-2xl font-bold text-pirrot-blue-700 lg:text-3xl">
+                  <h3 className="text-pirrot-blue-700 text-2xl font-bold lg:text-3xl">
                     Eigene Module
                   </h3>
-                  <p className="w-full max-w-2xl text-info-800">
+                  <p className="text-info-800 w-full max-w-2xl">
                     {" "}
                     Ihre Ideen, Ihr Material, Ihr Buch. Der Bereich „Eigene
                     Module“ ist Ihre kreative Werkstatt. Verwandeln Sie Ihre
@@ -1703,7 +1729,7 @@ export default function BookConfig(props: {
                   </p>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <CloudUpload className="size-28 text-pirrot-blue-700" />
+                  <CloudUpload className="text-pirrot-blue-700 size-28" />
                 </div>
               </div>
 
@@ -1732,7 +1758,7 @@ export default function BookConfig(props: {
               bgColor="bg-pirrot-green-300/10"
               iconColor="text-pirrot-green-300"
               filter={(m) => m.part === "PLANNER"}
-              slice={{ start: 10, end: 20 }}
+              slice={{ start: 0, end: 10 }}
             />
 
             {/* POPULAR BINDINGS */}
@@ -1742,7 +1768,7 @@ export default function BookConfig(props: {
                   <h3 className="text-warning-300 text-2xl font-bold lg:text-3xl">
                     Bindungen
                   </h3>
-                  <p className="w-full max-w-2xl text-info-800">
+                  <p className="text-info-800 w-full max-w-2xl">
                     Hier können Sie die passende Bindung für Ihr Buch auswählen.
                     Die Wahl der Bindung ist entscheidend für die Langlebigkeit
                     und das Erscheinungsbild Ihres Werkes. Entscheiden Sie sich
@@ -1761,13 +1787,15 @@ export default function BookConfig(props: {
                     .map((m) => (
                       <ModuleItem
                         key={m.id}
-                        isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(
-                          m.id,
-                        )}
+                        isPicked={pickedModules[
+                          getBookPart(m.type, m.part)
+                        ]?.includes(m.id)}
                         item={m}
                         onPickedItem={handlePickedItem}
                         isDisabled={bindingAvailabilityById.get(m.id)?.disabled}
-                        disabledReason={bindingAvailabilityById.get(m.id)?.reason}
+                        disabledReason={
+                          bindingAvailabilityById.get(m.id)?.reason
+                        }
                       />
                     ))}
                 </div>
@@ -1796,13 +1824,13 @@ export default function BookConfig(props: {
                 m.part !== "PLANNER" &&
                 m.type !== "bindung"
               }
-              slice={{ start: 10, end: 20 }}
+              slice={{ start: 0, end: 10 }}
             />
           </div>
         </div>
         {/* RIGHT SIDEBAR */}
         <div
-          className={`${isBookInfoOpen ? "h-full lg:w-xs" : ""} border-pirrot-blue-950/10 relative flex flex-col gap-2 overflow-y-auto border-t bg-pirrot-blue-100/65 backdrop-blur-sm md:h-screen lg:border-l`}
+          className={`${isBookInfoOpen ? "h-full lg:w-xs" : ""} border-pirrot-blue-950/10 bg-pirrot-blue-100/65 relative flex flex-col gap-2 overflow-y-auto border-t backdrop-blur-sm md:h-screen lg:border-l`}
         >
           <div className="flex flex-col gap-2">
             <div className="p-2">
@@ -1911,7 +1939,7 @@ export default function BookConfig(props: {
                   <div className="mt-2 flex flex-col gap-2">
                     {configWarnings.map((w, i) => (
                       <button
-                        key={i}
+                        key={w}
                         id={`warning-${i}`}
                         type="button"
                         onClick={handleConfigWarning}
@@ -1942,8 +1970,9 @@ export default function BookConfig(props: {
           )}
 
           {isBookInfoOpen && (
-            <div className="border-info-950/5 sticky bottom-1 flex w-full gap-2 border-t bg-pirrot-blue-100/85 p-1 backdrop-blur-sm">
+            <div className="border-info-950/5 bg-pirrot-blue-100/85 sticky bottom-1 flex w-full gap-2 border-t p-1 backdrop-blur-sm">
               <button
+                type="button"
                 disabled={isSavingConfig}
                 onClick={handleSaveConfig}
                 className="btn-soft flex flex-1 justify-center gap-2 p-2 font-bold disabled:opacity-25"
@@ -1952,6 +1981,7 @@ export default function BookConfig(props: {
                 <SaveIcon className="size-6" />
               </button>
               <button
+                type="button"
                 onClick={handleSummaryView}
                 disabled={!isConfigComplete}
                 className="btn-solid flex flex-1 justify-center gap-2 p-2 font-bold disabled:opacity-25"
@@ -1969,7 +1999,7 @@ export default function BookConfig(props: {
             <div className="absolute top-2 right-2 z-[123] w-full p-2">
               {configWarnings.map((w, i) => (
                 <button
-                  key={i}
+                  key={w}
                   id={`warning-${i}`}
                   type="button"
                   onClick={handleConfigWarning}
