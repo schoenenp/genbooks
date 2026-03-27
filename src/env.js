@@ -20,7 +20,7 @@ export const env = createEnv({
         ? z.string()
         : z.string().optional(),
     EMAIL_SERVER_USER: z.string(),
-    AUTH_URL: z.string(),
+    AUTH_URL: z.string().optional(),
     // AUTH_LINKEDIN_ID:z.string(),
     // AUTH_LINKEDIN_SECRET:z.string(),
     AUTH_GOOGLE_ID: z.string(),
