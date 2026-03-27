@@ -428,6 +428,7 @@ export const bookRouter = createTRPCRouter({
     return ctx.db.book.findMany({
       where: {
         isTemplate: true,
+        isPublic: true,
         deletedAt: null,
       },
       include: {
@@ -448,7 +449,7 @@ export const bookRouter = createTRPCRouter({
     .input(z.object({ templateId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const template = await ctx.db.book.findFirst({
-        where: { id: input.templateId, isTemplate: true, deletedAt: null },
+        where: { id: input.templateId, isTemplate: true, isPublic: true, deletedAt: null },
         include: {
           modules: true,
         },
