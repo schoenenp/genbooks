@@ -20,10 +20,11 @@ export const env = createEnv({
         ? z.string()
         : z.string().optional(),
     EMAIL_SERVER_USER: z.string(),
+    AUTH_URL: z.string(),
     // AUTH_LINKEDIN_ID:z.string(),
     // AUTH_LINKEDIN_SECRET:z.string(),
-    AUTH_GOOGLE_ID:z.string(),
-    AUTH_GOOGLE_SECRET:z.string(),
+    AUTH_GOOGLE_ID: z.string(),
+    AUTH_GOOGLE_SECRET: z.string(),
     STRIPE_SUCCESS_URL: z.string().url(),
     STRIPE_CANCEL_URL: z.string().url(),
     PARTNER_LINK_SECRET: z.string().optional(),
@@ -32,7 +33,7 @@ export const env = createEnv({
     EMAIL_SERVER_PORT: z.coerce.number().int().positive().default(465),
     EMAIL_FROM: z.string(),
     SHOP_EMAIL: z.string(),
-    CANCEL_SECRET:z.string(),
+    CANCEL_SECRET: z.string(),
     UPLOAD_URL_LINK: z.string(),
     UPLOAD_API_KEY: z.string(),
     GHOST_GRAYSCALE_API_KEY: z.string().optional(),
@@ -60,10 +61,10 @@ export const env = createEnv({
    * middlewares) or client-side so we need to destruct manually.
    */
   runtimeEnv: {
-    NEXT_PUBLIC_STRIPE_PUSHABLE_KEY:process.env.NEXT_PUBLIC_STRIPE_PUSHABLE_KEY,
+    NEXT_PUBLIC_STRIPE_PUSHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUSHABLE_KEY,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
-    STRIPE_SECRET_KEY:process.env.STRIPE_SECRET_KEY,
+    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
     STRIPE_CONNECT_SUBSCRIPTION_MONTHLY_PRICE_ID:
       process.env.STRIPE_CONNECT_SUBSCRIPTION_MONTHLY_PRICE_ID,
     STRIPE_CONNECT_SUBSCRIPTION_YEARLY_PRICE_ID:
@@ -77,7 +78,7 @@ export const env = createEnv({
     PARTNER_EU_LEGAL_TEXT: process.env.PARTNER_EU_LEGAL_TEXT,
     AUTH_SECRET: process.env.AUTH_SECRET,
     EMAIL_SERVER_USER: process.env.EMAIL_SERVER_USER,
-    NEXT_PUBLIC_CDN_SERVER_URL:process.env.NEXT_PUBLIC_CDN_SERVER_URL,
+    NEXT_PUBLIC_CDN_SERVER_URL: process.env.NEXT_PUBLIC_CDN_SERVER_URL,
 
     EMAIL_SERVER_PASSWORD: process.env.EMAIL_SERVER_PASSWORD,
     EMAIL_SERVER_HOST: process.env.EMAIL_SERVER_HOST,
@@ -88,6 +89,7 @@ export const env = createEnv({
     EMAIL_FROM: process.env.EMAIL_FROM,
     AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
     AUTH_GOOGLE_SECRET: process.env.AUTH_GOOGLE_SECRET,
+    AUTH_URL: process.env.AUTH_URL,
     // AUTH_LINKEDIN_ID: process.env.AUTH_LINKEDIN_ID,
     // AUTH_LINKEDIN_SECRET: process.env.AUTH_LINKEDIN_SECRET,
     SHOP_EMAIL: process.env.SHOP_EMAIL,

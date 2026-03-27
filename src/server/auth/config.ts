@@ -46,7 +46,7 @@ const smtpPort = env.EMAIL_SERVER_PORT;
 const smtpSecure = smtpPort === 465;
 const isProduction = env.NODE_ENV === "production";
 const localhostHosts = new Set(["localhost", "127.0.0.1", "::1"]);
-const allowedAuthHosts = new Set(["planer.pirrot.de", "planer.pirrot.eu"]);
+const allowedAuthHosts = new Set(["planer.pirrot.de", "planer.pirrot.eu", "demo-planer.pirrot.de"]);
 const verificationRateLimitWindowMs = 10 * 60 * 1000;
 const verificationRateLimitMaxRequests = 5;
 const verificationRateLimitStore = new Map<
@@ -94,6 +94,7 @@ function getConfiguredAuthOrigin() {
   }
 
   if (isProduction) {
+    if (env.AUTH_URL) return env.AUTH_URL;
     return "https://planer.pirrot.de";
   }
 
