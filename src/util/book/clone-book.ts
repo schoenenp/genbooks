@@ -81,7 +81,7 @@ export async function cloneBookForOrder(
       const srcMod = bm.module;
       
       // 🔧 ADD VALIDATION: Double-check module exists
-      if (!srcMod || !srcMod?.id) {
+      if (!srcMod?.id) {
         throw new Error(`Invalid module data for book ${bookId}`);
       }
       
