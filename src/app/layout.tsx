@@ -1,10 +1,21 @@
 import "@/styles/globals.css";
 
 import { type Metadata } from "next";
-import { Baloo_2, Cairo } from "next/font/google";
+import localFont from "next/font/local";
 
-const baloo = Baloo_2({ subsets: ["latin"], variable: "--font-baloo" });
-const cairo = Cairo({ subsets: ["latin"], variable: "--font-cairo" });
+const baloo = localFont({
+  src: "./fonts/Baloo_2/Baloo2-VariableFont_wght.ttf",
+  variable: "--font-baloo",
+  display: "swap",
+  weight: "400 800",
+});
+
+const cairo = localFont({
+  src: "./fonts/Cairo/Cairo-VariableFont_slnt,wght.ttf",
+  variable: "--font-cairo",
+  display: "swap",
+  weight: "200 1000",
+});
 
 import { PostHogClientProvider } from "@/app/_components/posthog-provider";
 import { TRPCReactProvider } from "@/trpc/react";
