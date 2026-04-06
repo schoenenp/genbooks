@@ -51,6 +51,11 @@ export default function Footer() {
                                 </Link>
                             </li>
                             <li>
+                                <Link href="/module-docs" className="text-info-700 hover:text-pirrot-red-500 transition-colors">
+                                    Modul-Dokumentation
+                                </Link>
+                            </li>
+                            <li>
                                 <Link href="/dashboard?view=orders" className="text-info-700 hover:text-pirrot-red-500 transition-colors">
                                     Bestellung verfolgen
                                 </Link>

@@ -1,4 +1,5 @@
 import {
+  FileText,
   HomeIcon,
   InfoIcon,
   LogInIcon,
@@ -29,6 +30,13 @@ export default async function Navigation() {
           </span>
         </Link>
         <div className="flex gap-2">
+          <Link
+            href="/module-docs"
+            className="btn-soft flex items-center gap-2 px-3 py-2 text-sm"
+          >
+            <FileText size={18} />
+            <span className="hidden sm:inline">Modul-Doku</span>
+          </Link>
           <Link
             href="/partner-info"
             className="btn-soft flex items-center gap-2 px-3 py-2 text-sm"

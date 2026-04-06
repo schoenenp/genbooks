@@ -43,7 +43,7 @@ export default function UserModules({
   const { mutate: createModule, isPending } = api.module.create.useMutation({
     onSuccess: async () => {
       await utils.module.getUserModules.invalidate()
-      await utils.config.init.invalidate({bookId})
+      await utils.config.init.invalidate({ bookId })
     }
   })
 
@@ -166,16 +166,16 @@ export default function UserModules({
           {userModules.length === 0 ? <div className="flex size-full bg-purple-100/50 p-2 rounded text-center items-center justify-center border shadow-2xs border-purple-500/10 flex-col gap-2">
             <h5 className="text-2xl font-bold uppercase">Module erstellen</h5>
             <p className="text-sm w-full max-w-64">Module Erstellen und dem Planer hinzufügen. Ihre Dokumente werden hier angezeigt.</p>
-          </div> 
-          :    
-          <div className="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[420px] overflow-y-auto border-b border-purple-300/20 py-4">
-            {userModules?.map((m, i) => <ModuleItem
-              key={i}
-              item={m}
-              isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(m.id)}
-              onPickedItem={handlePickedItem}
-            />)}
-          </div>}
+          </div>
+            :
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[420px] overflow-y-auto border-b border-purple-300/20 py-4">
+              {userModules?.map((m, i) => <ModuleItem
+                key={i}
+                item={m}
+                isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(m.id)}
+                onPickedItem={handlePickedItem}
+              />)}
+            </div>}
         </div>
 
 
@@ -183,7 +183,7 @@ export default function UserModules({
         <div className="border-t lg:border-l lg:border-t-0 border-info-950/20 py-8 lg:pl-8 lg:py-0 h-full flex w-full lg:w-auto flex-col lg:items-center gap-8">
           <div className="flex flex-col gap-2">
             <h5 className="font-bold text-2xl flex gap-2 items-center "><CircleQuestionMark /> Tooltips</h5>
-            <p className="text-sm w-full max-w-48">Hier ein paar schnelle Tipps für Sie. Mehr infos erhalten Sie in unserem <Link href="#info-center" className="font-medium text-pirrot-red-400">Hilfe-Center</Link>.</p>
+            <p className="text-sm w-full max-w-48">Hier ein paar schnelle Tipps für Sie. Mehr infos erhalten Sie in unserer <Link href="/module-docs#tooltips" className="font-medium text-pirrot-red-400">Dokumentation</Link>.</p>
           </div>
           <TooltipFader tooltips={existingTips} />
 

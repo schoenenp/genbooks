@@ -24,7 +24,7 @@ export default function StartConfig({
   initialRegion = "DE-SL",
 }: StartConfigProps) {
   const [previewData, setPreviewData] = useState({
-    name: "Hausaufgaben",
+    name: "Schulplaner",
     sub: "Meine Schule",
     period: {
       start: currentDate.toISOString().slice(0, 16),

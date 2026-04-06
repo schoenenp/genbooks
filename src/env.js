@@ -15,6 +15,8 @@ export const env = createEnv({
     PARTNER_CONTROLLED_FULFILLMENT_ENABLED: z.string().optional(),
     PARTNER_SETTLEMENT_ENABLED: z.string().optional(),
     PARTNER_EU_LEGAL_TEXT: z.string().optional(),
+    APP_ALLOWED_ORIGINS: z.string().optional(),
+    APP_FALLBACK_ORIGIN: z.string().optional(),
     AUTH_SECRET:
       process.env.NODE_ENV === "production"
         ? z.string()
@@ -76,6 +78,8 @@ export const env = createEnv({
       process.env.PARTNER_CONTROLLED_FULFILLMENT_ENABLED,
     PARTNER_SETTLEMENT_ENABLED: process.env.PARTNER_SETTLEMENT_ENABLED,
     PARTNER_EU_LEGAL_TEXT: process.env.PARTNER_EU_LEGAL_TEXT,
+    APP_ALLOWED_ORIGINS: process.env.APP_ALLOWED_ORIGINS,
+    APP_FALLBACK_ORIGIN: process.env.APP_FALLBACK_ORIGIN,
     AUTH_SECRET: process.env.AUTH_SECRET,
     EMAIL_SERVER_USER: process.env.EMAIL_SERVER_USER,
     NEXT_PUBLIC_CDN_SERVER_URL: process.env.NEXT_PUBLIC_CDN_SERVER_URL,

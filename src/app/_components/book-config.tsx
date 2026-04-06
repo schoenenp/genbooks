@@ -457,12 +457,12 @@ export default function BookConfig(props: {
       const matchesFilters = !hasFilters
         ? true
         : filterValues.every((val) => {
-            const normalizedVal = val?.trim().toLowerCase() ?? "";
-            if (!normalizedVal) return true;
-            return searchableFields.some(
-              (field) => modFields[field] === normalizedVal,
-            );
-          });
+          const normalizedVal = val?.trim().toLowerCase() ?? "";
+          if (!normalizedVal) return true;
+          return searchableFields.some(
+            (field) => modFields[field] === normalizedVal,
+          );
+        });
 
       return matchesSearch && matchesFilters;
     },
@@ -687,7 +687,7 @@ export default function BookConfig(props: {
 
       const result = await processPdfModules(
         {
-          title: existingBook?.bookTitle ?? "Hausaufgaben",
+          title: existingBook?.bookTitle ?? "Schulplaner",
           period: {
             start: existingBook?.planStart,
             end: existingBook?.planEnd ?? undefined,
@@ -717,8 +717,8 @@ export default function BookConfig(props: {
       const selectedBindingRuleKey = selectedBindingId
         ? moduleLookupById.get(selectedBindingId)
           ? (getMatchedBindingRuleKey(
-              moduleLookupById.get(selectedBindingId)!,
-            ) ?? getBindingRuleKey(moduleLookupById.get(selectedBindingId)!))
+            moduleLookupById.get(selectedBindingId)!,
+          ) ?? getBindingRuleKey(moduleLookupById.get(selectedBindingId)!))
           : undefined
         : undefined;
       const estimatedCost = calculatePrintCost({
@@ -805,7 +805,7 @@ export default function BookConfig(props: {
 
       const result = await processPdfModulesPreview(
         {
-          title: existingBook?.bookTitle ?? "Hausaufgaben",
+          title: existingBook?.bookTitle ?? "Schulplaner",
           period: {
             start: existingBook?.planStart,
             end: existingBook?.planEnd ?? undefined,
@@ -834,8 +834,8 @@ export default function BookConfig(props: {
       const selectedBindingRuleKey = selectedBindingId
         ? moduleLookupById.get(selectedBindingId)
           ? (getMatchedBindingRuleKey(
-              moduleLookupById.get(selectedBindingId)!,
-            ) ?? getBindingRuleKey(moduleLookupById.get(selectedBindingId)!))
+            moduleLookupById.get(selectedBindingId)!,
+          ) ?? getBindingRuleKey(moduleLookupById.get(selectedBindingId)!))
           : undefined
         : undefined;
       const estimatedCost = calculatePrintCost({
@@ -944,18 +944,18 @@ export default function BookConfig(props: {
               initialFormState={
                 existingBook
                   ? {
-                      id: existingBook.id,
-                      name: existingBook.bookTitle,
-                      sub: existingBook.subTitle,
-                      country: existingBook.country,
-                      region: existingBook?.region,
-                      period: {
-                        start: existingBook.planStart
-                          .toISOString()
-                          .slice(0, 16),
-                        end: existingBook?.planEnd?.toISOString().slice(0, 16),
-                      },
-                    }
+                    id: existingBook.id,
+                    name: existingBook.bookTitle,
+                    sub: existingBook.subTitle,
+                    country: existingBook.country,
+                    region: existingBook?.region,
+                    period: {
+                      start: existingBook.planStart
+                        .toISOString()
+                        .slice(0, 16),
+                      end: existingBook?.planEnd?.toISOString().slice(0, 16),
+                    },
+                  }
                   : undefined
               }
             />
@@ -1153,10 +1153,10 @@ export default function BookConfig(props: {
                     <ul className="border-info-950/5 bg-pirrot-blue-950/5 max-h-68 flex-1 space-y-2 overflow-y-auto rounded border-b p-1 py-2">
                       {orderSummary.pickedModuleDetails?.planner.length ===
                         0 && (
-                        <li className="text-gray-500 italic">
-                          Keine Module ausgewählt.
-                        </li>
-                      )}
+                          <li className="text-gray-500 italic">
+                            Keine Module ausgewählt.
+                          </li>
+                        )}
                       {orderSummary.pickedModuleDetails?.planner.map((mod) => (
                         <li
                           key={mod.id}
@@ -1441,7 +1441,7 @@ export default function BookConfig(props: {
   };
   const partnerCampaignExpiresAt =
     existingBook.sourceType === "PARTNER_TEMPLATE" &&
-    partnerBookMeta.partnerCampaignExpiresAt
+      partnerBookMeta.partnerCampaignExpiresAt
       ? new Date(partnerBookMeta.partnerCampaignExpiresAt)
       : null;
   const hasPartnerOrderBeenSubmitted =
@@ -1636,15 +1636,6 @@ export default function BookConfig(props: {
             {/* MODULE SELECTION */}
             <div className="flex flex-col gap-4">
               {/* HERO SECTION */}
-              <div className="content-card relative size-full h-72 overflow-hidden rounded lg:h-96">
-                <Image
-                  className="size-full rounded object-cover"
-                  src="/assets/gen/pirgen_bg.png"
-                  fill
-                  priority
-                  alt="hero"
-                />
-              </div>
               <div className="flex items-center justify-between py-4 lg:py-8">
                 <div className="flex flex-col gap-2 p-1">
                   <h3 className="text-2xl font-bold lg:text-3xl">
@@ -1710,7 +1701,18 @@ export default function BookConfig(props: {
               slice={{ start: 0, end: 10 }}
             />
 
+
             {/* CUSTOM MODULES */}
+
+            <div className="content-card relative size-full h-72 overflow-hidden rounded lg:h-96">
+              <Image
+                className="size-full rounded object-cover"
+                src="/assets/gen/pirgen_bg.png"
+                fill
+                priority
+                alt="hero"
+              />
+            </div>
             <div className="scroll-m-40" id="custom"></div>
             <div className="flex flex-col gap-4 py-6 lg:py-8">
               <div className="flex flex-col-reverse items-center justify-between py-4 lg:flex-row lg:py-8">

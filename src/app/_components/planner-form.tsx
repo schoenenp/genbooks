@@ -42,7 +42,7 @@ export default function PlannerForm({
     initialRegion,
   );
   const router = useRouter();
-  const [name, setName] = useState<string>("Hausaufgaben");
+  const [name, setName] = useState<string>("Schulplaner");
   const [sub, setSub] = useState<string>("Meine Schule");
   const [country, setCountry] = useState<string>(initialLocation.country);
   const [region, setRegion] = useState<string>(initialLocation.region);
@@ -125,7 +125,7 @@ export default function PlannerForm({
           className="field-shell w-full px-3 py-2.5"
           onChange={(e) => setName(e.target.value)}
           value={name}
-          placeholder="z.B. Hausaufgaben, Schulplaner, etc."
+          placeholder="z.B. Schulplaner, Hausaufgaben, etc."
         />
       </div>
 

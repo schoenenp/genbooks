@@ -13,6 +13,11 @@ import { createTransport } from "nodemailer";
 
 import { db } from "@/server/db";
 import { env } from "@/env";
+import {
+  getAppOriginFromHeaders,
+  getConfiguredAppOrigin,
+  toAllowedAppOrigin,
+} from "@/util/app-origin";
 
 /**
  * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
@@ -44,9 +49,6 @@ const trustHost = process.env.AUTH_TRUST_HOST
   : env.NODE_ENV === "production";
 const smtpPort = env.EMAIL_SERVER_PORT;
 const smtpSecure = smtpPort === 465;
-const isProduction = env.NODE_ENV === "production";
-const localhostHosts = new Set(["localhost", "127.0.0.1", "::1"]);
-const allowedAuthHosts = new Set(["planer.pirrot.de", "planer.pirrot.eu", "demo-planer.pirrot.de"]);
 const verificationRateLimitWindowMs = 10 * 60 * 1000;
 const verificationRateLimitMaxRequests = 5;
 const verificationRateLimitStore = new Map<
@@ -58,70 +60,16 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/$/, "");
 }
 
-function isAllowedAuthHostname(hostname: string) {
-  if (allowedAuthHosts.has(hostname)) return true;
-  if (!isProduction && localhostHosts.has(hostname)) return true;
-  return false;
-}
-
 function toAllowedOrigin(value: string): string | null {
-  try {
-    const url = new URL(value);
-    const hostname = url.hostname.toLowerCase();
-
-    if (!isAllowedAuthHostname(hostname)) return null;
-
-    if (localhostHosts.has(hostname)) {
-      url.protocol = "http:";
-      return url.origin;
-    }
-
-    url.protocol = "https:";
-    url.port = "";
-    return url.origin;
-  } catch {
-    return null;
-  }
+  return toAllowedAppOrigin(value);
 }
 
 function getConfiguredAuthOrigin() {
-  const configuredOrigins = [process.env.AUTH_URL, process.env.NEXTAUTH_URL];
-  for (const configuredOrigin of configuredOrigins) {
-    if (!configuredOrigin) continue;
-
-    const allowedOrigin = toAllowedOrigin(trimTrailingSlash(configuredOrigin));
-    if (allowedOrigin) return allowedOrigin;
-  }
-
-  if (isProduction) {
-    if (env.AUTH_URL) return env.AUTH_URL;
-    return "https://planer.pirrot.de";
-  }
-
-  return "http://127.0.0.1:3000";
+  return getConfiguredAppOrigin();
 }
 
 function getRequestOrigin(request: Request): string | null {
-  const forwardedHost = request.headers
-    .get("x-forwarded-host")
-    ?.split(",")[0]
-    ?.trim();
-  const host = forwardedHost ?? request.headers.get("host")?.trim();
-  if (!host) return null;
-
-  try {
-    const parsedHost = new URL(`http://${host}`);
-    const hostname = parsedHost.hostname.toLowerCase();
-    if (!isAllowedAuthHostname(hostname)) return null;
-
-    if (localhostHosts.has(hostname)) {
-      return `http://${parsedHost.host}`;
-    }
-
-    return `https://${hostname}`;
-  } catch {
-    return null;
-  }
+  return getAppOriginFromHeaders(request.headers);
 }
 
 function getCallbackOrigin(url: URL): string | null {
@@ -130,7 +78,9 @@ function getCallbackOrigin(url: URL): string | null {
 
   try {
     const resolvedUrl = new URL(callbackUrl, `${url.protocol}//${url.host}`);
-    return toAllowedOrigin(resolvedUrl.origin);
+    return toAllowedAppOrigin(resolvedUrl.origin, {
+      extraOrigins: [url.origin],
+    });
   } catch {
     return null;
   }
@@ -158,7 +108,10 @@ function buildVerificationUrl(url: string, request: Request): string {
     try {
       const callbackTarget = new URL(callbackUrl, canonicalOrigin.origin);
       const safeCallbackOrigin =
-        toAllowedOrigin(callbackTarget.origin) ?? canonicalOrigin.origin;
+        toAllowedAppOrigin(callbackTarget.origin, {
+          headers: request.headers,
+          extraOrigins: [canonicalOrigin.origin],
+        }) ?? canonicalOrigin.origin;
       const normalizedCallback = new URL(callbackTarget.toString());
       const normalizedOrigin = new URL(safeCallbackOrigin);
 
@@ -174,38 +127,34 @@ function buildVerificationUrl(url: string, request: Request): string {
   return parsedUrl.toString();
 }
 
-function enforceVerificationLinkPolicy(url: string): string {
+function enforceVerificationLinkPolicy(url: string, request: Request): string {
   const parsedUrl = new URL(url);
-  const fallbackOrigin = new URL(getConfiguredAuthOrigin());
-  const hostname = parsedUrl.hostname.toLowerCase();
+  const fallbackOrigin = new URL(getCanonicalAuthOrigin(request, parsedUrl));
+  const safeOrigin =
+    toAllowedAppOrigin(parsedUrl.origin, {
+      headers: request.headers,
+      extraOrigins: [fallbackOrigin.origin],
+    }) ?? fallbackOrigin.origin;
+  const normalizedSafeOrigin = new URL(safeOrigin);
 
-  if (allowedAuthHosts.has(hostname)) {
-    parsedUrl.protocol = "https:";
-    parsedUrl.port = "";
-  } else if (!isProduction && localhostHosts.has(hostname)) {
-    parsedUrl.protocol = "http:";
-  } else {
-    parsedUrl.protocol = fallbackOrigin.protocol;
-    parsedUrl.host = fallbackOrigin.host;
-    parsedUrl.port = fallbackOrigin.port;
-  }
+  parsedUrl.protocol = normalizedSafeOrigin.protocol;
+  parsedUrl.host = normalizedSafeOrigin.host;
+  parsedUrl.port = normalizedSafeOrigin.port;
 
   const callbackUrl = parsedUrl.searchParams.get("callbackUrl");
   if (callbackUrl) {
     try {
       const callbackTarget = new URL(callbackUrl, parsedUrl.origin);
-      const callbackHostname = callbackTarget.hostname.toLowerCase();
+      const safeCallbackOrigin =
+        toAllowedAppOrigin(callbackTarget.origin, {
+          headers: request.headers,
+          extraOrigins: [parsedUrl.origin, fallbackOrigin.origin],
+        }) ?? parsedUrl.origin;
+      const normalizedCallbackOrigin = new URL(safeCallbackOrigin);
 
-      if (allowedAuthHosts.has(callbackHostname)) {
-        callbackTarget.protocol = "https:";
-        callbackTarget.port = "";
-      } else if (!isProduction && localhostHosts.has(callbackHostname)) {
-        callbackTarget.protocol = "http:";
-      } else {
-        callbackTarget.protocol = parsedUrl.protocol;
-        callbackTarget.host = parsedUrl.host;
-        callbackTarget.port = parsedUrl.port;
-      }
+      callbackTarget.protocol = normalizedCallbackOrigin.protocol;
+      callbackTarget.host = normalizedCallbackOrigin.host;
+      callbackTarget.port = normalizedCallbackOrigin.port;
 
       parsedUrl.searchParams.set("callbackUrl", callbackTarget.toString());
     } catch {
@@ -289,11 +238,16 @@ function enforceVerificationRateLimit(request: Request, identifier: string) {
 }
 
 function getSafeRedirectTarget(url: string, baseUrl: string) {
-  const safeBaseOrigin = toAllowedOrigin(baseUrl) ?? getConfiguredAuthOrigin();
+  const safeBaseOrigin =
+    toAllowedAppOrigin(baseUrl, {
+      extraOrigins: [trimTrailingSlash(baseUrl)],
+    }) ?? getConfiguredAuthOrigin();
 
   try {
     const targetUrl = new URL(url, safeBaseOrigin);
-    const safeTargetOrigin = toAllowedOrigin(targetUrl.origin);
+    const safeTargetOrigin = toAllowedAppOrigin(targetUrl.origin, {
+      extraOrigins: [safeBaseOrigin],
+    });
     if (!safeTargetOrigin) return safeBaseOrigin;
 
     return `${safeTargetOrigin}${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
@@ -325,6 +279,7 @@ export const authConfig = {
 
         const verificationUrl = enforceVerificationLinkPolicy(
           buildVerificationUrl(url, request),
+          request,
         );
         const host = new URL(verificationUrl).host;
         const transport = createTransport(provider.server);
