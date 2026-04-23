@@ -1127,7 +1127,7 @@ export const configRouter = createTRPCRouter({
           type: type.name,
           thumbnail,
           url,
-          creteadAt: createdAt,
+          createdAt,
           booksCount: moduleItem._count.books,
         };
       });

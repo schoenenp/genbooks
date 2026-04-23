@@ -1,194 +1,261 @@
 'use client'
+
 import TooltipFader from "@/app/_components/tooltip-fader";
 import Link from "next/link";
-import { AlertTriangle, CircleQuestionMark, XIcon, } from "lucide-react";
+import { AlertTriangle, CircleQuestionMark, UploadCloud, XIcon } from "lucide-react";
 import FileUpload from "../file-upload";
 import { api } from "@/trpc/react";
 import { useState } from "react";
 import { fileToBase64, validatePDFUpload } from "@/util/pdf/functions";
 import type { BookPart } from "@prisma/client";
-import ModuleItem, { type ModulePickerItem } from "@/app/_components/module-item";
-import { getBookPart, getPageRules } from "@/util/book/functions";
+import { getPageRules } from "@/util/book/functions";
 import LoadingSpinner from "@/app/_components/loading-spinner";
-import type { ConfigModules } from "@/hooks/use-module-state";
 
 export default function UserModules({
   bookId,
   existingTips,
-  onPickedUserItem,
-  pickedModules,
-  userModules
+  onCreated,
 }: {
   bookId: string;
-  existingTips: string[]
-  onPickedUserItem: (pickedItem: { id: string; type: string; }) => void;
-  pickedModules: ConfigModules
-  userModules: ModulePickerItem[]
+  existingTips: string[];
+  onCreated?: () => void;
 }) {
-
-  const [moduleFormError, setModuleFormError] = useState<string | undefined>()
+  const [moduleFormError, setModuleFormError] = useState<string | undefined>();
 
   const [moduleFormState, setModuleFormState] = useState({
     name: "",
     type: "sonstige",
-    moduleFile: null as File | null
-  })
+    moduleFile: null as File | null,
+  });
 
+  const { data: customTypeItems } = api.type.getCustomTypes.useQuery();
 
-
-  const { data: customTypeItems } = api.type.getCustomTypes.useQuery()
-
-
-  const utils = api.useUtils()
+  const utils = api.useUtils();
   const { mutate: createModule, isPending } = api.module.create.useMutation({
     onSuccess: async () => {
-      await utils.module.getUserModules.invalidate()
-      await utils.config.init.invalidate({ bookId })
-    }
-  })
-
-
+      await utils.module.getUserModules.invalidate();
+      await utils.config.init.invalidate({ bookId });
+      setModuleFormError(undefined);
+      setModuleFormState({
+        name: "",
+        type: "sonstige",
+        moduleFile: null,
+      });
+      onCreated?.();
+    },
+  });
 
   function handleCloseError() {
-    setModuleFormError(undefined)
-    setModuleFormState({
-      ...moduleFormState,
-      moduleFile: null
-    })
+    setModuleFormError(undefined);
+    setModuleFormState((prev) => ({
+      ...prev,
+      moduleFile: null,
+    }));
   }
 
   async function handleFormSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    event.stopPropagation()
+    event.preventDefault();
+    event.stopPropagation();
+
     if (!moduleFormState.moduleFile) {
-      return
+      return;
     }
-    const fileToUpload = await fileToBase64(moduleFormState.moduleFile)
+
+    const fileToUpload = await fileToBase64(moduleFormState.moduleFile);
 
     const { valid, message } = await validatePDFUpload(
       fileToUpload,
-      moduleFormState.type.toLocaleUpperCase() as BookPart
-    )
+      moduleFormState.type.toLocaleUpperCase() as BookPart,
+    );
 
     if (valid) {
       createModule({
         name: moduleFormState.name,
         type: moduleFormState.type,
-        moduleFile: fileToUpload
-      })
+        moduleFile: fileToUpload,
+      });
     } else {
-      setModuleFormError(message)
+      setModuleFormError(message);
     }
   }
 
-
-  function handlePickedItem(pickedItem: {
-    id: string;
-    type: string;
-  }) {
-    onPickedUserItem(pickedItem)
-  }
-
-  return <div className="bg-purple-300/10 border rounded border-purple-500/5 p-1 lg:px-4 py-16">
-    <div className="flex flex-wrap w-full">
-      {moduleFormError || isPending ? <div onClick={handleCloseError} className="p-1 lg:p-4 bg-pirrot-blue-50 w-full aspect-video lg:py-16 rounded relative  flex justify-center items-center flex-col">
-        {moduleFormError && <button onClick={handleCloseError} className="absolute top-2 right-2"><XIcon className="size-6" /></button>}
-        {moduleFormError}
-        {isPending && <LoadingSpinner />}
-      </div> : <div className="w-full grid grid-cols-1 lg:grid-cols-2 p-1 lg:p-4 bg-pirrot-blue-50  lg:py-16 rounded gap-4">
-        <div className="flex w-full flex-col gap-2">
-          <h5 className="text-2xl font-bold underline">Erstellen von Modulen</h5>
-          <p className="text-sm w-full max-w-64">Bitte hängen Sie Ihre PDF-Dateien diesem Formular an, um sie für den Planer zu übernehmen.</p>
-
+  return (
+    <section className="content-card p-4 lg:p-5">
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <p className="text-info-800 text-sm uppercase tracking-[0.18em]">
+            Eigene Inhalte
+          </p>
+          <h3 className="text-3xl font-bold text-pirrot-blue-900">
+            PDFs direkt in den Planer aufnehmen
+          </h3>
+          <p className="text-info-800 max-w-3xl">
+            Laden Sie eigene Inhalte hoch und ordnen Sie diese direkt dem
+            passenden Buchteil zu. Nach dem Speichern erscheinen Ihre Module
+            ohne Extra-Bereich direkt in der normalen Auswahl.
+          </p>
         </div>
 
-        <div className="p-2 flex flex-col gap-2 bg-purple-50/20 border-purple-100 border rounded">
-          <h5 className="text-2xl font-bold flex gap-2 items-center"><AlertTriangle /> Hinweis</h5>
-          <p className="text-sm w-full">Erstellte Module sind grundsätzlich privat und nur für Sie einsehbar. Sie haben jedoch die Option, diese Module in Ihrem Nutzerbereich für alle öffentlich zu machen. Beachten Sie hierbei bitte die Allgemeinen Geschäftsbedingungen (AGBs) unserer Webseite.</p>
-        </div>
-        <div className="flex-1 aspect-video">
-          <FileUpload
-            fieldName="custom-upload"
-            resetFile={() => setModuleFormState({
-              ...moduleFormState,
-              moduleFile: null
-            })}
-            onPickedFile={(e) => setModuleFormState({
-              ...moduleFormState,
-              moduleFile: e
-            })}
-          />
-        </div>
-        <form onSubmit={handleFormSubmit} className="basis-1/2 inset-shadow-sm inset-shadow-purple-950/5 bg-purple-300/5 border-info-100 p-2 pt-8 border rounded overflow-y-auto flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">Modul name</label>
-            <input
-              placeholder="Beispiel Titel"
-              className="w-full p-2 text-xl bg-pirrot-blue-50/50 border border-pirrot-blue-50 rounded"
-              value={moduleFormState.name}
-              onChange={
-                (e) => setModuleFormState({
-                  ...moduleFormState,
-                  name: e.target.value
-                })}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium">Teil des Buches</label>
-            <select className="w-full p-2 text-xl bg-pirrot-blue-50/50 border border-pirrot-blue-50 rounded" value={moduleFormState.type} onChange={(e) => setModuleFormState({ ...moduleFormState, type: e.target.value })}>
-              {customTypeItems?.map((t) => <option
-                id={t.name}
-                key={t.id}
-                value={t.name}
-
+        {moduleFormError || isPending ? (
+          <div
+            onClick={handleCloseError}
+            className="content-card relative flex aspect-video w-full flex-col items-center justify-center gap-3 p-4 text-center lg:py-16"
+          >
+            {moduleFormError ? (
+              <button
+                onClick={handleCloseError}
+                type="button"
+                className="btn-soft absolute top-3 right-3 p-2"
               >
-                {t.name}
-                {" | "}
-                {getPageRules({ min: t.min, max: t.max })} Seiten
-              </option>)}
-            </select>
+                <XIcon className="size-5" />
+              </button>
+            ) : null}
+            {moduleFormError ? <p className="max-w-xl">{moduleFormError}</p> : null}
+            {isPending ? <LoadingSpinner /> : null}
           </div>
-          <div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="content-card flex flex-col gap-4 p-4">
+              <div className="flex flex-col gap-2">
+                <h4 className="text-2xl font-bold">Neues Modul erstellen</h4>
+                <p className="text-info-800 text-sm">
+                  Hängen Sie eine PDF-Datei an und legen Sie fest, für welchen
+                  Buchteil das Modul gedacht ist.
+                </p>
+              </div>
 
+              <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="field-shell p-3">
+                  <FileUpload
+                    fieldName="custom-upload"
+                    resetFile={() =>
+                      setModuleFormState((prev) => ({
+                        ...prev,
+                        moduleFile: null,
+                      }))
+                    }
+                    onPickedFile={(file) =>
+                      setModuleFormState((prev) => ({
+                        ...prev,
+                        moduleFile: file,
+                      }))
+                    }
+                  />
+                </div>
+
+                <form
+                  onSubmit={handleFormSubmit}
+                  className="field-shell flex flex-col gap-4 p-4"
+                >
+                  <div className="flex flex-col gap-1">
+                    <label className="form-label">Modulname</label>
+                    <input
+                      placeholder="Beispiel Titel"
+                      className="field-shell w-full px-3 py-2.5"
+                      value={moduleFormState.name}
+                      onChange={(event) =>
+                        setModuleFormState((prev) => ({
+                          ...prev,
+                          name: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="form-label">Teil des Buches</label>
+                    <select
+                      className="field-shell w-full px-3 py-2.5"
+                      value={moduleFormState.type}
+                      onChange={(event) =>
+                        setModuleFormState((prev) => ({
+                          ...prev,
+                          type: event.target.value,
+                        }))
+                      }
+                    >
+                      {customTypeItems?.map((typeItem) => (
+                        <option
+                          id={typeItem.name}
+                          key={typeItem.id}
+                          value={typeItem.name}
+                        >
+                          {typeItem.name} |{" "}
+                          {getPageRules({
+                            min: typeItem.min,
+                            max: typeItem.max,
+                          })}{" "}
+                          Seiten
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    disabled={isPending}
+                    type="submit"
+                    className="btn-solid mt-auto px-4 py-2 disabled:opacity-30"
+                  >
+                    Modul speichern
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="field-shell flex flex-col gap-3 p-4">
+                <div className="rounded-full bg-pirrot-red-100 p-2 text-pirrot-red-500 w-fit">
+                  <UploadCloud className="size-5" />
+                </div>
+                <h4 className="text-lg font-bold">Nach dem Speichern</h4>
+                <p className="text-info-800 text-sm">
+                  Das Modul taucht direkt in der normalen Modulauswahl auf,
+                  passend zum gewählten Buchteil. Bearbeitung und Freigabe
+                  finden Sie weiterhin im{" "}
+                  <Link
+                    href="/dashboard?view=module"
+                    className="font-medium text-pirrot-red-500"
+                  >
+                    Dashboard
+                  </Link>
+                  .
+                </p>
+              </div>
+
+              <div className="field-shell flex flex-col gap-3 p-4">
+                <h4 className="flex items-center gap-2 text-lg font-bold">
+                  <AlertTriangle className="size-5 text-pirrot-red-500" />
+                  Hinweis
+                </h4>
+                <p className="text-info-800 text-sm">
+                  Erstellte Module sind zunächst privat und nur für Sie sichtbar.
+                  Im Nutzerbereich können Sie diese später öffentlich machen,
+                  falls das gewünscht ist.
+                </p>
+              </div>
+
+              <div className="field-shell flex flex-col gap-3 p-4">
+                <h4 className="flex items-center gap-2 text-lg font-bold">
+                  <CircleQuestionMark className="size-5 text-pirrot-blue-600" />
+                  Tooltips
+                </h4>
+                <p className="text-info-800 text-sm">
+                  Schnelle Hinweise für PDF-Aufbereitung und Druckdaten. Mehr
+                  Details finden Sie in der{" "}
+                  <Link
+                    href="/module-docs#tooltips"
+                    className="font-medium text-pirrot-red-500"
+                  >
+                    Dokumentation
+                  </Link>
+                  .
+                </p>
+                <TooltipFader tooltips={existingTips} />
+              </div>
+            </div>
           </div>
-          <div>
-            <button disabled={isPending} type="submit" className="bg-info-300/50 hover:bg-info-300/70  border disabled:opacity-30 p-2 px-4 rounded border-info-100/50 transition duration-300 cursor-pointer font-medium">Speichern</button>
-          </div>
-        </form>
-      </div>}
-      <div className="flex w-full flex-col lg:flex-row p-4 py-16 gap-4 justify-between">
-        <div className="flex-1 w-full flex h-full flex-col gap-4 justify-between">
-
-          <div className="flex flex-col  gap-2">
-            <h5 className="text-2xl font-bold underline">User Module</h5>
-            <p className="text-sm w-full max-w-64">Hier werden Ihre eigenen Module angezeigt. Custom Module können im <Link href="/dashboard?view=module" className="font-medium text-pirrot-red-400">Dashboard</Link> bearbeitet werden.</p>
-          </div>
-          {userModules.length === 0 ? <div className="flex size-full bg-purple-100/50 p-2 rounded text-center items-center justify-center border shadow-2xs border-purple-500/10 flex-col gap-2">
-            <h5 className="text-2xl font-bold uppercase">Module erstellen</h5>
-            <p className="text-sm w-full max-w-64">Module Erstellen und dem Planer hinzufügen. Ihre Dokumente werden hier angezeigt.</p>
-          </div>
-            :
-            <div className="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[420px] overflow-y-auto border-b border-purple-300/20 py-4">
-              {userModules?.map((m, i) => <ModuleItem
-                key={i}
-                item={m}
-                isPicked={pickedModules[getBookPart(m.type, m.part)]?.includes(m.id)}
-                onPickedItem={handlePickedItem}
-              />)}
-            </div>}
-        </div>
-
-
-
-        <div className="border-t lg:border-l lg:border-t-0 border-info-950/20 py-8 lg:pl-8 lg:py-0 h-full flex w-full lg:w-auto flex-col lg:items-center gap-8">
-          <div className="flex flex-col gap-2">
-            <h5 className="font-bold text-2xl flex gap-2 items-center "><CircleQuestionMark /> Tooltips</h5>
-            <p className="text-sm w-full max-w-48">Hier ein paar schnelle Tipps für Sie. Mehr infos erhalten Sie in unserer <Link href="/module-docs#tooltips" className="font-medium text-pirrot-red-400">Dokumentation</Link>.</p>
-          </div>
-          <TooltipFader tooltips={existingTips} />
-
-        </div>
+        )}
       </div>
-    </div>
-  </div>
+    </section>
+  );
 }

@@ -1,6 +1,6 @@
 "use client";
-import prices from "@/util/prices";
 
+import prices from "@/util/prices";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,49 +9,40 @@ import {
   CalendarDays,
   CheckIcon,
   ChevronDown,
-  CloudUpload,
   Component,
   EyeIcon,
-  Filter,
-  FilterIcon,
   GiftIcon,
   InfoIcon,
-  ListCollapse,
   LoaderCircle,
   PenBox,
+  Plus,
   SaveIcon,
   ShellIcon,
   XIcon,
 } from "lucide-react";
 import Modal from "./modal";
 import LoginPromptModal from "./login-prompt-modal";
-import { useCallback, useMemo, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/trpc/react";
 import LoadingSpinner from "./loading-spinner";
 import ModuleItem, { type ModulePickerItem } from "./module-item";
 import ModuleChanger, { type ColorCode, type ModuleId } from "./module-changer";
 import {
+  calculatePdfPageCounts,
   processPdfModules,
   processPdfModulesPreview,
+  type BookDetails,
+  type PDFModule,
 } from "@/util/pdf/converter";
-import { motion } from "framer-motion";
 import Link from "next/link";
 
-import { useModuleState, type ConfigModules } from "@/hooks/use-module-state";
-import { useFilterState } from "@/hooks/use-filter-state";
+import { useModuleState } from "@/hooks/use-module-state";
 import { useUIState } from "@/hooks/use-ui-state";
 import { useBookConfig } from "@/hooks/use-book-config";
 
-import { FilterButton, type FilterItem } from "./filter-button";
 import { ToggleSwitch } from "./toggle-switch";
 import { SearchInput } from "./search-input";
 
-import Image from "next/image";
-
-import UserModules from "../config/_components/_user/modules";
-import { getBookPart } from "@/util/book/functions";
-import Login from "../config/_components/_user/login-form";
-import ModuleCarousel from "./module-carousel";
 import { useRouter } from "next/navigation";
 import ConfigInfoForm from "./config-info-form";
 import CustomDatesForm from "./custom-dates-form";
@@ -63,8 +54,23 @@ import {
   getBindingLimitMessage,
   isBindingAllowedForTotalPages,
 } from "@/util/book/binding-rules";
+import Login from "../config/_components/_user/login-form";
+import UserModules from "../config/_components/_user/modules";
+import { configSteps } from "@/util/book/config-steps";
+import {
+  CONFIG_STEP_ORDER,
+  FILTER_TYPES,
+  getOrderedContentModuleIds,
+  isBindingModuleLike,
+  isConfigModuleSelected,
+  isContentModuleLike,
+  isCoverModuleLike,
+  isPlannerModuleLike,
+  type ConfigModuleBucket,
+  type ConfigModules,
+  type ConfigStepId,
+} from "@/util/book/configurator";
 
-export type ConfigBookPart = keyof ConfigModules;
 type BindingOverflowEvent = {
   invalidBindingId: string;
   invalidBindingName: string;
@@ -72,47 +78,61 @@ type BindingOverflowEvent = {
   suggestedBindingIds: string[];
 };
 
-const GRID_SLICE_SIZES = {
-  both: 8,
-  single: 11,
-  default: 14,
-} as const;
+type AvailableModule = ModulePickerItem & {
+  url?: string | null;
+  thumbnail?: string | null;
+  booksCount?: number;
+  theme: string | null;
+  part: string;
+};
 
-export const FILTER_TYPES = {
-  COVER: "umschlag",
-  PLANNER: "wochenplaner",
-  BINDING: "bindung",
-  CUSTOM: "custom",
-} as const;
+type CalculationSnapshot = {
+  bPages: number;
+  cPages: number;
+  fullPageCount: number;
+};
 
-function isBindingModule(moduleItem: ModulePickerItem): boolean {
-  const normalizedType = moduleItem.type.toLowerCase();
-  const normalizedPart = moduleItem.part.toUpperCase();
-  return (
-    normalizedPart === "BINDING" ||
-    normalizedPart === "SETTINGS" ||
-    normalizedType === FILTER_TYPES.BINDING ||
-    normalizedType === "farben"
-  );
-}
+type LiveDelta = {
+  pageDelta: number;
+  priceDelta: number;
+};
+
+const STEP_LABELS: Record<ConfigStepId, string> = {
+  COVER: "Umschlag",
+  PRE: "Vorderer Teil",
+  PLANNER: "Wochenplaner",
+  POST: "Hinterer Teil",
+  BINDING: "Bindung",
+  CHECKOUT: "Checkout",
+};
+
+const STEP_ACCENTS: Record<ConfigStepId, string> = {
+  COVER: "text-pirrot-blue-700",
+  PRE: "text-pirrot-red-500",
+  PLANNER: "text-pirrot-green-700",
+  POST: "text-pirrot-red-500",
+  BINDING: "text-warning-700",
+  CHECKOUT: "text-info-900",
+};
 
 function getBindingRuleKey(
-  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+  moduleItem: Pick<AvailableModule, "theme" | "name">,
 ): string {
   return moduleItem.theme?.toLocaleLowerCase() ?? moduleItem.name;
 }
 
 function getBindingRuleKeys(
-  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+  moduleItem: Pick<AvailableModule, "theme" | "name">,
 ): string[] {
   const keys = [moduleItem.theme?.toLocaleLowerCase(), moduleItem.name].filter(
-    (val): val is string => typeof val === "string" && val.trim().length > 0,
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
   );
   return Array.from(new Set(keys));
 }
 
 function getMatchedBindingRuleKey(
-  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+  moduleItem: Pick<AvailableModule, "theme" | "name">,
 ): string | null {
   for (const key of getBindingRuleKeys(moduleItem)) {
     if (getBindingPageLimitByName(key) !== null) {
@@ -123,7 +143,7 @@ function getMatchedBindingRuleKey(
 }
 
 function isBindingAllowedForModule(
-  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+  moduleItem: Pick<AvailableModule, "theme" | "name">,
   totalPages: number,
 ): boolean {
   const matchedKey = getMatchedBindingRuleKey(moduleItem);
@@ -132,7 +152,7 @@ function isBindingAllowedForModule(
 }
 
 function getBindingLimitMessageForModule(
-  moduleItem: Pick<ModulePickerItem, "theme" | "name">,
+  moduleItem: Pick<AvailableModule, "theme" | "name">,
   totalPages: number,
 ): string | null {
   const matchedKey = getMatchedBindingRuleKey(moduleItem);
@@ -140,26 +160,146 @@ function getBindingLimitMessageForModule(
   return getBindingLimitMessage(matchedKey, totalPages);
 }
 
-function getGridColumns(
-  isFilterOpen: boolean,
-  isBookInfoOpen: boolean,
-): string {
-  if (isFilterOpen && isBookInfoOpen) return "grid-cols-2 xl:grid-cols-3";
-  if (isFilterOpen || isBookInfoOpen)
-    return "grid-cols-2 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-4";
-  return "grid-cols-2 xl:grid-cols-5";
+function getModuleBadgeClass(moduleType: string): string {
+  switch (moduleType.toLowerCase()) {
+    case FILTER_TYPES.BINDING:
+      return "bg-warning-300/20";
+    case FILTER_TYPES.PLANNER:
+      return "bg-pirrot-green-300/20";
+    case FILTER_TYPES.COVER:
+      return "bg-pirrot-blue-300/20";
+    default:
+      return "bg-pirrot-red-400/20";
+  }
 }
 
-function getCurrentSlice(
-  isFilterOpen: boolean,
-  isBookInfoOpen: boolean,
-): number {
-  if (isFilterOpen && isBookInfoOpen) return GRID_SLICE_SIZES.both;
-  if (isFilterOpen || isBookInfoOpen) return GRID_SLICE_SIZES.single;
-  return GRID_SLICE_SIZES.default;
+function formatSignedPages(value: number): string {
+  if (value === 0) return "0 Seiten";
+  return `${value > 0 ? "+" : ""}${value} Seiten`;
 }
 
-// Main component
+function formatSignedEuroCents(value: number): string {
+  const euros = (Math.abs(value) / 100).toFixed(2);
+  return `${value > 0 ? "+" : value < 0 ? "-" : ""}${euros} €`;
+}
+
+function getStepIcon(stepId: ConfigStepId) {
+  switch (stepId) {
+    case "COVER":
+      return <BookImage className="size-4" />;
+    case "PRE":
+      return <Component className="size-4" />;
+    case "PLANNER":
+      return <CalendarDays className="size-4" />;
+    case "POST":
+      return <BookA className="size-4" />;
+    case "BINDING":
+      return <ShellIcon className="size-4" />;
+    case "CHECKOUT":
+      return <CheckIcon className="size-4" />;
+  }
+}
+
+function getStepThemeClasses(stepId: ConfigStepId) {
+  switch (stepId) {
+    case "COVER":
+      return "border-pirrot-blue-300/60 text-pirrot-blue-800";
+    case "PRE":
+      return "border-pirrot-red-200/70 text-pirrot-red-700";
+    case "PLANNER":
+      return "border-pirrot-green-300/60 text-pirrot-green-800";
+    case "POST":
+      return "border-pirrot-red-200/70 text-pirrot-red-700";
+    case "BINDING":
+      return "border-warning-300/60 text-warning-800";
+    case "CHECKOUT":
+      return "border-pirrot-blue-200/60 text-info-900";
+  }
+}
+
+function getStepBucket(step: ConfigStepId): ConfigModuleBucket | null {
+  switch (step) {
+    case "COVER":
+      return "COVER";
+    case "PRE":
+      return "PRE";
+    case "PLANNER":
+      return "PLANNER";
+    case "POST":
+      return "POST";
+    case "BINDING":
+      return "BINDING";
+    case "CHECKOUT":
+      return null;
+  }
+}
+
+function getBucketLabel(bucket: ConfigModuleBucket): string {
+  switch (bucket) {
+    case "COVER":
+      return "Umschlag";
+    case "PRE":
+      return "vorderen Teil";
+    case "PLANNER":
+      return "Wochenplaner";
+    case "POST":
+      return "hinteren Teil";
+    case "BINDING":
+      return "Bindung";
+  }
+}
+
+function removeModuleFromBuckets(
+  pickedModules: ConfigModules,
+  moduleId: string,
+): ConfigModules {
+  return {
+    COVER: pickedModules.COVER.filter((id) => id !== moduleId),
+    PRE: pickedModules.PRE.filter((id) => id !== moduleId),
+    PLANNER: pickedModules.PLANNER.filter((id) => id !== moduleId),
+    POST: pickedModules.POST.filter((id) => id !== moduleId),
+    BINDING: pickedModules.BINDING.filter((id) => id !== moduleId),
+  };
+}
+
+function SelectedModuleList(props: {
+  title: string;
+  modules: AvailableModule[];
+  emptyText: string;
+}) {
+  const { title, modules, emptyText } = props;
+
+  return (
+    <div className="field-shell flex flex-col gap-2 p-3">
+      <h4 className="font-bold">{title}</h4>
+      {modules.length === 0 ? (
+        <p className="text-info-800 text-sm">{emptyText}</p>
+      ) : (
+        <ul className="space-y-2">
+          {modules.map((moduleItem) => (
+            <li
+              key={moduleItem.id}
+              className="border-info-950/10 flex flex-wrap items-center gap-2 border-b pb-2"
+            >
+              <span className="font-semibold">{moduleItem.name}</span>
+              <span
+                className={`rounded-lg px-2 py-0.5 text-xs first-letter:uppercase ${getModuleBadgeClass(moduleItem.type)}`}
+              >
+                {moduleItem.type}
+              </span>
+              {moduleItem.theme ? (
+                <span className="field-shell rounded-lg px-2 py-0.5 text-xs first-letter:uppercase">
+                  {moduleItem.theme}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function BookConfig(props: {
   bookId?: string;
   isLoggedIn?: boolean;
@@ -171,18 +311,8 @@ export default function BookConfig(props: {
   const {
     modules,
     book: existingBook,
-    types: existingTypes,
     tips: existingTips,
   } = useBookConfig(bookId);
-
-  const {
-    data: userModules,
-    error: userModulesError,
-    isLoading: userModulesLoading,
-  } = api.module.getUserModules.useQuery(undefined, {
-    retry: 0,
-    retryOnMount: false,
-  });
 
   const {
     nameInput,
@@ -201,11 +331,11 @@ export default function BookConfig(props: {
     setIsMakingPreview,
   } = useModuleState({
     name: existingBook?.name,
-    modules: existingBook?.modules.map((m) => ({
-      id: m.moduleId,
-      idx: m.idx,
-      part: m.module.part,
-      color: m.colorCode === "COLOR" ? 4 : 1,
+    modules: existingBook?.modules.map((moduleItem) => ({
+      id: moduleItem.moduleId,
+      idx: moduleItem.idx,
+      part: moduleItem.module.part,
+      color: moduleItem.colorCode === "COLOR" ? 4 : 1,
     })),
   });
 
@@ -229,6 +359,36 @@ export default function BookConfig(props: {
     setOnlyPickedModules,
   } = useUIState();
 
+  const [searchFilterValue, setSearchFilterValue] = useState("");
+  const [currentStep, setCurrentStep] = useState<ConfigStepId>("COVER");
+  const [moduleColorMap, setModuleColorMap] = useState<Map<ModuleId, ColorCode>>(
+    () => {
+      const next = new Map<ModuleId, ColorCode>();
+      if (existingBook?.modules) {
+        for (const moduleItem of existingBook.modules) {
+          next.set(
+            moduleItem.moduleId,
+            moduleItem.colorCode === "COLOR" ? 4 : 1,
+          );
+        }
+      }
+      return next;
+    },
+  );
+  const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
+  const [useMobilePdfFallback, setUseMobilePdfFallback] = useState(false);
+  const [bindingOverflowEvent, setBindingOverflowEvent] =
+    useState<BindingOverflowEvent | null>(null);
+  const [liveChangeNotice, setLiveChangeNotice] = useState<string>();
+  const [lastCalculation, setLastCalculation] =
+    useState<CalculationSnapshot | null>(null);
+  const [isLiveCalculating, setIsLiveCalculating] = useState(false);
+  const [liveCalculationError, setLiveCalculationError] = useState<string>();
+  const [liveDelta, setLiveDelta] = useState<LiveDelta | null>(null);
+  const [previewConfigKey, setPreviewConfigKey] = useState<string | null>(null);
+  const calcRequestIdRef = useRef(0);
+  const previousCalculationRef = useRef<CalculationSnapshot | null>(null);
+
   useEffect(() => {
     return () => {
       if (previewFileURL) {
@@ -236,43 +396,6 @@ export default function BookConfig(props: {
       }
     };
   }, [previewFileURL]);
-
-  const {
-    filterValues,
-    setFilterValues,
-    searchFilterValue,
-    setSearchFilterValue,
-    handleFilterValues,
-    clearSearch,
-  } = useFilterState();
-
-  function handleCategorySwitch(val: string) {
-    if (filterValues.includes(val)) {
-      setFilterValues([]);
-    } else {
-      setFilterValues([val]);
-      setIsFilterOpen(true);
-    }
-  }
-
-  const [moduleColorMap, setModuleColorMap] = useState<
-    Map<ModuleId, ColorCode>
-  >(() => {
-    const newMap = new Map();
-    if (existingBook?.modules) {
-      for (const moduleItem of existingBook.modules) {
-        newMap.set(
-          moduleItem.moduleId,
-          moduleItem.colorCode === "COLOR" ? 4 : 1,
-        );
-      }
-    }
-    return newMap;
-  });
-  const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
-  const [useMobilePdfFallback, setUseMobilePdfFallback] = useState(false);
-  const [bindingOverflowEvent, setBindingOverflowEvent] =
-    useState<BindingOverflowEvent | null>(null);
 
   useEffect(() => {
     const userAgent = navigator.userAgent ?? "";
@@ -288,6 +411,426 @@ export default function BookConfig(props: {
     setUseMobilePdfFallback(isiOS || isMobileDevice);
   }, []);
 
+  useEffect(() => {
+    if (!liveChangeNotice) return;
+    const timeout = window.setTimeout(() => {
+      setLiveChangeNotice(undefined);
+    }, 2600);
+    return () => window.clearTimeout(timeout);
+  }, [liveChangeNotice]);
+
+  const allModules = useMemo<AvailableModule[]>(
+    () => modules as AvailableModule[],
+    [modules],
+  );
+
+  const moduleLookupById = useMemo(
+    () => new Map(allModules.map((moduleItem) => [moduleItem.id, moduleItem])),
+    [allModules],
+  );
+
+  const selectedBindingRuleKey = useMemo(() => {
+    const selectedBindingId = pickedModules.BINDING[0];
+    if (!selectedBindingId) return undefined;
+
+    const selectedBinding = moduleLookupById.get(selectedBindingId);
+    if (!selectedBinding) return undefined;
+
+    return (
+      getMatchedBindingRuleKey(selectedBinding) ??
+      getBindingRuleKey(selectedBinding)
+    );
+  }, [moduleLookupById, pickedModules.BINDING]);
+
+  const pdfBookDetails = useMemo<BookDetails>(
+    () => ({
+      title: existingBook?.bookTitle ?? "Schulplaner",
+      period: {
+        start: existingBook?.planStart,
+        end: existingBook?.planEnd ?? undefined,
+      },
+      code: existingBook?.region ?? "DE-SL",
+      country: existingBook?.country ?? "DE",
+      addHolidays: true,
+      customDates: (existingBook?.customDates ?? []).map((dateItem) => ({
+        date: formatDateKeyUTC(new Date(dateItem.date)),
+        name: dateItem.name,
+      })),
+    }),
+    [
+      existingBook?.bookTitle,
+      existingBook?.planStart,
+      existingBook?.planEnd,
+      existingBook?.region,
+      existingBook?.country,
+      existingBook?.customDates,
+    ],
+  );
+
+  const pdfModulesForSelection = useMemo<PDFModule[] | null>(() => {
+    const coverId = pickedModules.COVER[0];
+    if (!coverId) return null;
+
+    const coverModule = moduleLookupById.get(coverId);
+    if (!coverModule?.url) return null;
+
+    const contentIds = getOrderedContentModuleIds(pickedModules);
+    const contentModules: PDFModule[] = [];
+
+    for (const [idx, moduleId] of contentIds.entries()) {
+      const moduleItem = moduleLookupById.get(moduleId);
+      if (!moduleItem?.url) return null;
+
+      contentModules.push({
+        idx,
+        id: moduleId,
+        type: moduleItem.type.toLowerCase(),
+        pdfUrl: moduleItem.url,
+      });
+    }
+
+    return [
+      ...contentModules,
+      {
+        id: coverModule.id,
+        idx: 12345,
+        type: FILTER_TYPES.COVER,
+        pdfUrl: coverModule.url,
+      },
+    ];
+  }, [moduleLookupById, pickedModules]);
+
+  const configKey = useMemo(
+    () =>
+      JSON.stringify({
+        cover: pickedModules.COVER,
+        pre: pickedModules.PRE,
+        planner: pickedModules.PLANNER,
+        post: pickedModules.POST,
+        binding: pickedModules.BINDING,
+        format: pickedFormat,
+        colors: Array.from(moduleColorMap.entries()).sort(([a], [b]) =>
+          a.localeCompare(b),
+        ),
+      }),
+    [moduleColorMap, pickedFormat, pickedModules],
+  );
+
+  const isCheckoutPreviewStale =
+    previewConfigKey !== null && previewConfigKey !== configKey;
+  const hasLiveCalcBaseConfig =
+    pickedModules.COVER.length === 1 && pickedModules.PLANNER.length >= 1;
+
+  useEffect(() => {
+    if (!lastCalculation) return;
+    const estimatedCost = calculatePrintCost({
+      amount: orderAmount,
+      bPages: lastCalculation.bPages,
+      cPages: lastCalculation.cPages,
+      format: pickedFormat,
+      bindingName: selectedBindingRuleKey,
+      prices,
+    });
+    setPreviewPrice(estimatedCost);
+  }, [
+    lastCalculation,
+    orderAmount,
+    pickedFormat,
+    selectedBindingRuleKey,
+    setPreviewPrice,
+  ]);
+
+  const modulesByStep = useMemo(() => {
+    const resolveModules = (ids: string[]) =>
+      ids
+        .map((id) => moduleLookupById.get(id))
+        .filter((moduleItem): moduleItem is AvailableModule => Boolean(moduleItem));
+
+    return {
+      cover: resolveModules(pickedModules.COVER),
+      pre: resolveModules(pickedModules.PRE),
+      planner: resolveModules(pickedModules.PLANNER),
+      post: resolveModules(pickedModules.POST),
+      binding: resolveModules(pickedModules.BINDING),
+    };
+  }, [moduleLookupById, pickedModules]);
+
+  const completionStatus = useMemo(
+    () => ({
+      hasCoverModule: pickedModules.COVER.length === 1,
+      hasPlannerModule: pickedModules.PLANNER.length >= 1,
+      hasBindingModule: pickedModules.BINDING.length === 1,
+    }),
+    [pickedModules],
+  );
+
+  const currentStepConfig = configSteps.find((step) => step.id === currentStep)!;
+  const currentStepIndex = CONFIG_STEP_ORDER.indexOf(currentStep);
+  const currentBucket = getStepBucket(currentStep);
+  const currentStepSelectedIds = useMemo(
+    () => (currentBucket ? pickedModules[currentBucket] : []),
+    [currentBucket, pickedModules],
+  );
+
+  const matchingTips = useMemo(
+    () =>
+      (existingTips ?? []).map((tip: { title?: string } | string) =>
+        typeof tip === "string" ? tip : (tip.title ?? ""),
+      ),
+    [existingTips],
+  );
+
+  const bindingAvailabilityById = useMemo(() => {
+    const availability = new Map<string, { disabled: boolean; reason?: string }>();
+
+    for (const moduleItem of allModules) {
+      if (!isBindingModuleLike(moduleItem)) {
+        availability.set(moduleItem.id, { disabled: false });
+        continue;
+      }
+
+      if (totalPagesCount <= 0) {
+        availability.set(moduleItem.id, { disabled: false });
+        continue;
+      }
+
+      const isAllowed = isBindingAllowedForModule(moduleItem, totalPagesCount);
+      availability.set(moduleItem.id, {
+        disabled: !isAllowed,
+        reason: isAllowed
+          ? undefined
+          : (getBindingLimitMessageForModule(moduleItem, totalPagesCount) ?? undefined),
+      });
+    }
+
+    return availability;
+  }, [allModules, totalPagesCount]);
+
+  const bindingOverflowSuggestions = useMemo(() => {
+    if (!bindingOverflowEvent) return [];
+    return bindingOverflowEvent.suggestedBindingIds
+      .map((id) => moduleLookupById.get(id))
+      .filter((moduleItem): moduleItem is AvailableModule => Boolean(moduleItem));
+  }, [bindingOverflowEvent, moduleLookupById]);
+
+  const isConfigComplete =
+    completionStatus.hasCoverModule &&
+    completionStatus.hasPlannerModule &&
+    completionStatus.hasBindingModule;
+
+  const visibleModules = useMemo(() => {
+    if (currentStep === "CHECKOUT") return [];
+
+    const normalizedSearch = searchFilterValue.trim().toLowerCase();
+
+    return allModules.filter((moduleItem) => {
+      const isStepMatch =
+        currentStep === "COVER"
+          ? isCoverModuleLike(moduleItem)
+          : currentStep === "PLANNER"
+            ? isPlannerModuleLike(moduleItem)
+            : currentStep === "BINDING"
+              ? isBindingModuleLike(moduleItem)
+              : isContentModuleLike(moduleItem);
+
+      if (!isStepMatch) return false;
+
+      if (
+        onlyPickedModules &&
+        !currentStepSelectedIds.includes(moduleItem.id)
+      ) {
+        return false;
+      }
+
+      if (!normalizedSearch) return true;
+
+      return [moduleItem.name, moduleItem.type, moduleItem.theme ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSearch);
+    });
+  }, [
+    allModules,
+    currentStep,
+    currentStepSelectedIds,
+    onlyPickedModules,
+    searchFilterValue,
+  ]);
+
+  const utils = api.useUtils();
+  const { mutate: updateName } = api.book.updatePlannerName.useMutation({
+    onSuccess: async (data) => {
+      await utils.config.init.invalidate({ bookId });
+      setNameInput(data.name);
+      setModalId(undefined);
+    },
+  });
+
+  const { mutateAsync: saveConfigModules, isPending: isSavingConfig } =
+    api.book.saveBookModules.useMutation({
+      onSuccess: async () => {
+        await utils.book.getById.invalidate({ id: bookId });
+        router.refresh();
+      },
+    });
+
+  function announceChange(message: string) {
+    setLiveChangeNotice(message);
+  }
+
+  function clearSearch() {
+    setSearchFilterValue("");
+  }
+
+  function findSelectedBucket(moduleId: string): ConfigModuleBucket | null {
+    if (pickedModules.COVER.includes(moduleId)) return "COVER";
+    if (pickedModules.PRE.includes(moduleId)) return "PRE";
+    if (pickedModules.PLANNER.includes(moduleId)) return "PLANNER";
+    if (pickedModules.POST.includes(moduleId)) return "POST";
+    if (pickedModules.BINDING.includes(moduleId)) return "BINDING";
+    return null;
+  }
+
+  const triggerBindingOverflowIfNeeded = useCallback((
+    nextTotalPagesCount: number,
+  ): boolean => {
+    const selectedBindingId = pickedModules.BINDING[0];
+    if (!selectedBindingId || nextTotalPagesCount <= 0) return false;
+
+    const selectedBinding = moduleLookupById.get(selectedBindingId);
+    if (!selectedBinding || !isBindingModuleLike(selectedBinding)) return false;
+
+    if (isBindingAllowedForModule(selectedBinding, nextTotalPagesCount)) {
+      setBindingOverflowEvent(null);
+      return false;
+    }
+
+    const suggestedBindingIds = allModules
+      .filter((moduleItem) => {
+        if (!isBindingModuleLike(moduleItem)) return false;
+        if (moduleItem.id === selectedBinding.id) return false;
+        return isBindingAllowedForModule(moduleItem, nextTotalPagesCount);
+      })
+      .slice(0, 2)
+      .map((moduleItem) => moduleItem.id);
+
+    setPickedModules((prev) => ({ ...prev, BINDING: [] }));
+    setBindingOverflowEvent({
+      invalidBindingId: selectedBinding.id,
+      invalidBindingName: selectedBinding.name,
+      totalPages: nextTotalPagesCount,
+      suggestedBindingIds,
+    });
+    setModalId("binding-overflow");
+    return true;
+  }, [allModules, moduleLookupById, pickedModules.BINDING, setModalId, setPickedModules]);
+
+  useEffect(() => {
+    if (!hasLiveCalcBaseConfig) {
+      calcRequestIdRef.current += 1;
+      previousCalculationRef.current = null;
+      setLastCalculation(null);
+      setLiveDelta(null);
+      setLiveCalculationError(undefined);
+      setIsLiveCalculating(false);
+      setTotalPagesCount(0);
+      setPreviewPrice({ single: 0, total: 0 });
+      return;
+    }
+
+    if (!pdfModulesForSelection) {
+      setLiveCalculationError(
+        "Seitenzahl konnte für die aktuelle Auswahl nicht berechnet werden.",
+      );
+      return;
+    }
+
+    const requestId = ++calcRequestIdRef.current;
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          setIsLiveCalculating(true);
+          setLiveCalculationError(undefined);
+
+          const counts = await calculatePdfPageCounts(
+            pdfBookDetails,
+            pdfModulesForSelection,
+            {
+              colorMap: moduleColorMap,
+            },
+          );
+
+          if (requestId !== calcRequestIdRef.current) return;
+
+          const nextCalculation: CalculationSnapshot = {
+            bPages: counts.bPages,
+            cPages: counts.cPages,
+            fullPageCount: counts.fullPageCount,
+          };
+
+          const previousCalculation = previousCalculationRef.current;
+          const nextPrice = calculatePrintCost({
+            amount: orderAmount,
+            bPages: counts.bPages,
+            cPages: counts.cPages,
+            format: pickedFormat,
+            bindingName: selectedBindingRuleKey,
+            prices,
+          });
+
+          if (previousCalculation) {
+            const previousPrice = calculatePrintCost({
+              amount: orderAmount,
+              bPages: previousCalculation.bPages,
+              cPages: previousCalculation.cPages,
+              format: pickedFormat,
+              bindingName: selectedBindingRuleKey,
+              prices,
+            });
+
+            setLiveDelta({
+              pageDelta:
+                nextCalculation.fullPageCount -
+                previousCalculation.fullPageCount,
+              priceDelta: nextPrice.total - previousPrice.total,
+            });
+          } else {
+            setLiveDelta(null);
+          }
+
+          previousCalculationRef.current = nextCalculation;
+          setLastCalculation(nextCalculation);
+          setPreviewPrice(nextPrice);
+          setTotalPagesCount(nextCalculation.fullPageCount);
+          triggerBindingOverflowIfNeeded(nextCalculation.fullPageCount);
+        } catch (error) {
+          if (requestId !== calcRequestIdRef.current) return;
+          const message = error instanceof Error ? error.message : String(error);
+          setLiveCalculationError(handleWarningText(message));
+        } finally {
+          if (requestId === calcRequestIdRef.current) {
+            setIsLiveCalculating(false);
+          }
+        }
+      })();
+    }, 320);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    hasLiveCalcBaseConfig,
+    moduleColorMap,
+    orderAmount,
+    pdfBookDetails,
+    pdfModulesForSelection,
+    pickedFormat,
+    selectedBindingRuleKey,
+    setPreviewPrice,
+    setTotalPagesCount,
+    triggerBindingOverflowIfNeeded,
+  ]);
+
   const handleOpenPreviewInNewTab = useCallback(() => {
     if (!previewFileURL) return;
     const opened = window.open(previewFileURL, "_blank", "noopener,noreferrer");
@@ -295,6 +838,321 @@ export default function BookConfig(props: {
       window.location.href = previewFileURL;
     }
   }, [previewFileURL]);
+
+  function markPreviewFresh() {
+    setPreviewConfigKey(configKey);
+  }
+
+  async function handleSaveConfig(
+    event?: React.MouseEvent<HTMLButtonElement>,
+  ): Promise<void> {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    if (!bookId) return;
+
+    await saveConfigModules({
+      bookId,
+      modules: [
+        ...pickedModules.COVER.map((id) => ({
+          id,
+          idx: 0,
+          colorCode: moduleColorMap.get(id),
+        })),
+        ...getOrderedContentModuleIds(pickedModules).map((id, index) => ({
+          id,
+          idx: index + 1,
+          colorCode: moduleColorMap.get(id),
+        })),
+        ...pickedModules.BINDING.map((id) => ({
+          id,
+          idx: -1,
+        })),
+      ],
+    });
+  }
+
+  async function generateCheckoutPreview(usePreviewMode: boolean) {
+    if (!pdfModulesForSelection) {
+      throw new Error("Cover module not found");
+    }
+
+    if (previewFileURL) {
+      URL.revokeObjectURL(previewFileURL);
+      setPreviewFileURL(undefined);
+    }
+
+    const options = {
+      compressionLevel: "high" as const,
+      format: pickedFormat,
+      colorMap: moduleColorMap,
+      ...(usePreviewMode ? {} : { addWatermark: true }),
+    };
+
+    const result = usePreviewMode
+      ? await processPdfModulesPreview(
+        pdfBookDetails,
+        pdfModulesForSelection,
+        options,
+      )
+      : await processPdfModules(pdfBookDetails, pdfModulesForSelection, options);
+
+    const blob = new Blob([result.pdfFile as BlobPart], {
+      type: "application/pdf",
+    });
+    const url = URL.createObjectURL(blob);
+
+    const recalculatedTotalPages = result.details.fullPageCount;
+    if (typeof recalculatedTotalPages !== "number") {
+      throw new Error("Genaue Gesamtseitenzahl konnte nicht ermittelt werden.");
+    }
+
+    setPreviewFileURL(url);
+    const nextCalculation = {
+      bPages: result.details.bPages,
+      cPages: result.details.cPages,
+      fullPageCount: recalculatedTotalPages,
+    };
+    setLastCalculation(nextCalculation);
+    previousCalculationRef.current = nextCalculation;
+    setTotalPagesCount(recalculatedTotalPages);
+    markPreviewFresh();
+    triggerBindingOverflowIfNeeded(recalculatedTotalPages);
+  }
+
+  async function prepareCheckoutStep() {
+    try {
+      setIsMakingPreview(true);
+      await generateCheckoutPreview(false);
+      await handleSaveConfig();
+      setCurrentStep("CHECKOUT");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const warning = handleWarningText(message);
+      setConfigWarnings((prev) =>
+        prev.includes(warning) ? prev : [...prev, warning],
+      );
+    } finally {
+      setIsMakingPreview(false);
+    }
+  }
+
+  async function refreshCheckoutPreview() {
+    try {
+      setIsRefreshingPreview(true);
+      setIsMakingPreview(true);
+      await generateCheckoutPreview(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const warning = handleWarningText(message);
+      setConfigWarnings((prev) =>
+        prev.includes(warning) ? prev : [...prev, warning],
+      );
+    } finally {
+      setIsMakingPreview(false);
+      setIsRefreshingPreview(false);
+    }
+  }
+
+  function handleWarningText(text: string): string {
+    switch (true) {
+      case text.toLocaleLowerCase().includes("cover"):
+        return configWarningTexts.cover;
+      case text.toLocaleLowerCase().includes("planner"):
+        return configWarningTexts.planner;
+      default:
+        return text;
+    }
+  }
+
+  function handlePickedItem(pickedItem: { id: string; type: string }) {
+    const pickedModule = moduleLookupById.get(pickedItem.id);
+    if (!pickedModule) return;
+
+    const normalizedType = pickedModule.type.toLowerCase();
+    const currentBucketForModule = findSelectedBucket(pickedModule.id);
+    const targetContentBucket = currentStep === "POST" ? "POST" : "PRE";
+
+    if (
+      currentBucketForModule &&
+      isContentModuleLike(pickedModule) &&
+      (currentBucketForModule === "PRE" || currentBucketForModule === "POST") &&
+      currentBucketForModule !== targetContentBucket &&
+      (currentStep === "PRE" || currentStep === "POST")
+    ) {
+      setPickedModules((prev) => {
+        const next = removeModuleFromBuckets(prev, pickedModule.id);
+        return {
+          ...next,
+          [targetContentBucket]: [...next[targetContentBucket], pickedModule.id],
+        };
+      });
+      announceChange(
+        `${pickedModule.name} wurde in den ${getBucketLabel(targetContentBucket)} verschoben.`,
+      );
+      setIsBookInfoOpen(true);
+      return;
+    }
+
+    if (currentBucketForModule) {
+      setPickedModules((prev) => removeModuleFromBuckets(prev, pickedModule.id));
+      announceChange(
+        `${pickedModule.name} wurde aus dem ${getBucketLabel(currentBucketForModule)} entfernt.`,
+      );
+      return;
+    }
+
+    if (
+      isBindingModuleLike(pickedModule) &&
+      totalPagesCount > 0 &&
+      !isBindingAllowedForModule(pickedModule, totalPagesCount)
+    ) {
+      const warning =
+        getBindingLimitMessageForModule(pickedModule, totalPagesCount) ??
+        "Die gewählte Bindung ist für die aktuelle Seitenzahl nicht verfügbar.";
+      setConfigWarnings((prev) =>
+        prev.includes(warning) ? prev : [...prev, warning],
+      );
+      return;
+    }
+
+    setPickedModules((prev) => {
+      const next = removeModuleFromBuckets(prev, pickedModule.id);
+
+      if (isCoverModuleLike(pickedModule) || normalizedType === FILTER_TYPES.COVER) {
+        announceChange(`${pickedModule.name} wurde als Umschlag gesetzt.`);
+        return { ...next, COVER: [pickedModule.id] };
+      }
+
+      if (
+        isBindingModuleLike(pickedModule) ||
+        normalizedType === FILTER_TYPES.BINDING
+      ) {
+        announceChange(`${pickedModule.name} wurde als Bindung gesetzt.`);
+        return { ...next, BINDING: [pickedModule.id] };
+      }
+
+      if (
+        isPlannerModuleLike(pickedModule) ||
+        normalizedType === FILTER_TYPES.PLANNER
+      ) {
+        announceChange(`${pickedModule.name} wurde als Wochenplaner gesetzt.`);
+        return { ...next, PLANNER: [pickedModule.id] };
+      }
+
+      announceChange(
+        `${pickedModule.name} wurde zum ${getBucketLabel(targetContentBucket)} hinzugefügt.`,
+      );
+      return {
+        ...next,
+        [targetContentBucket]: [...next[targetContentBucket], pickedModule.id],
+      };
+    });
+
+    if (bindingOverflowEvent) {
+      setBindingOverflowEvent(null);
+    }
+    if (modalId === "binding-overflow") {
+      setModalId(undefined);
+    }
+
+    setIsBookInfoOpen(true);
+  }
+
+  function isStepAccessible(stepId: ConfigStepId): boolean {
+    switch (stepId) {
+      case "COVER":
+        return true;
+      case "PRE":
+        return completionStatus.hasCoverModule;
+      case "PLANNER":
+        return completionStatus.hasCoverModule;
+      case "POST":
+        return completionStatus.hasCoverModule && completionStatus.hasPlannerModule;
+      case "BINDING":
+        return completionStatus.hasCoverModule && completionStatus.hasPlannerModule;
+      case "CHECKOUT":
+        return isConfigComplete;
+    }
+  }
+
+  function isStepComplete(stepId: ConfigStepId): boolean {
+    switch (stepId) {
+      case "COVER":
+        return completionStatus.hasCoverModule;
+      case "PRE":
+        return true;
+      case "PLANNER":
+        return completionStatus.hasPlannerModule;
+      case "POST":
+        return true;
+      case "BINDING":
+        return completionStatus.hasBindingModule;
+      case "CHECKOUT":
+        return Boolean(previewFileURL) && !isCheckoutPreviewStale;
+    }
+  }
+
+  function canContinueCurrentStep(): boolean {
+    switch (currentStep) {
+      case "COVER":
+        return completionStatus.hasCoverModule;
+      case "PRE":
+        return completionStatus.hasCoverModule;
+      case "PLANNER":
+        return completionStatus.hasPlannerModule;
+      case "POST":
+        return completionStatus.hasPlannerModule;
+      case "BINDING":
+        return isConfigComplete;
+      case "CHECKOUT":
+        return isCheckoutPreviewStale;
+    }
+  }
+
+  async function handleStepChange(stepId: ConfigStepId) {
+    if (!isStepAccessible(stepId)) return;
+    if (stepId === "CHECKOUT") {
+      await prepareCheckoutStep();
+      return;
+    }
+    setCurrentStep(stepId);
+  }
+
+  async function handleNextStep() {
+    if (currentStep === "CHECKOUT") {
+      if (isCheckoutPreviewStale) {
+        await prepareCheckoutStep();
+      }
+      return;
+    }
+
+    const nextStep = CONFIG_STEP_ORDER[currentStepIndex + 1];
+    if (!nextStep) return;
+    await handleStepChange(nextStep);
+  }
+
+  function handlePreviousStep() {
+    if (currentStepIndex <= 0) return;
+    setCurrentStep(CONFIG_STEP_ORDER[currentStepIndex - 1]!);
+  }
+
+  function handleConfigWarning(event: React.MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const warnId = event.currentTarget.id.split("-")[1];
+    setConfigWarnings((prev) =>
+      prev.filter((_, index) => index !== Number(warnId)),
+    );
+  }
+
+  const handleNameSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!bookId || !nameInput) return;
+    updateName({ id: bookId, name: nameInput });
+  };
 
   const renderMobilePdfFallback = (className = "") => {
     if (!previewFileURL) return null;
@@ -335,597 +1193,8 @@ export default function BookConfig(props: {
     </p>
   );
 
-  // API mutations
-  const utils = api.useUtils();
-  const { mutate: updateName } = api.book.updatePlannerName.useMutation({
-    onSuccess: async (data) => {
-      await utils.config.init.invalidate({ bookId });
-      setNameInput(data.name);
-      setModalId(undefined);
-    },
-  });
-
-  const { mutate: saveConfigModules, isPending: isSavingConfig } =
-    api.book.saveBookModules.useMutation({
-      onSuccess: async () => {
-        await utils.book.getById.invalidate({ id: bookId });
-        router.refresh();
-      },
-    });
-
-  function getUniqueThemes(modules: ModulePickerItem[]) {
-    return Array.from(
-      new Set(
-        modules
-          .map((m) => m.theme)
-          .filter((theme) => theme && theme !== "custom"),
-      ),
-    );
-  }
-
-  const uniqueThemes = getUniqueThemes(modules);
-
-  const moduleLookupById = useMemo(() => {
-    const allModules = [...modules, ...(userModules ?? [])];
-    return new Map(allModules.map((moduleItem) => [moduleItem.id, moduleItem]));
-  }, [modules, userModules]);
-
-  // Computed values
-  const modulesByType = useMemo(() => {
-    const idToModule = new Map(modules.map((m) => [m.id, m]));
-    const toOrdered = (ids: string[]) =>
-      ids
-        .map((id) => idToModule.get(id))
-        .filter((m): m is (typeof modules)[number] => Boolean(m));
-
-    return {
-      cover: toOrdered(pickedModules.COVER),
-      planner: toOrdered(pickedModules.MODULES),
-      settings: toOrdered(pickedModules.SETTINGS),
-    };
-  }, [modules, pickedModules]);
-
-  const completionStatus = useMemo(
-    () => ({
-      hasCoverModule: modulesByType.cover.some(
-        (m) => m.type.toLowerCase() === FILTER_TYPES.COVER,
-      ),
-      hasPlannerModule: modulesByType.planner.some(
-        (m) => m.type.toLowerCase() === FILTER_TYPES.PLANNER,
-      ),
-      hasCustomModule: [...modulesByType.planner, ...modulesByType.cover].some(
-        (m) => m.type.toLowerCase() === FILTER_TYPES.CUSTOM,
-      ),
-      hasBindingModule: modulesByType.settings.some(
-        (m) => m.type.toLowerCase() === FILTER_TYPES.BINDING,
-      ),
-    }),
-    [modulesByType],
-  );
-
-  const filterGroups: FilterItem[] = [
-    {
-      id: "Umschläge",
-      filterValue: FILTER_TYPES.COVER,
-      isComplete: completionStatus.hasCoverModule,
-    },
-    {
-      id: "Wochenplaner",
-      filterValue: FILTER_TYPES.PLANNER,
-      isComplete: completionStatus.hasPlannerModule,
-    },
-    {
-      id: "Bindungen",
-      filterValue: FILTER_TYPES.BINDING,
-      isComplete: completionStatus.hasBindingModule,
-    },
-  ];
-
-  const moduleFilter = useCallback(
-    (mod: ModulePickerItem): boolean => {
-      if (!mod) return false;
-
-      const normalizedSearch = searchFilterValue?.trim().toLowerCase() ?? "";
-      const hasSearch = normalizedSearch.length > 0;
-      const hasFilters = (filterValues?.length ?? 0) > 0;
-      const hasPickedFilter = onlyPickedModules && pickedModules;
-
-      if (hasPickedFilter) {
-        const isModulePicked = pickedModules[
-          getBookPart(mod.type, mod.part)
-        ]?.includes(mod.id);
-        if (!isModulePicked) return false;
-      }
-
-      if (!hasSearch && !hasFilters) return true;
-
-      const modFields: Record<ModFieldKey, string> = {
-        name: mod.name?.toLowerCase() ?? "",
-        type: mod.type?.toLowerCase() ?? "",
-        theme: mod.theme?.toLowerCase() ?? "",
-      };
-
-      const searchableFields = ["name", "type", "theme"] as const;
-      type ModFieldKey = (typeof searchableFields)[number];
-
-      const matchesSearch =
-        !hasSearch ||
-        searchableFields.some((field) =>
-          modFields[field].includes(normalizedSearch),
-        );
-
-      const matchesFilters = !hasFilters
-        ? true
-        : filterValues.every((val) => {
-          const normalizedVal = val?.trim().toLowerCase() ?? "";
-          if (!normalizedVal) return true;
-          return searchableFields.some(
-            (field) => modFields[field] === normalizedVal,
-          );
-        });
-
-      return matchesSearch && matchesFilters;
-    },
-    [searchFilterValue, filterValues, onlyPickedModules, pickedModules],
-  );
-
-  const filteredModules = modules.filter(moduleFilter);
-
-  const bindingAvailabilityById = useMemo(() => {
-    const availability = new Map<
-      string,
-      { disabled: boolean; reason?: string }
-    >();
-
-    for (const moduleItem of modules) {
-      if (!isBindingModule(moduleItem)) {
-        availability.set(moduleItem.id, { disabled: false });
-        continue;
-      }
-
-      if (totalPagesCount <= 0) {
-        availability.set(moduleItem.id, { disabled: false });
-        continue;
-      }
-
-      const isAllowed = isBindingAllowedForModule(moduleItem, totalPagesCount);
-      const reason = isAllowed
-        ? undefined
-        : (getBindingLimitMessageForModule(moduleItem, totalPagesCount) ??
-          undefined);
-
-      availability.set(moduleItem.id, { disabled: !isAllowed, reason });
-    }
-
-    return availability;
-  }, [modules, totalPagesCount]);
-
-  const bindingOverflowSuggestions = useMemo(() => {
-    if (!bindingOverflowEvent) return [];
-    return bindingOverflowEvent.suggestedBindingIds
-      .map((id) => modules.find((m) => m.id === id))
-      .filter((m): m is (typeof modules)[number] => Boolean(m));
-  }, [bindingOverflowEvent, modules]);
-
-  function triggerBindingOverflowIfNeeded(
-    nextTotalPagesCount: number,
-  ): boolean {
-    const selectedBindingId = pickedModules.SETTINGS[0];
-    if (!selectedBindingId || nextTotalPagesCount <= 0) return false;
-
-    const selectedBinding = moduleLookupById.get(selectedBindingId);
-    if (!selectedBinding || !isBindingModule(selectedBinding)) return false;
-
-    if (isBindingAllowedForModule(selectedBinding, nextTotalPagesCount)) {
-      setBindingOverflowEvent(null);
-      return false;
-    }
-
-    const suggestedBindingIds = modules
-      .filter((moduleItem) => {
-        if (!isBindingModule(moduleItem)) return false;
-        if (moduleItem.id === selectedBinding.id) return false;
-        return isBindingAllowedForModule(moduleItem, nextTotalPagesCount);
-      })
-      .slice(0, 2)
-      .map((moduleItem) => moduleItem.id);
-
-    setPickedModules((prev) =>
-      prev.SETTINGS.length === 0 ? prev : { ...prev, SETTINGS: [] },
-    );
-    setBindingOverflowEvent({
-      invalidBindingId: selectedBinding.id,
-      invalidBindingName: selectedBinding.name,
-      totalPages: nextTotalPagesCount,
-      suggestedBindingIds,
-    });
-    setModalId("binding-overflow");
-    return true;
-  }
-
-  /** HANDLERS  */
-
-  const handleNameSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!bookId || !nameInput) return;
-    updateName({ id: bookId, name: nameInput });
-  };
-
-  function handleCoverModule(id: string) {
-    setPickedModules((prev) => ({
-      ...prev,
-      COVER: [id],
-    }));
-  }
-
-  function handleBindingModule(id: string) {
-    setPickedModules((prev) => ({
-      ...prev,
-      SETTINGS: [id],
-    }));
-  }
-
-  function handlePlannerModule(id: string) {
-    setPickedModules((prev) => {
-      const withoutPlanner = prev.MODULES.filter((moduleId) => {
-        const moduleItem = moduleLookupById.get(moduleId);
-        if (!moduleItem) {
-          return true;
-        }
-        return (
-          moduleItem.part !== "PLANNER" &&
-          moduleItem.type.toLowerCase() !== FILTER_TYPES.PLANNER
-        );
-      });
-
-      return {
-        ...prev,
-        MODULES: [...withoutPlanner, id],
-      };
-    });
-  }
-
-  function handleRegularModule(
-    id: string,
-    bookPart: ConfigBookPart,
-    currentModules: string[],
-    isAlreadyPicked: boolean,
-  ) {
-    setPickedModules((prev) => ({
-      ...prev,
-      [bookPart]: isAlreadyPicked
-        ? currentModules.filter((m) => m !== id)
-        : [...currentModules, id],
-    }));
-  }
-
-  function handlePickedItem(pickedItem: { id: string; type: string }) {
-    const { id, type } = pickedItem;
-    const pickedModule = moduleLookupById.get(id);
-    const normalizedType = (pickedModule?.type ?? type).toLowerCase();
-    const normalizedPart = pickedModule?.part?.toUpperCase();
-
-    const bookPart = getBookPart(type, pickedModule?.part);
-    const currentModules = pickedModules[bookPart] ?? [];
-    const isAlreadyPicked = currentModules.includes(id);
-
-    if (isAlreadyPicked) {
-      handleRegularModule(id, bookPart, currentModules, true);
-      return;
-    }
-
-    const isCoverModule =
-      normalizedPart === "COVER" || normalizedType === FILTER_TYPES.COVER;
-    const isBindingModuleItem =
-      normalizedPart === "BINDING" ||
-      normalizedPart === "SETTINGS" ||
-      normalizedType === FILTER_TYPES.BINDING ||
-      normalizedType === "farben";
-    const isPlannerModule =
-      normalizedPart === "PLANNER" || normalizedType === FILTER_TYPES.PLANNER;
-
-    if (
-      isBindingModuleItem &&
-      pickedModule &&
-      totalPagesCount > 0 &&
-      !isBindingAllowedForModule(pickedModule, totalPagesCount)
-    ) {
-      const warning =
-        getBindingLimitMessageForModule(pickedModule, totalPagesCount) ??
-        "Die gewählte Bindung ist für die aktuelle Seitenzahl nicht verfügbar.";
-      setConfigWarnings((prev) =>
-        prev.includes(warning) ? prev : [...prev, warning],
-      );
-      return;
-    }
-
-    if (isCoverModule) {
-      handleCoverModule(id);
-    } else if (isBindingModuleItem) {
-      handleBindingModule(id);
-      if (bindingOverflowEvent) {
-        setBindingOverflowEvent(null);
-      }
-      if (modalId === "binding-overflow") {
-        setModalId(undefined);
-      }
-    } else if (isPlannerModule) {
-      handlePlannerModule(id);
-    } else {
-      handleRegularModule(id, bookPart, currentModules, false);
-    }
-
-    setIsBookInfoOpen(true);
-  }
-
-  async function handleSummaryView() {
-    const coverModule = modules.find((m) => m.id === pickedModules.COVER[0]);
-    const pdfUrls = pickedModules.MODULES.map((moduleId, idx) => {
-      const moduleItem = modules.find((m) => m.id === moduleId);
-      return {
-        idx,
-        id: moduleId,
-        type: moduleItem?.type.toLowerCase() ?? "sonstige",
-        pdfUrl: moduleItem?.url ?? "notizen.pdf",
-      };
-    });
-
-    const pdfModules = [
-      ...pdfUrls,
-      {
-        id: coverModule?.id ?? "",
-        idx: 12345,
-        type: FILTER_TYPES.COVER,
-        pdfUrl: coverModule?.url ?? "",
-      },
-    ];
-
-    try {
-      setPreviewFileURL(undefined);
-      setIsMakingPreview(true);
-      setModalId("summary");
-
-      const result = await processPdfModules(
-        {
-          title: existingBook?.bookTitle ?? "Schulplaner",
-          period: {
-            start: existingBook?.planStart,
-            end: existingBook?.planEnd ?? undefined,
-          },
-          code: existingBook?.region ?? "DE-SL",
-          country: existingBook?.country ?? "DE",
-          addHolidays: true,
-          customDates: (existingBook?.customDates ?? []).map((d) => ({
-            date: formatDateKeyUTC(new Date(d.date)),
-            name: d.name,
-          })),
-        },
-        pdfModules,
-        {
-          addWatermark: true,
-          compressionLevel: "high",
-          format: pickedFormat,
-          colorMap: moduleColorMap,
-        },
-      );
-
-      // Create preview URL
-      const blob = new Blob([result.pdfFile as BlobPart], {
-        type: "application/pdf",
-      });
-      const selectedBindingId = pickedModules.SETTINGS[0];
-      const selectedBindingRuleKey = selectedBindingId
-        ? moduleLookupById.get(selectedBindingId)
-          ? (getMatchedBindingRuleKey(
-            moduleLookupById.get(selectedBindingId)!,
-          ) ?? getBindingRuleKey(moduleLookupById.get(selectedBindingId)!))
-          : undefined
-        : undefined;
-      const estimatedCost = calculatePrintCost({
-        amount: orderAmount,
-        bPages: result.details.bPages,
-        cPages: result.details.cPages,
-        format: pickedFormat,
-        bindingName: selectedBindingRuleKey,
-        prices,
-      });
-
-      setPreviewPrice(estimatedCost);
-      const url = URL.createObjectURL(blob);
-      setPreviewFileURL(url);
-      const recalculatedTotalPages = result.details.fullPageCount;
-      if (typeof recalculatedTotalPages !== "number") {
-        throw new Error(
-          "Genaue Gesamtseitenzahl konnte nicht ermittelt werden.",
-        );
-      }
-      setTotalPagesCount(recalculatedTotalPages);
-      triggerBindingOverflowIfNeeded(recalculatedTotalPages);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      const warning = handleWarningText(errorMessage);
-      setConfigWarnings((prev) => [...prev, warning]);
-      setIsMakingPreview(false);
-    } finally {
-      setIsMakingPreview(false);
-    }
-    // MAKE MORE HERE
-  }
-
-  function handleModuleDetailBG(modType: string): string {
-    let moduleTypeBgClass: string;
-    switch (modType) {
-      case "bindung":
-        moduleTypeBgClass = "bg-warning-300/20";
-        break;
-      case "wochenplaner":
-        moduleTypeBgClass = "bg-pirrot-green-300/20";
-        break;
-      default:
-        moduleTypeBgClass = "bg-pirrot-red-400/20";
-        break;
-    }
-    return moduleTypeBgClass;
-  }
-
-  const handleRefreshPrice = async () => {
-    try {
-      const coverModule = modules.find((m) => m.id === pickedModules.COVER[0]);
-      if (!coverModule?.url) {
-        throw new Error("Cover module not found");
-      }
-
-      const pdfUrls = pickedModules.MODULES.map((moduleId, idx) => {
-        const moduleItem = modules.find((m) => m.id === moduleId);
-        if (!moduleItem?.url) {
-          throw new Error(`Module not found: ${moduleId}`);
-        }
-        return {
-          idx,
-          id: moduleId,
-          type: moduleItem.type.toLowerCase(),
-          pdfUrl: moduleItem.url,
-        };
-      });
-
-      const pdfModules = [
-        ...pdfUrls,
-        {
-          id: coverModule.id,
-          idx: 12345,
-          type: FILTER_TYPES.COVER,
-          pdfUrl: coverModule.url,
-        },
-      ];
-
-      setPreviewFileURL(undefined);
-      setIsRefreshingPreview(true);
-      setIsMakingPreview(true);
-      // setModalId("preview")
-
-      const result = await processPdfModulesPreview(
-        {
-          title: existingBook?.bookTitle ?? "Schulplaner",
-          period: {
-            start: existingBook?.planStart,
-            end: existingBook?.planEnd ?? undefined,
-          },
-          code: existingBook?.region ?? "DE-SL",
-          country: existingBook?.country ?? "DE",
-          addHolidays: true,
-          customDates: (existingBook?.customDates ?? []).map((d) => ({
-            date: formatDateKeyUTC(new Date(d.date)),
-            name: d.name,
-          })),
-        },
-        pdfModules,
-        {
-          compressionLevel: "high",
-          format: pickedFormat,
-          colorMap: moduleColorMap,
-        },
-      );
-
-      // Create preview URL
-      const blob = new Blob([result.pdfFile as BlobPart], {
-        type: "application/pdf",
-      });
-      const selectedBindingId = pickedModules.SETTINGS[0];
-      const selectedBindingRuleKey = selectedBindingId
-        ? moduleLookupById.get(selectedBindingId)
-          ? (getMatchedBindingRuleKey(
-            moduleLookupById.get(selectedBindingId)!,
-          ) ?? getBindingRuleKey(moduleLookupById.get(selectedBindingId)!))
-          : undefined
-        : undefined;
-      const estimatedCost = calculatePrintCost({
-        amount: orderAmount,
-        bPages: result.details.bPages,
-        cPages: result.details.cPages,
-        format: pickedFormat,
-        bindingName: selectedBindingRuleKey,
-        prices,
-      });
-      setPreviewPrice(estimatedCost);
-      const url = URL.createObjectURL(blob);
-      setPreviewFileURL(url);
-      const recalculatedTotalPages = result.details.fullPageCount;
-      if (typeof recalculatedTotalPages !== "number") {
-        throw new Error(
-          "Genaue Gesamtseitenzahl konnte nicht ermittelt werden.",
-        );
-      }
-      setTotalPagesCount(recalculatedTotalPages);
-      triggerBindingOverflowIfNeeded(recalculatedTotalPages);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      const warning = handleWarningText(errorMessage);
-      setConfigWarnings((prev) => [...prev, warning]);
-    } finally {
-      setIsMakingPreview(false);
-      setIsRefreshingPreview(false);
-    }
-  };
-  function handleWarningText(text: string): string {
-    let warningText = "Fehler beim erstellen der PDF";
-    switch (true) {
-      case text.toLocaleLowerCase().includes("cover"):
-        warningText = configWarningTexts.cover;
-        break;
-      case text.toLocaleLowerCase().includes("planner"):
-        warningText = configWarningTexts.planner;
-        break;
-      default:
-        warningText = text;
-        break;
-    }
-    return warningText;
-  }
-
-  function handleSaveConfig(event?: React.MouseEvent<HTMLButtonElement>): void {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-
-    if (!bookId) {
-      return;
-    }
-
-    saveConfigModules({
-      bookId,
-      modules: [
-        ...pickedModules.COVER.map((c) => ({
-          id: c,
-          idx: 0,
-          colorCode: moduleColorMap.get(c),
-        })),
-        ...pickedModules.MODULES.map((c, i) => ({
-          id: c,
-          idx: i + 1,
-          colorCode: moduleColorMap.get(c),
-        })),
-        ...pickedModules.SETTINGS.map((c) => ({ id: c, idx: -1 })),
-      ],
-    });
-  }
-
-  const orderSummary = {
-    bookId,
-    amount: orderAmount,
-    planerPages: totalPagesCount,
-    format: pickedFormat,
-    price: previewPrice.total,
-    single: previewPrice.single,
-    pickedModuleDetails: modulesByType,
-  } as const;
-
-  // Modal content
   const renderModalContent = () => {
     switch (modalId) {
-      case "login-prompt":
-        return null;
-
       case "info":
         return (
           <div className="content-card text-info-950 w-full max-w-xl p-3">
@@ -948,12 +1217,12 @@ export default function BookConfig(props: {
                     name: existingBook.bookTitle,
                     sub: existingBook.subTitle,
                     country: existingBook.country,
-                    region: existingBook?.region,
+                    region: existingBook.region,
                     period: {
                       start: existingBook.planStart
                         .toISOString()
                         .slice(0, 16),
-                      end: existingBook?.planEnd?.toISOString().slice(0, 16),
+                      end: existingBook.planEnd?.toISOString().slice(0, 16),
                     },
                   }
                   : undefined
@@ -961,7 +1230,6 @@ export default function BookConfig(props: {
             />
           </div>
         );
-
       case "dates":
         return (
           <div className="content-card text-info-950 w-full max-w-xl p-3">
@@ -978,20 +1246,18 @@ export default function BookConfig(props: {
             <CustomDatesForm bookId={bookId!} />
           </div>
         );
-
-      case "payment":
-        return (
-          <div className="content-card text-info-950 h-full w-full max-w-5xl overflow-y-auto p-3 lg:h-auto">
-            <div className="flex items-center justify-between pb-3">
-              <h3 className="text-2xl font-bold">Zahlung</h3>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setModalId("summary")}
-                  className="btn-soft flex gap-2 rounded p-2"
-                >
-                  <ArrowLeft className="size-6" /> Übersicht
-                </button>
+      case "custom-modules":
+        return bookId ? (
+          <div className="text-info-950 w-full max-w-5xl p-3">
+            <div className="content-card flex flex-col gap-4 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-2xl font-bold">Eigene Inhalte</h3>
+                  <p className="text-info-800 text-sm">
+                    Eigene PDFs anlegen und direkt in die normale
+                    Modulauswahl übernehmen.
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={() => setModalId(undefined)}
@@ -1000,27 +1266,19 @@ export default function BookConfig(props: {
                   <XIcon className="size-6" />
                 </button>
               </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <h2 className="text-xl font-bold">Zahlungsabwicklung</h2>
-              <p className="w-full max-w-xl">
-                Bitte geben Sie nun Ihre Daten ein, damit wir Ihre Bestellung
-                bearbeiten können. Wir leiten Sie dann zum Zahlungsprozess
-                weiter.
-              </p>
-              {!!bookId && (
-                <ConfigOrderForm
-                  bookId={bookId}
-                  quantity={orderSummary.amount}
-                  format={orderSummary.format}
-                  partnerToken={partnerToken}
-                  onAbortForm={() => setModalId("summary")}
-                />
-              )}
+              <UserModules
+                bookId={bookId}
+                existingTips={matchingTips}
+                onCreated={() => {
+                  setModalId(undefined);
+                  announceChange(
+                    "Eigenes Modul gespeichert. Es erscheint jetzt direkt in der Auswahl.",
+                  );
+                }}
+              />
             </div>
           </div>
-        );
-
+        ) : null;
       case "binding-overflow":
         return (
           <div className="content-card text-info-950 w-full max-w-2xl p-4">
@@ -1056,258 +1314,8 @@ export default function BookConfig(props: {
                 </button>
               ))}
             </div>
-            {bindingOverflowSuggestions.length < 2 ? (
-              <p className="mt-3 text-sm">
-                Hinweis: Es sind aktuell weniger als zwei passende Bindungen
-                verfügbar.
-              </p>
-            ) : null}
           </div>
         );
-      case "summary": {
-        function handleFinishOrder(event: React.MouseEvent<HTMLButtonElement>) {
-          event.preventDefault();
-          event.stopPropagation();
-          handleSaveConfig(event);
-          setModalId("payment");
-        }
-
-        return (
-          <div className="content-card text-info-950 h-full w-full max-w-[95vw] overflow-y-auto p-3 lg:h-auto">
-            <div className="flex items-center justify-between pb-3">
-              <h3 className="text-2xl font-bold">Übersicht</h3>
-              <button
-                type="button"
-                onClick={() => setModalId(undefined)}
-                className="btn-soft rounded p-2"
-              >
-                <XIcon className="size-6" />
-              </button>
-            </div>
-            <div className="flex h-full flex-col gap-4 lg:flex-row">
-              {/* LEFT: Order Details */}
-              <div className="flex flex-1 flex-col gap-4">
-                <h2 className="text-xl font-bold">Bestellungsübersicht</h2>
-                <p className="w-full max-w-xl">
-                  Fast geschafft! Bitte überprüfen Sie die Zusammenfassung Ihrer
-                  Bestellung. Wenn alle Angaben korrekt sind, können Sie im
-                  nächsten Schritt die Zahlung abschließen.
-                </p>
-                <div className="field-shell p-2">
-                  <ul className="space-y-1">
-                    <li>
-                      <b>Buchname:</b> {nameInput ?? "Unbenanntes Buch"}
-                    </li>
-                    <li>
-                      <b>Format:</b> {orderSummary.format}
-                    </li>
-                    <li>
-                      <b>Stückzahl:</b> {orderSummary.amount}x
-                    </li>
-                    <li>
-                      <b>Seiten gesamt:</b> {orderSummary.planerPages}
-                    </li>
-                    <li>
-                      <b>Einzelpreis:</b>{" "}
-                      {(orderSummary.single / 100).toFixed(2)} €
-                    </li>
-                    <li>
-                      <b>Gesamtpreis:</b>{" "}
-                      {(orderSummary.price / 100).toFixed(2)} €
-                    </li>
-                  </ul>
-                </div>
-                <div className="inline-block flex-1 p-1 lg:hidden">
-                  {previewFileURL ? (
-                    useMobilePdfFallback ? (
-                      renderMobilePdfFallback("h-full w-full")
-                    ) : (
-                      <div className="aspect-square h-full w-full lg:aspect-auto">
-                        <iframe
-                          src={previewFileURL + "#view=fit"}
-                          title="PDF Preview"
-                          width="100%"
-                          height="100%"
-                          className="bg-pirrot-blue-950/10 border-info-950/5 border"
-                        />
-                      </div>
-                    )
-                  ) : (
-                    <div className="flex size-full flex-col items-center justify-center gap-4">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <h5 className="text-2xl">
-                          PDF Dokument wird erstellt...
-                        </h5>
-                        <p>
-                          <b className="uppercase">info:</b> Dieser Vorgang kann
-                          einige Minuten dauern.
-                        </p>
-                      </div>
-                      <LoadingSpinner />
-                    </div>
-                  )}
-                </div>
-                <div className="mt-4">
-                  <h4 className="mb-2 font-bold">Ausgewählte Module:</h4>
-                  <div className="flex gap-4">
-                    <ul className="border-info-950/5 bg-pirrot-blue-950/5 max-h-68 flex-1 space-y-2 overflow-y-auto rounded border-b p-1 py-2">
-                      {orderSummary.pickedModuleDetails?.planner.length ===
-                        0 && (
-                          <li className="text-gray-500 italic">
-                            Keine Module ausgewählt.
-                          </li>
-                        )}
-                      {orderSummary.pickedModuleDetails?.planner.map((mod) => (
-                        <li
-                          key={mod.id}
-                          className="border-info-950/10 flex flex-wrap items-center gap-2 border-b py-2"
-                        >
-                          <span className="font-semibold">{mod.name}</span>
-                          <span
-                            className={`text-xs first-letter:uppercase ${handleModuleDetailBG(mod.type)} rounded-lg px-2 py-0.5`}
-                          >
-                            {mod.type}
-                          </span>
-                          {mod.theme && (
-                            <span className="field-shell rounded-lg px-2 py-0.5 text-xs first-letter:uppercase">
-                              {mod.theme}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="flex flex-col gap-4">
-                      <div className="field-shell flex aspect-square w-32 flex-col gap-4 p-2">
-                        <div className="flex justify-between">
-                          <BookImage />
-                          <h3
-                            className={`field-shell flex items-center justify-center rounded-lg px-2 py-0.5 text-xs first-letter:uppercase`}
-                          >
-                            Umschlag
-                          </h3>
-                        </div>
-                        <div className="mt-auto flex flex-col gap-2">
-                          <h5 className="text-sm font-semibold">
-                            {orderSummary.pickedModuleDetails?.cover[0]?.name}
-                          </h5>
-                          <h5 className="field-shell rounded-lg px-2 py-0.5 text-xs first-letter:uppercase">
-                            {orderSummary.pickedModuleDetails?.cover[0]?.theme}
-                          </h5>
-                        </div>
-                      </div>
-                      <div className="field-shell flex aspect-square w-32 flex-col gap-2 p-2">
-                        <div className="flex justify-between">
-                          <ShellIcon />
-                          <h3
-                            className={`field-shell flex items-center justify-center rounded-lg px-2 py-0.5 text-xs first-letter:uppercase`}
-                          >
-                            Bindung
-                          </h3>
-                        </div>
-                        <div className="mt-auto flex flex-col gap-2">
-                          <h5 className="text-sm font-semibold">
-                            {
-                              orderSummary.pickedModuleDetails?.settings[0]
-                                ?.name
-                            }
-                          </h5>
-                          <h5 className="field-shell rounded-lg px-2 py-0.5 text-xs first-letter:uppercase">
-                            {
-                              orderSummary.pickedModuleDetails?.settings[0]
-                                ?.theme
-                            }
-                          </h5>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-col gap-2">
-                    <div className="text-info-950 flex w-full items-center gap-2">
-                      <input
-                        id="agb"
-                        type="checkbox"
-                        checked={acceptPolicies.agb}
-                        onChange={() =>
-                          setAcceptPolicies((prev) => ({
-                            ...prev,
-                            agb: !prev.agb,
-                          }))
-                        }
-                        className="mr-2"
-                      />
-                      <label htmlFor="agb" className="form-label">
-                        Allgemeine Geschäftsbedingungen
-                      </label>
-                    </div>
-                    <div className="text-info-950 flex w-full items-center gap-2">
-                      <input
-                        id="data"
-                        type="checkbox"
-                        checked={acceptPolicies.data}
-                        onChange={() =>
-                          setAcceptPolicies((prev) => ({
-                            ...prev,
-                            data: !prev.data,
-                          }))
-                        }
-                        className="mr-2"
-                      />
-                      <label htmlFor="data" className="form-label">
-                        Datenschutzeinwilligung
-                      </label>
-                    </div>
-                    <div>
-                      <button
-                        type="button"
-                        disabled={!acceptPoliciesValid}
-                        onClick={handleFinishOrder}
-                        className="btn-solid flex gap-2 rounded p-2 font-bold disabled:opacity-25"
-                      >
-                        Abschließen
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {/* RIGHT: PDF Preview */}
-              <div className="hidden flex-1 items-center justify-center p-1 lg:flex">
-                {previewFileURL ? (
-                  <div className="flex h-full max-h-[85vh] min-h-0 w-full flex-col gap-2">
-                    {renderPreviewDisclaimer()}
-                    {useMobilePdfFallback ? (
-                      renderMobilePdfFallback("min-h-0 flex-1")
-                    ) : (
-                      <div className="min-h-0 flex-1">
-                        <iframe
-                          src={previewFileURL}
-                          title="PDF Preview"
-                          width="100%"
-                          height="100%"
-                          className="border-info-950/5 h-full w-full border"
-                        />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex size-full flex-col items-center justify-center gap-4">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <h5 className="text-2xl">
-                        PDF Dokument wird erstellt...
-                      </h5>
-                      <p>
-                        <b className="uppercase">info:</b> Dieser Vorgang kann
-                        einige Minuten dauern.
-                      </p>
-                    </div>
-                    <LoadingSpinner />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      }
-
       case "preview":
         return (
           <div className="content-card text-info-950 w-full max-w-[90vw] p-3">
@@ -1341,23 +1349,15 @@ export default function BookConfig(props: {
                 </>
               ) : (
                 <div className="flex size-full flex-col items-center justify-center gap-4">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <h5 className="text-2xl">PDF Dokument wird erstellt...</h5>
-                    <p>
-                      <b className="uppercase">info:</b> Dieser Vorgang kann
-                      einige Minuten dauern.
-                    </p>
-                  </div>
                   <LoadingSpinner />
                 </div>
               )}
             </div>
           </div>
         );
-
       case "name":
         return (
-          <div className="content-card text-info-950 z-[69] w-full max-w-xl p-3">
+          <div className="content-card text-info-950 w-full max-w-xl p-3">
             <form onSubmit={handleNameSubmit}>
               <div className="flex flex-col gap-2">
                 <label htmlFor="project-name" className="form-label">
@@ -1367,7 +1367,7 @@ export default function BookConfig(props: {
                   <input
                     id="project-name"
                     className="field-shell w-full px-3 py-2.5"
-                    onChange={(e) => setNameInput(e.target.value)}
+                    onChange={(event) => setNameInput(event.target.value)}
                     value={nameInput ?? ""}
                   />
                   <button type="submit" className="btn-solid rounded p-2">
@@ -1385,36 +1385,14 @@ export default function BookConfig(props: {
             </form>
           </div>
         );
-
       default:
-        return <LoadingSpinner />;
+        return null;
     }
   };
 
-  const isConfigComplete = useMemo(
-    () =>
-      pickedModules.COVER.length === 1 &&
-      pickedModules.MODULES.length >= 1 &&
-      completionStatus.hasPlannerModule &&
-      completionStatus.hasBindingModule,
-    [pickedModules, completionStatus],
-  );
-
-  function handleConfigWarning(event: React.MouseEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    const warnId = event.currentTarget.id.split("-")[1];
-    const filteredWarnings = configWarnings.filter(
-      (_, idx) => idx !== Number(warnId),
-    );
-    setConfigWarnings(filteredWarnings);
-  }
-
   if (!existingBook) {
     return (
-      <div
-        className={`${modalId !== undefined && "blur"} relative flex h-screen w-full flex-col items-center justify-center gap-8 overflow-hidden`}
-      >
+      <div className="relative flex h-screen w-full flex-col items-center justify-center gap-8 overflow-hidden">
         <h2 className="text-pirrot-red-400 text-2xl font-bold">
           Kein Buch gefunden.
         </h2>
@@ -1460,87 +1438,107 @@ export default function BookConfig(props: {
   return (
     <>
       <div
-        className={`${modalId !== undefined && "blur"} relative z-10 flex h-screen w-full flex-col justify-between overflow-hidden md:flex-row`}
+        className={`${modalId !== undefined && modalId !== "login-prompt" ? "blur" : ""} relative z-10 flex h-screen w-full flex-col justify-between overflow-hidden md:flex-row`}
       >
-        {/* LEFT SIDEBAR */}
         <div
-          className={`${isFilterOpen ? "sticky top-0 md:w-xs" : ""} border-pirrot-blue-950/10 bg-pirrot-blue-100/65 relative flex flex-col gap-2 overflow-y-auto border-b backdrop-blur-sm md:h-screen lg:border-r`}
+          className={`${isFilterOpen ? "sticky top-0 md:w-sm" : ""} border-pirrot-blue-950/10 bg-pirrot-blue-100/65 relative flex flex-col gap-2 overflow-y-auto border-b backdrop-blur-sm md:h-screen lg:border-r`}
         >
-          <div className="p-2">
-            <Filter
-              className="btn-soft size-9 cursor-pointer p-2"
+          <div className="flex items-center gap-2 p-2">
+            {bookId ? (
+              <button
+                type="button"
+                onClick={() => setModalId("custom-modules")}
+                className="btn-solid p-2"
+                aria-label="Eigene Inhalte öffnen"
+                title="Eigene Inhalte"
+              >
+                <Plus className="size-5" />
+              </button>
+            ) : null}
+            <button
+              type="button"
               onClick={() => setIsFilterOpen((prev) => !prev)}
-            />
+              className="btn-soft p-2"
+            >
+              {isFilterOpen ? <XIcon /> : <ChevronDown />}
+            </button>
           </div>
 
-          {isFilterOpen && (
-            <div className="flex w-full flex-col gap-2">
-              <SearchInput
-                value={searchFilterValue}
-                onChange={setSearchFilterValue}
-                onClear={clearSearch}
-              />
-
-              <ToggleSwitch
-                checked={onlyPickedModules}
-                onChange={setOnlyPickedModules}
-                label="Nur ausgewählte Module"
-              />
-
-              <div>
-                <h3 className="px-1">Aktive Filter:</h3>
-                <div className="flex w-full max-w-xl flex-wrap gap-1 p-1 lg:max-w-xs">
-                  {filterValues.map((f) => (
-                    <button
-                      type="button"
-                      key={f}
-                      className="field-shell cursor-pointer truncate rounded-full px-3 py-1.5 text-center text-sm first-letter:uppercase"
-                      onClick={() => handleFilterValues(f)}
-                    >
-                      {f}
-                    </button>
-                  ))}
-                </div>
+          {isFilterOpen ? (
+            <div className="flex w-full flex-col gap-2 p-2 pt-0">
+              <div className="content-card flex flex-col gap-2 p-3">
+                <h3 className="font-bold">Aktueller Schritt</h3>
+                <p className={`text-xl font-bold ${STEP_ACCENTS[currentStep]}`}>
+                  {STEP_LABELS[currentStep]}
+                </p>
+                <p className="text-info-800 text-sm">{currentStepConfig.desc}</p>
               </div>
-              <div className="w-full">
-                <h3 className="px-1">Nach Kategorie:</h3>
-                <div className="flex w-full max-w-xl flex-wrap gap-1 p-1 lg:max-w-xs">
-                  {existingTypes.map((t) => (
-                    <button
-                      type="button"
-                      key={t.id}
-                      className="field-shell cursor-pointer truncate rounded-full px-3 py-1.5 text-center text-sm first-letter:uppercase"
-                      onClick={() => handleFilterValues(t.name)}
-                    >
-                      {t.name}
-                    </button>
-                  ))}
+
+              {currentStep !== "CHECKOUT" ? (
+                <>
+                  <SearchInput
+                    value={searchFilterValue}
+                    onChange={setSearchFilterValue}
+                    onClear={clearSearch}
+                  />
+                  <ToggleSwitch
+                    checked={onlyPickedModules}
+                    onChange={setOnlyPickedModules}
+                    label="Nur aktuelle Auswahl"
+                  />
+                </>
+              ) : null}
+
+              <div className="content-card flex flex-col gap-2 p-3">
+                <h3 className="font-bold">Live-Hinweis</h3>
+                <p className="text-info-800 text-sm">
+                  {liveChangeNotice ??
+                    "Änderungen an Modulen werden hier sofort mit dem Zielbereich eingeblendet."}
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="field-shell p-2">
+                    <p className="text-info-800 text-[11px] uppercase tracking-wide">
+                      Seiten
+                    </p>
+                    <p className="text-lg font-bold">{totalPagesCount}</p>
+                    {liveDelta ? (
+                      <p className="text-info-800 text-xs">
+                        {formatSignedPages(liveDelta.pageDelta)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="field-shell p-2">
+                    <p className="text-info-800 text-[11px] uppercase tracking-wide">
+                      Preis
+                    </p>
+                    <p className="text-lg font-bold">
+                      {(previewPrice.total / 100).toFixed(2)} €
+                    </p>
+                    {liveDelta ? (
+                      <p className="text-info-800 text-xs">
+                        {formatSignedEuroCents(liveDelta.priceDelta)}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-              <div className="w-full">
-                <h3 className="px-1">Themes:</h3>
-                <div className="flex flex-wrap gap-1 p-1">
-                  {uniqueThemes.map((t) => (
-                    <button
-                      type="button"
-                      key={t}
-                      className="field-shell cursor-pointer truncate rounded-full px-3 py-1.5 text-center text-sm first-letter:uppercase"
-                      onClick={() => handleFilterValues(t ?? "")}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
+                {isLiveCalculating ? (
+                  <p className="text-pirrot-blue-700 text-xs">
+                    Seiten und Kosten werden gerade neu berechnet…
+                  </p>
+                ) : null}
+                {liveCalculationError ? (
+                  <p className="text-pirrot-red-500 text-xs">
+                    {liveCalculationError}
+                  </p>
+                ) : null}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
-        {/* MAIN CONTENT */}
-        <div className="flex w-full max-w-screen-2xl flex-[5] flex-col gap-10 overflow-y-auto">
-          <div className="flex w-full flex-col gap-10 p-2 lg:p-4">
-            {/* PARTNER TEMPLATE BANNER */}
-            {showPartnerTemplateBanner && (
+        <div className="flex w-full max-w-screen-2xl flex-[5] flex-col gap-8 overflow-y-auto">
+          <div className="flex w-full flex-col gap-8 p-2 lg:p-4">
+            {showPartnerTemplateBanner ? (
               <div className="bg-pirrot-green-100 border-pirrot-green-300 flex flex-col items-start justify-between gap-4 rounded-lg border p-4 sm:flex-row sm:items-center">
                 <div className="flex items-center gap-3">
                   <div className="bg-pirrot-green-300 rounded-full p-2">
@@ -1551,7 +1549,7 @@ export default function BookConfig(props: {
                       Partner-Vorlage
                     </h3>
                     <p className="text-pirrot-green-700 text-sm">
-                      {existingBook?.modules.length ?? 0} Module inklusive •
+                      {existingBook.modules.length ?? 0} Module inklusive •
                       Zusätzliche Module kosten Extra
                     </p>
                   </div>
@@ -1560,11 +1558,10 @@ export default function BookConfig(props: {
                   <span className="font-semibold">Kostenlos</span> inkludiert
                 </div>
               </div>
-            )}
+            ) : null}
 
-            {/* HEADER */}
-            <div className="content-card sticky top-2 z-[59] flex w-full flex-col justify-start gap-4 p-3 pb-3 lg:justify-between">
-              <div className="pb-3">
+            <div className="content-card sticky top-2 z-[59] flex w-full flex-col gap-4 p-3">
+              <div className="pb-1">
                 <Link
                   href="/"
                   className="underline underline-offset-4 transition-all duration-300 hover:underline-offset-8"
@@ -1573,446 +1570,551 @@ export default function BookConfig(props: {
                 </Link>
               </div>
 
-              <div className="flex justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
                   onClick={() => setModalId("name")}
-                  className="font-cairo flex items-center gap-4 text-3xl font-bold lg:text-5xl"
+                  className="font-cairo flex items-center gap-3 text-3xl font-bold tracking-tight lg:text-5xl"
                 >
-                  {nameInput} <PenBox className="size-9" />
+                  {nameInput} <PenBox className="size-8 lg:size-9" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setModalId("info")}
-                  className="flex items-center gap-4 text-3xl"
-                >
-                  <span className="hidden sm:block">Planerinfo</span>{" "}
-                  <InfoIcon className="size-9" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setModalId(isLoggedIn ? "dates" : "login-prompt")
-                  }
-                  className="flex items-center gap-4 text-3xl"
-                >
-                  <span className="hidden sm:block">Termine</span>{" "}
-                  <CalendarDays className="size-9" />
-                </button>
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setModalId("info")}
+                    className="btn-soft flex items-center gap-2 p-2"
+                  >
+                    <InfoIcon className="size-5" />
+                    <span className="hidden sm:block">Planerinfo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setModalId(isLoggedIn ? "dates" : "login-prompt")
+                    }
+                    className="btn-soft flex items-center gap-2 p-2"
+                  >
+                    <CalendarDays className="size-5" />
+                    <span className="hidden sm:block">Termine</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsBookInfoOpen((prev) => !prev)}
+                    className="btn-soft flex items-center gap-2 p-2"
+                  >
+                    <BookA className="size-5" />
+                    <span className="hidden sm:block">Buchaufbau</span>
+                  </button>
+                </div>
               </div>
 
               <hr className="w-full rounded-full border border-white/50" />
 
-              <div className="flex w-full justify-between gap-2 lg:gap-4">
-                <button
-                  type="button"
-                  onClick={() => setIsFilterOpen((prev) => !prev)}
-                  className="btn-soft text-pirrot-blue-950 p-2"
-                >
-                  <FilterIcon />
-                </button>
+              <div className="flex gap-2 overflow-x-auto py-2">
+                {configSteps.map((step, index) => {
+                  const isCurrentStep = step.id === currentStep;
+                  const isComplete = isStepComplete(step.id);
+                  const isAccessible = isStepAccessible(step.id);
 
-                <div className="flex w-full items-center justify-between gap-2 md:gap-4">
-                  {filterGroups.map((item) => (
-                    <FilterButton
-                      key={item.id}
-                      item={item}
-                      isActive={filterValues.includes(item.filterValue)}
-                      onToggle={() => handleCategorySwitch(item.filterValue)}
-                    />
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsBookInfoOpen((prev) => !prev)}
-                  className="btn-soft text-pirrot-blue-950 p-2"
-                >
-                  <BookA />
-                </button>
+                  return (
+                    <button
+                      key={step.id}
+                      type="button"
+                      disabled={!isAccessible || isMakingPreview}
+                      onClick={() => void handleStepChange(step.id)}
+                      className={`min-w-48 rounded-[1.1rem] border px-4 py-3 text-left transition ${isCurrentStep
+                        ? `${getStepThemeClasses(step.id)} bg-white shadow-md`
+                        : isComplete
+                          ? "border-pirrot-green-300 bg-pirrot-green-100/60 shadow-sm"
+                          : `field-shell ${getStepThemeClasses(step.id)}`
+                        } ${!isAccessible ? "cursor-not-allowed opacity-50" : "hover:-translate-y-0.5 hover:shadow-md"}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="field-shell inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
+                          {getStepIcon(step.id)}
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        {isComplete ? (
+                          <span className="text-pirrot-green-700 text-xs font-bold">
+                            Fertig
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className={`mt-2 font-bold ${STEP_ACCENTS[step.id]}`}>
+                        {step.title}
+                      </div>
+                      <p className="text-info-800 mt-1 text-xs">{step.desc}</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* MODULE SELECTION */}
+            {liveChangeNotice ? (
+              <div className="border-pirrot-green-300 bg-pirrot-green-100/70 text-pirrot-green-800 rounded-xl border px-4 py-3 shadow-sm">
+                {liveChangeNotice}
+              </div>
+            ) : null}
+
             <div className="flex flex-col gap-4">
-              {/* HERO SECTION */}
-              <div className="flex items-center justify-between py-4 lg:py-8">
-                <div className="flex flex-col gap-2 p-1">
-                  <h3 className="text-2xl font-bold lg:text-3xl">
-                    Die neuesten Module
-                  </h3>
-                  <p className="text-info-800 w-full max-w-2xl">
-                    Hallo! Willkommen bei unserem Buchkonfigurator. Hier können
-                    Sie Ihr ganz persönliches Buch nach Ihren Wünschen
-                    gestalten. Lassen Sie Ihrer Kreativität freien Lauf und
-                    erschaffen Sie ein einzigartiges Werk, das genau Ihren
-                    Vorstellungen entspricht.
+              <div className={`content-card p-4 ${getStepThemeClasses(currentStep)}`}>
+                <div className="flex flex-col gap-2">
+                  <div className="field-shell w-fit rounded-full flex gap-1 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em]">
+                    {getStepIcon(currentStep)}
+                    <span className="ml-2 inline-block">
+                      Schritt {currentStepIndex + 1} von {CONFIG_STEP_ORDER.length}
+                    </span>
+                  </div>
+                  <h2 className={`text-3xl font-bold ${STEP_ACCENTS[currentStep]}`}>
+                    {currentStepConfig.title}
+                  </h2>
+                  <p className="text-info-800 max-w-3xl">
+                    {currentStepConfig.desc}
                   </p>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <ListCollapse className="size-28" />
-                </div>
               </div>
 
-              <div
-                className={`grid gap-4 p-1 ${getGridColumns(isFilterOpen, isBookInfoOpen)}`}
-              >
-                <Link
-                  href="#custom"
-                  className="content-card group relative flex cursor-pointer flex-col items-center justify-center gap-2 select-none"
-                >
-                  <CloudUpload className="size-9" />
-                  <h3 className="font-bold">Modul hochladen</h3>
-                </Link>
-
-                {filteredModules
-                  .slice(0, getCurrentSlice(isFilterOpen, isBookInfoOpen))
-                  .map((m) => (
-                    <ModuleItem
-                      key={m.id}
-                      isPicked={pickedModules[
-                        getBookPart(m.type, m.part)
-                      ]?.includes(m.id)}
-                      item={m}
-                      onPickedItem={handlePickedItem}
-                      isDisabled={bindingAvailabilityById.get(m.id)?.disabled}
-                      disabledReason={bindingAvailabilityById.get(m.id)?.reason}
-                    />
-                  ))}
-              </div>
-            </div>
-
-            <ModuleCarousel
-              title="Beliebte Covers"
-              description="Jetzt ist es an der Zeit, den Umschlag für Ihr Buch zu gestalten. Der
-  Umschlag ist das Erste, was man von Ihrem Buch sieht, und prägt den
-  entscheidenden ersten Eindruck. Wählen Sie aus unseren hochwertigen
-  Materialien und Designs, um Ihr Buch perfekt in Szene zu setzen."
-              icon={<BookImage className="size-28" />}
-              modules={modules}
-              onPickedItem={handlePickedItem}
-              pickedModules={pickedModules}
-              getBookPart={getBookPart}
-              autoplayDelay={10000}
-              borderColor="border-pirrot-blue-500/5"
-              bgColor="bg-pirrot-blue-300/10"
-              iconColor="text-pirrot-blue-300"
-              filter={(m) => m.part === "COVER"}
-              slice={{ start: 0, end: 10 }}
-            />
-
-
-            {/* CUSTOM MODULES */}
-
-            <div className="content-card relative size-full h-72 overflow-hidden rounded lg:h-96">
-              <Image
-                className="size-full rounded object-cover"
-                src="/assets/gen/pirgen_bg.png"
-                fill
-                priority
-                alt="hero"
-              />
-            </div>
-            <div className="scroll-m-40" id="custom"></div>
-            <div className="flex flex-col gap-4 py-6 lg:py-8">
-              <div className="flex flex-col-reverse items-center justify-between py-4 lg:flex-row lg:py-8">
-                <div className="flex flex-col gap-2 p-1">
-                  <h3 className="text-pirrot-blue-700 text-2xl font-bold lg:text-3xl">
-                    Eigene Module
-                  </h3>
-                  <p className="text-info-800 w-full max-w-2xl">
-                    {" "}
-                    Ihre Ideen, Ihr Material, Ihr Buch. Der Bereich „Eigene
-                    Module“ ist Ihre kreative Werkstatt. Verwandeln Sie Ihre
-                    PDF-Dateien (ob Lehrmaterialien, Arbeitsblätter oder
-                    persönliche Notizen) in feste Bestandteile Ihres Werkes.
-                    Erschaffen Sie einen Planer, der zu Ihrem einzigartigen
-                    Bildungsangebot passt.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <CloudUpload className="text-pirrot-blue-700 size-28" />
-                </div>
-              </div>
-
-              {userModulesError?.message === "UNAUTHORIZED" && <Login />}
-              {!userModulesError && !userModulesLoading && userModules && (
-                <UserModules
-                  bookId={bookId ?? ""}
-                  onPickedUserItem={handlePickedItem}
-                  existingTips={existingTips.map((t) => t.title)}
-                  pickedModules={pickedModules}
-                  userModules={userModules}
-                />
-              )}
-            </div>
-
-            <ModuleCarousel
-              title="Beliebte Wochenplaner"
-              description="Gestalten Sie hier Ihren individuellen Wochenplaner, der Ihnen hilft, Ihre Termine und Aufgaben stilvoll zu organisieren. Fügen Sie persönliche Elemente hinzu, um den Planer perfekt auf Ihre Bedürfnisse abzustimmen. So wird die Planung Ihrer Woche zu einem kreativen und persönlichen Erlebnis."
-              icon={<CalendarDays className="text-pirrot-green-300 size-28" />}
-              modules={modules}
-              onPickedItem={handlePickedItem}
-              pickedModules={pickedModules}
-              getBookPart={getBookPart}
-              autoplayDelay={10000}
-              borderColor="border-pirrot-green-500/5"
-              bgColor="bg-pirrot-green-300/10"
-              iconColor="text-pirrot-green-300"
-              filter={(m) => m.part === "PLANNER"}
-              slice={{ start: 0, end: 10 }}
-            />
-
-            {/* POPULAR BINDINGS */}
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between py-4 lg:py-8">
-                <div className="flex flex-col gap-2 p-1">
-                  <h3 className="text-warning-300 text-2xl font-bold lg:text-3xl">
-                    Bindungen
-                  </h3>
-                  <p className="text-info-800 w-full max-w-2xl">
-                    Hier können Sie die passende Bindung für Ihr Buch auswählen.
-                    Die Wahl der Bindung ist entscheidend für die Langlebigkeit
-                    und das Erscheinungsbild Ihres Werkes. Entscheiden Sie sich
-                    für die Option, die am besten zu Ihrem Projekt passt.
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <ShellIcon className="text-warning-300 size-28" />
-                </div>
-              </div>
-              <div className="overflow-hidden">
-                <div className="grid grid-cols-1 gap-4 p-1 md:grid-cols-2">
-                  {modules
-                    .filter((m) => m.part === "BINDING")
-                    .slice(0, 2)
-                    .map((m) => (
+              {currentStep !== "CHECKOUT" ? (
+                <>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {visibleModules.map((moduleItem) => (
                       <ModuleItem
-                        key={m.id}
-                        isPicked={pickedModules[
-                          getBookPart(m.type, m.part)
-                        ]?.includes(m.id)}
-                        item={m}
+                        key={moduleItem.id}
+                        isPicked={isConfigModuleSelected(pickedModules, moduleItem.id)}
+                        item={moduleItem}
                         onPickedItem={handlePickedItem}
-                        isDisabled={bindingAvailabilityById.get(m.id)?.disabled}
+                        isDisabled={bindingAvailabilityById.get(moduleItem.id)?.disabled}
                         disabledReason={
-                          bindingAvailabilityById.get(m.id)?.reason
+                          bindingAvailabilityById.get(moduleItem.id)?.reason
                         }
                       />
                     ))}
-                </div>
-              </div>
-            </div>
+                  </div>
 
-            {/* POPULAR MODULES CAROUSEL */}
-            <ModuleCarousel
-              title="Beliebte Module"
-              description="Gestalten Sie hier Ihren individuellen Wochenplaner, der Ihnen hilft,
-  Ihre Termine und Aufgaben stilvoll zu organisieren. Fügen Sie
-  persönliche Elemente hinzu, um den Planer perfekt auf Ihre Bedürfnisse
-  abzustimmen. So wird die Planung Ihrer Woche zu einem kreativen und
-  persönlichen Erlebnis."
-              icon={<Component className="text-pirrot-red-300 size-28" />}
-              modules={modules}
-              onPickedItem={handlePickedItem}
-              pickedModules={pickedModules}
-              getBookPart={getBookPart}
-              autoplayDelay={10000}
-              borderColor="border-pirrot-red-500/5"
-              bgColor="bg-pirrot-red-300/10"
-              iconColor="text-pirrot-red-300"
-              filter={(m) =>
-                m.part !== "COVER" &&
-                m.part !== "PLANNER" &&
-                m.type !== "bindung"
-              }
-              slice={{ start: 0, end: 10 }}
-            />
-          </div>
-        </div>
-        {/* RIGHT SIDEBAR */}
-        <div
-          className={`${isBookInfoOpen ? "h-full lg:w-xs" : ""} border-pirrot-blue-950/10 bg-pirrot-blue-100/65 relative flex flex-col gap-2 overflow-y-auto border-t backdrop-blur-sm md:h-screen lg:border-l`}
-        >
-          <div className="flex flex-col gap-2">
-            <div className="p-2">
-              <BookA
-                onClick={() => setIsBookInfoOpen((prev) => !prev)}
-                className="btn-soft text-info-950 size-9 cursor-pointer p-2"
-              />
-            </div>
-            {isBookInfoOpen && (
-              <div className="content-card mx-2 flex flex-col gap-2 p-2">
-                <div className="flex flex-col gap-2 p-1">
-                  <h3 className="font-bold">Stückzahl</h3>
-                  <div className="flex gap-2">
-                    <input
-                      className="field-shell w-full px-3 py-2.5"
-                      type="number"
-                      onChange={(e) => setOrderAmount(+e.target.value)}
-                      value={orderAmount}
-                    />
+                  {visibleModules.length === 0 ? (
+                    <div className="content-card flex min-h-56 flex-col items-center justify-center gap-3 p-6 text-center">
+                      <h3 className="text-2xl font-bold">Keine Module gefunden</h3>
+                      <p className="text-info-800 max-w-lg">
+                        Passen Sie die Suche an oder wechseln Sie den Schritt, um
+                        weitere Module zu sehen.
+                      </p>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                  <div className="flex flex-col gap-4">
+                    <div className="content-card flex flex-col gap-3 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-2xl font-bold">Zusammenfassung</h3>
+                          <p className="text-info-800 max-w-2xl text-sm">
+                            Prüfen Sie Ihren Planer vor dem Bestellen. Die
+                            Vorschau und die Kosten basieren auf der zuletzt
+                            berechneten Konfiguration.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void prepareCheckoutStep()}
+                            disabled={isMakingPreview}
+                            className="btn-soft flex items-center gap-2 px-3 py-2 disabled:opacity-25"
+                          >
+                            Neu berechnen
+                            {isMakingPreview ? (
+                              <LoaderCircle className="size-4 animate-spin" />
+                            ) : null}
+                          </button>
+                          {previewFileURL ? (
+                            <button
+                              type="button"
+                              onClick={() => setModalId("preview")}
+                              className="btn-soft flex items-center gap-2 px-3 py-2"
+                            >
+                              Vorschau <EyeIcon className="size-4" />
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="field-shell p-3">
+                          <p className="text-info-800 text-xs uppercase tracking-wide">
+                            Format
+                          </p>
+                          <p className="text-xl font-bold">{pickedFormat}</p>
+                        </div>
+                        <div className="field-shell p-3">
+                          <p className="text-info-800 text-xs uppercase tracking-wide">
+                            Stückzahl
+                          </p>
+                          <p className="text-xl font-bold">{orderAmount}x</p>
+                        </div>
+                        <div className="field-shell p-3">
+                          <p className="text-info-800 text-xs uppercase tracking-wide">
+                            Seiten
+                          </p>
+                          <p className="text-xl font-bold">
+                            {lastCalculation?.fullPageCount ?? totalPagesCount}
+                          </p>
+                          {liveDelta ? (
+                            <p className="text-info-800 text-xs">
+                              {formatSignedPages(liveDelta.pageDelta)}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="field-shell p-3">
+                          <p className="text-info-800 text-xs uppercase tracking-wide">
+                            Gesamtpreis
+                          </p>
+                          <p className="text-xl font-bold">
+                            {(previewPrice.total / 100).toFixed(2)} €
+                          </p>
+                          {liveDelta ? (
+                            <p className="text-info-800 text-xs">
+                              {formatSignedEuroCents(liveDelta.priceDelta)}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {isLiveCalculating ? (
+                        <div className="border-pirrot-blue-300 bg-pirrot-blue-50 rounded-xl border px-3 py-2 text-sm">
+                          Seiten und Kosten werden automatisch neu berechnet.
+                        </div>
+                      ) : null}
+                      {liveCalculationError ? (
+                        <div className="border-pirrot-red-300 bg-pirrot-red-100/60 rounded-xl border px-3 py-2 text-sm">
+                          {liveCalculationError}
+                        </div>
+                      ) : null}
+                      {isCheckoutPreviewStale ? (
+                        <div className="border-warning-300 bg-warning-100/60 rounded-xl border px-3 py-2 text-sm">
+                          Die Vorschau ist nach Ihren letzten Änderungen veraltet.
+                          Bitte berechnen Sie den Checkout erneut.
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <SelectedModuleList
+                        title="Umschlag"
+                        modules={modulesByStep.cover}
+                        emptyText="Kein Umschlag ausgewählt."
+                      />
+                      <SelectedModuleList
+                        title="Bindung"
+                        modules={modulesByStep.binding}
+                        emptyText="Keine Bindung ausgewählt."
+                      />
+                      <SelectedModuleList
+                        title="Vorderer Teil"
+                        modules={modulesByStep.pre}
+                        emptyText="Keine Module im vorderen Teil."
+                      />
+                      <SelectedModuleList
+                        title="Wochenplaner"
+                        modules={modulesByStep.planner}
+                        emptyText="Kein Wochenplaner ausgewählt."
+                      />
+                      <div className="md:col-span-2">
+                        <SelectedModuleList
+                          title="Hinterer Teil"
+                          modules={modulesByStep.post}
+                          emptyText="Keine Module im hinteren Teil."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="content-card flex flex-col gap-3 p-4">
+                      <h3 className="text-xl font-bold">
+                        Rechtliches vor dem Bestellen
+                      </h3>
+                      <div className="field-shell flex items-center gap-2 px-3 py-2">
+                        <input
+                          id="agb"
+                          type="checkbox"
+                          checked={acceptPolicies.agb}
+                          onChange={() =>
+                            setAcceptPolicies((prev) => ({
+                              ...prev,
+                              agb: !prev.agb,
+                            }))
+                          }
+                        />
+                        <label htmlFor="agb" className="form-label">
+                          Allgemeine Geschäftsbedingungen
+                        </label>
+                      </div>
+                      <div className="field-shell flex items-center gap-2 px-3 py-2">
+                        <input
+                          id="data"
+                          type="checkbox"
+                          checked={acceptPolicies.data}
+                          onChange={() =>
+                            setAcceptPolicies((prev) => ({
+                              ...prev,
+                              data: !prev.data,
+                            }))
+                          }
+                        />
+                        <label htmlFor="data" className="form-label">
+                          Datenschutzeinwilligung
+                        </label>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`content-card p-4 ${acceptPoliciesValid ? "" : "pointer-events-none opacity-60"}`}
+                    >
+                      <ConfigOrderForm
+                        bookId={bookId!}
+                        quantity={orderAmount}
+                        format={pickedFormat}
+                        partnerToken={partnerToken}
+                        onAbortForm={() => setCurrentStep("BINDING")}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="content-card flex min-h-[420px] flex-col gap-3 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="text-xl font-bold">Druckvorschau</h3>
+                      {isRefreshingPreview ? (
+                        <LoaderCircle className="size-4 animate-spin" />
+                      ) : null}
+                    </div>
+                    {previewFileURL ? (
+                      <>
+                        {renderPreviewDisclaimer()}
+                        {useMobilePdfFallback ? (
+                          renderMobilePdfFallback("min-h-0 flex-1")
+                        ) : (
+                          <div className="min-h-0 flex-1">
+                            <iframe
+                              src={previewFileURL}
+                              title="PDF Preview"
+                              width="100%"
+                              height="100%"
+                              className="border-info-950/5 h-full w-full border"
+                            />
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex size-full flex-col items-center justify-center gap-4 text-center">
+                        <p className="max-w-md">
+                          Für den Checkout wird zuerst eine aktuelle Vorschau
+                          erzeugt.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => void prepareCheckoutStep()}
+                          disabled={isMakingPreview}
+                          className="btn-solid px-4 py-2 disabled:opacity-25"
+                        >
+                          Vorschau erzeugen
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="flex flex-col gap-2 p-1">
-                  <h3 className="font-bold">Buch Format</h3>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div
+          className={`${isBookInfoOpen ? "h-full lg:w-sm" : ""} border-pirrot-blue-950/10 bg-pirrot-blue-100/65 relative flex flex-col gap-2 overflow-y-auto border-t backdrop-blur-sm md:h-screen lg:border-l`}
+        >
+          <div className="p-2">
+            <button
+              type="button"
+              onClick={() => setIsBookInfoOpen((prev) => !prev)}
+              className="btn-soft p-2"
+            >
+              <BookA className="size-5" />
+            </button>
+          </div>
+
+          {isBookInfoOpen ? (
+            <>
+              <div className="content-card mx-2 flex flex-col gap-3 p-3">
+                <div className="flex flex-col gap-2">
+                  <h3 className="font-bold">Stückzahl</h3>
+                  <input
+                    className="field-shell w-full px-3 py-2.5"
+                    type="number"
+                    min={1}
+                    onChange={(event) => setOrderAmount(Number(event.target.value))}
+                    value={orderAmount}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <h3 className="font-bold">Buchformat</h3>
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      id="DIN A5"
-                      onClick={(e) =>
-                        setPickedFormat(e?.currentTarget.id as "DIN A5")
-                      }
-                      className={`btn-soft flex-1 p-1 ${pickedFormat === "DIN A5" ? "border-pirrot-blue-700/50 border-2" : ""}`}
+                      onClick={() => setPickedFormat("DIN A5")}
+                      className={`btn-soft flex-1 p-2 ${pickedFormat === "DIN A5" ? "border-pirrot-blue-700/50 border-2" : ""}`}
                     >
                       DIN A5
                     </button>
                     <button
                       type="button"
-                      id="DIN A4"
-                      onClick={(e) =>
-                        setPickedFormat(e?.currentTarget.id as "DIN A4")
-                      }
-                      className={`btn-soft flex-1 p-1 ${pickedFormat === "DIN A4" ? "border-pirrot-blue-700/50 border-2" : ""}`}
+                      onClick={() => setPickedFormat("DIN A4")}
+                      className={`btn-soft flex-1 p-2 ${pickedFormat === "DIN A4" ? "border-pirrot-blue-700/50 border-2" : ""}`}
                     >
                       DIN A4
                     </button>
                   </div>
                 </div>
               </div>
-            )}
-            {isBookInfoOpen && (
-              <div className="content-card mx-2 flex flex-col gap-2 p-2">
-                <div className="flex justify-between">
-                  <h3 className="font-bold">Kosten Übersicht</h3>
-                  <motion.button
-                    onClick={() => setIsCostOpen((prev) => !prev)}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <motion.div
-                      animate={{ rotate: isCostOpen ? 180 : 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <ChevronDown />
-                    </motion.div>
-                  </motion.button>
-                </div>
 
-                <div
-                  className={`field-shell ${isCostOpen ? "aspect-video" : "h-9"} p-1 transition-transform duration-300`}
-                >
-                  <div className="size-full overflow-y-auto transition-transform duration-300">
+              <div className="content-card mx-2 flex flex-col gap-2 p-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold">Kostenübersicht</h3>
+                  <button
+                    type="button"
+                    onClick={() => setIsCostOpen((prev) => !prev)}
+                    className="btn-soft p-1.5"
+                  >
+                    <ChevronDown
+                      className={`${isCostOpen ? "rotate-180" : ""} transition-transform`}
+                    />
+                  </button>
+                </div>
+                <div className={`field-shell p-3 ${isCostOpen ? "" : "hidden"}`}>
+                  <div className="flex flex-col gap-1 text-sm">
                     <h3>Seiten gesamt: {totalPagesCount}</h3>
-                    <h5>Kosten: {(previewPrice.total / 100).toFixed(2)}€</h5>
+                    {liveDelta ? (
+                      <p className="text-info-800 text-xs">
+                        Änderung: {formatSignedPages(liveDelta.pageDelta)}
+                      </p>
+                    ) : null}
+                    <h5>Kosten: {(previewPrice.total / 100).toFixed(2)} €</h5>
+                    {liveDelta ? (
+                      <p className="text-info-800 text-xs">
+                        Preisänderung: {formatSignedEuroCents(liveDelta.priceDelta)}
+                      </p>
+                    ) : null}
                     <h5>
-                      pro Planer: {(previewPrice.single / 100).toFixed(2)}€
+                      pro Planer: {(previewPrice.single / 100).toFixed(2)} €
                     </h5>
+                    {isLiveCalculating ? (
+                      <p className="text-pirrot-blue-700">
+                        Live-Berechnung läuft…
+                      </p>
+                    ) : null}
+                    {liveCalculationError ? (
+                      <p className="text-pirrot-red-500">{liveCalculationError}</p>
+                    ) : null}
+                    {isCheckoutPreviewStale ? (
+                      <p className="text-warning-800">
+                        Vorschau und exakte Seitenzahl sind nach den letzten
+                        Änderungen veraltet.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
-
-                <div className="flex w-full justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <button
                     className="btn-soft flex gap-2 px-4 py-2"
                     type="button"
-                    disabled={isMakingPreview}
-                    onClick={handleRefreshPrice}
+                    disabled={isMakingPreview || !isConfigComplete}
+                    onClick={() => void refreshCheckoutPreview()}
                   >
-                    Aktualisieren{" "}
-                    {isMakingPreview && (
-                      <span className="flex items-center justify-center">
-                        <LoaderCircle className="size-4 animate-spin" />
-                      </span>
-                    )}
+                    Vorschau neu
+                    {isMakingPreview ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : null}
                   </button>
-                  {previewFileURL && (
-                    <button type="button" onClick={() => setModalId("preview")}>
+                  {previewFileURL ? (
+                    <button
+                      type="button"
+                      onClick={() => setModalId("preview")}
+                      className="btn-soft p-2"
+                    >
                       <EyeIcon />
                     </button>
-                  )}
+                  ) : null}
                 </div>
-                {isRefreshingPreview && (
-                  <p className="text-info-800 text-sm">
-                    Vorschau wird erstellt...
-                  </p>
-                )}
-                {configWarnings.length > 0 && (
+
+                {configWarnings.length > 0 ? (
                   <div className="mt-2 flex flex-col gap-2">
-                    {configWarnings.map((w, i) => (
+                    {configWarnings.map((warning, index) => (
                       <button
-                        key={w}
-                        id={`warning-${i}`}
+                        key={warning}
+                        id={`warning-${index}`}
                         type="button"
                         onClick={handleConfigWarning}
                         className="border-pirrot-red-500/50 bg-pirrot-red-300/80 flex w-full gap-2 rounded border p-2 text-start text-sm"
                       >
                         <XIcon className="size-4 shrink-0" />
-                        <span>{w}</span>
+                        <span>{warning}</span>
                       </button>
                     ))}
                   </div>
-                )}
+                ) : null}
               </div>
-            )}
-          </div>
 
-          {isBookInfoOpen && (
-            <div className="flex flex-col">
               <div className="p-1">
                 <ModuleChanger
                   items={pickedModules}
-                  modules={modules}
+                  modules={modules as never[]}
                   onItemsChange={(items) => setPickedModules(items)}
                   initialColorMap={moduleColorMap}
                   onColorMapChange={setModuleColorMap}
                 />
               </div>
-            </div>
-          )}
 
-          {isBookInfoOpen && (
-            <div className="border-info-950/5 bg-pirrot-blue-100/85 sticky bottom-1 flex w-full gap-2 border-t p-1 backdrop-blur-sm">
-              <button
-                type="button"
-                disabled={isSavingConfig}
-                onClick={handleSaveConfig}
-                className="btn-soft flex flex-1 justify-center gap-2 p-2 font-bold disabled:opacity-25"
-              >
-                {isSavingConfig ? <LoadingSpinner /> : "Speichern"}{" "}
-                <SaveIcon className="size-6" />
-              </button>
-              <button
-                type="button"
-                onClick={handleSummaryView}
-                disabled={!isConfigComplete}
-                className="btn-solid flex flex-1 justify-center gap-2 p-2 font-bold disabled:opacity-25"
-              >
-                Weiter <ArrowRight className="size-6" />
-              </button>
-            </div>
-          )}
+              <div className="border-info-950/5 bg-pirrot-blue-100/85 sticky bottom-1 mt-auto flex w-full flex-col gap-2 border-t p-2 backdrop-blur-sm">
+                <button
+                  type="button"
+                  disabled={isSavingConfig}
+                  onClick={() => void handleSaveConfig()}
+                  className="btn-soft flex justify-center gap-2 p-2 font-bold disabled:opacity-25"
+                >
+                  {isSavingConfig ? <LoadingSpinner /> : "Speichern"}
+                  <SaveIcon className="size-5" />
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={currentStepIndex === 0 || isMakingPreview}
+                    onClick={handlePreviousStep}
+                    className="btn-soft flex flex-1 justify-center gap-2 p-2 font-bold disabled:opacity-25"
+                  >
+                    <ArrowLeft className="size-5" />
+                    Zurück
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canContinueCurrentStep() || isMakingPreview}
+                    onClick={() => void handleNextStep()}
+                    className="btn-solid flex flex-1 justify-center gap-2 p-2 font-bold disabled:opacity-25"
+                  >
+                    {currentStep === "CHECKOUT"
+                      ? "Aktualisieren"
+                      : currentStep === "BINDING"
+                        ? "Checkout"
+                        : "Weiter"}
+                    <ArrowRight className="size-5" />
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
 
-      <Modal selector="modal-hook" show={modalId !== undefined}>
+      <Modal
+        selector="modal-hook"
+        show={modalId !== undefined && modalId !== "login-prompt"}
+      >
         <div className="absolute top-0 left-0 z-[69] flex h-full w-full items-center justify-center">
           <div className="bg-info-950/95 flex size-full items-center justify-center">
-            <div className="absolute top-2 right-2 z-[123] w-full p-2">
-              {configWarnings.map((w, i) => (
-                <button
-                  key={w}
-                  id={`warning-${i}`}
-                  type="button"
-                  onClick={handleConfigWarning}
-                  style={{ translate: `-${2 * i}px ${2 * i}px ` }}
-                  className="border-pirrot-red-500/50 bg-pirrot-red-300 absolute top-2 right-2 flex w-full max-w-xl gap-2 rounded border p-2 text-start shadow-2xs"
-                >
-                  <XIcon />
-                  {w}
-                </button>
-              ))}
-            </div>
             {renderModalContent()}
           </div>
         </div>

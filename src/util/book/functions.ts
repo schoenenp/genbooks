@@ -1,6 +1,4 @@
 import type { BookPart } from "@prisma/client";
-import { FILTER_TYPES } from "@/app/_components/book-config";
-import type { ConfigBookPart } from "@/app/_components/book-config";
 import { logger } from "@/util/logger";
 const currentDate = new Date();
 const nextYearDate = new Date(currentDate);
@@ -25,38 +23,6 @@ const formatDate = (date: Date): string => {
 
 // const nextYearDateStr = formatDate(nextYearDate)
 // // e.g., "2025-03-21"
-
-export function getBookPart(
-  modType: string,
-  modPart?: string | null,
-): ConfigBookPart {
-  const normalizedPart = modPart?.toUpperCase();
-
-  switch (normalizedPart) {
-    case "COVER":
-      return "COVER";
-    case "BINDING":
-    case "SETTINGS":
-      return "SETTINGS";
-    case "DEFAULT":
-    case "PLANNER":
-      return "MODULES";
-    default:
-      break;
-  }
-
-  const normalizedType = modType.toLowerCase();
-
-  switch (normalizedType) {
-    case FILTER_TYPES.COVER:
-      return "COVER";
-    case FILTER_TYPES.BINDING:
-    case "farben":
-      return "SETTINGS";
-    default:
-      return "MODULES";
-  }
-}
 
 export function getPageRules(item: { min: number; max: number }) {
   const { min, max } = item;

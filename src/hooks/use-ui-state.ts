@@ -2,11 +2,10 @@ import { useState } from "react";
 
 type ModalType =
   | "info"
+  | "custom-modules"
   | "dates"
   | "name"
   | "preview"
-  | "summary"
-  | "payment"
   | "binding-overflow"
   | "login-prompt"
   | undefined;
