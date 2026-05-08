@@ -1,6 +1,7 @@
 "use client";
 import type { FormEvent } from "react";
 import { useState, useMemo, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { FileType } from "@prisma/client";
@@ -508,11 +509,14 @@ function extractTagsFromFields(
                   className="size-full rounded-xl bg-white"
                 />
               ) : (
-                <div className="flex size-full items-center justify-center rounded-xl bg-white p-4">
-                  <img
+                <div className="relative flex size-full items-center justify-center rounded-xl bg-white p-4">
+                  <Image
                     src={pdfFileUrl}
                     alt="Modulvorschau"
-                    className="max-h-full max-w-full rounded-xl object-contain"
+                    fill
+                    sizes="(min-width: 1280px) 50vw, 100vw"
+                    className="rounded-xl object-contain p-4"
+                    unoptimized
                   />
                 </div>
               )

@@ -29,7 +29,7 @@ function isCoverType(type: string): boolean {
 }
 
 function getMimeTypeFromDataUrl(input: string): string | null {
-  const match = input.match(/^data:([^;]+);base64,/i);
+  const match = /^data:([^;]+);base64,/i.exec(input);
   return match?.[1] ?? null;
 }
 

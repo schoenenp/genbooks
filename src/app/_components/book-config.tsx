@@ -23,6 +23,7 @@ import {
 import Modal from "./modal";
 import LoginPromptModal from "./login-prompt-modal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import NextImage from "next/image";
 import { api } from "@/trpc/react";
 import LoadingSpinner from "./loading-spinner";
 import ModuleItem, { type ModulePickerItem } from "./module-item";
@@ -1908,11 +1909,14 @@ export default function BookConfig(props: {
 
                         {customCoverPreviewUrl ? (
                           <div className="field-shell bg-white p-2">
-                            <div className="mx-auto aspect-[210/297] max-h-64 w-full max-w-44 overflow-hidden rounded-lg border border-pirrot-blue-200">
-                              <img
+                            <div className="relative mx-auto aspect-[210/297] max-h-64 w-full max-w-44 overflow-hidden rounded-lg border border-pirrot-blue-200">
+                              <NextImage
                                 src={customCoverPreviewUrl}
                                 alt="A4 Cover Vorschau"
-                                className="h-full w-full object-cover"
+                                fill
+                                sizes="176px"
+                                className="object-cover"
+                                unoptimized
                               />
                             </div>
                           </div>

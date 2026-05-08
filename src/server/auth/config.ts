@@ -60,10 +60,6 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/$/, "");
 }
 
-function toAllowedOrigin(value: string): string | null {
-  return toAllowedAppOrigin(value);
-}
-
 function getConfiguredAuthOrigin() {
   return getConfiguredAppOrigin();
 }

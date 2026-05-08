@@ -24,6 +24,8 @@ export const metadata: Metadata = {
     "Anleitung zum Erstellen von PDF-Modulen mit Formularfeldern für den Planer Generator.",
 };
 
+export const dynamic = "force-dynamic";
+
 const coreRules = [
   {
     icon: FileType2,
