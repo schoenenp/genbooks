@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
+import { env } from "@/env";
 import { Naming } from "@/util/naming";
 import {
   createTRPCRouter,
@@ -8,13 +9,104 @@ import {
   publicProcedure,
 } from "@/server/api/trpc";
 import { getBase64, uploadData, type FileItem } from "@/util/upload/functions";
-import { pickModulePdfFile } from "@/util/module-files";
+import { pickCoverImageFile, pickModulePdfFile } from "@/util/module-files";
 import { validatePDFUpload } from "@/util/pdf/functions";
 import { handleBookPart } from "@/util/book/functions";
 import {
   buildModuleFeedVisibilityWhere,
   buildModulePreviewVisibilityWhere,
 } from "./module-visibility";
+
+const COVER_TYPE = "umschlag";
+const COVER_IMAGE_FILE_PREFIX = "cover_image_";
+
+function normalizeType(type: string): string {
+  return type.toLocaleLowerCase();
+}
+
+function isCoverType(type: string): boolean {
+  return normalizeType(type) === COVER_TYPE;
+}
+
+function getMimeTypeFromDataUrl(input: string): string | null {
+  const match = input.match(/^data:([^;]+);base64,/i);
+  return match?.[1] ?? null;
+}
+
+function isImageUpload(input: string): boolean {
+  const mimeType = getMimeTypeFromDataUrl(input);
+  return mimeType?.startsWith("image/") ?? false;
+}
+
+function getUploadExtension(input: string): string {
+  const mimeType = getMimeTypeFromDataUrl(input);
+  switch (mimeType) {
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/gif":
+      return "gif";
+    default:
+      if (mimeType?.includes("jpeg") || mimeType?.includes("jpg")) {
+        return "jpg";
+      }
+      return "pdf";
+  }
+}
+
+function toModuleAssetSrc(src: string): string {
+  return /^https?:\/\//i.test(src) ? src : `https://cdn.pirrot.de${src}`;
+}
+
+function getModuleThumbnailSrc(files: Array<{ name: string | null; src: string }>): string {
+  const thumbnailFile = files.find((file) => file.name?.startsWith("thumb_"));
+  const coverImageFile = pickCoverImageFile(files);
+  const previewFile = thumbnailFile ?? coverImageFile;
+
+  return previewFile ? toModuleAssetSrc(previewFile.src) : "/default.png";
+}
+
+function getCustomCoverTemplateFile(): FileItem {
+  if (!env.CUSTOM_COVER_TEMPLATE_URL) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message:
+        "Missing CUSTOM_COVER_TEMPLATE_URL for image-based custom cover modules",
+    });
+  }
+
+  return {
+    name: "file_custom_cover_template.pdf",
+    src: env.CUSTOM_COVER_TEMPLATE_URL,
+    type: "PDF",
+    size: 0,
+  };
+}
+
+async function uploadModuleAsset(
+  base64File: string,
+  fileNamePrefix?: string,
+): Promise<FileItem> {
+  const fileBuffer = Buffer.from(getBase64(base64File), "base64");
+  const extension = getUploadExtension(base64File);
+  const uploadedFiles = await uploadData([
+    {
+      data: fileBuffer,
+      name: `${fileNamePrefix ?? ""}${Naming.file(extension)}`,
+    },
+  ]);
+
+  const uploadedFile = uploadedFiles[0];
+  if (!uploadedFile) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "File upload failed",
+    });
+  }
+
+  return uploadedFile;
+}
 
 export const moduleRouter = createTRPCRouter({
   initPage: protectedProcedure.query(({ ctx }) => {
@@ -69,7 +161,7 @@ export const moduleRouter = createTRPCRouter({
       z.object({
         name: z.string(),
         type: z.string(),
-        moduleFile: z.string(),
+        moduleFile: z.string().min(1),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -86,39 +178,25 @@ export const moduleRouter = createTRPCRouter({
       }
 
       const bookPart = handleBookPart(type);
-      const { valid, message } = await validatePDFUpload(moduleFile, bookPart);
+      const filesToCreate: FileItem[] = [];
+      const isImageBasedCover = isCoverType(type) && isImageUpload(moduleFile);
 
-      if (!valid) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: message ?? "Invalid PDF upload",
-        });
-      }
+      if (isImageBasedCover) {
+        filesToCreate.push(getCustomCoverTemplateFile());
+        filesToCreate.push(
+          await uploadModuleAsset(moduleFile, COVER_IMAGE_FILE_PREFIX),
+        );
+      } else {
+        const { valid, message } = await validatePDFUpload(moduleFile, bookPart);
 
-      const files = [];
-      let base64String = moduleFile;
-      if (base64String.startsWith("data:")) {
-        base64String = base64String.split(",")[1] ?? "";
-      }
+        if (!valid) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: message ?? "Invalid PDF upload",
+          });
+        }
 
-      const fileBuffer = Buffer.from(base64String, "base64");
-
-      const daFile = {
-        data: fileBuffer,
-        name: Naming.file("pdf"),
-      };
-
-      files.push(daFile);
-
-      let uploadedFile: FileItem[] = [];
-      uploadedFile = await uploadData(files);
-
-      const file = uploadedFile[0];
-      if (!file) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "File upload failed",
-        });
+        filesToCreate.push(await uploadModuleAsset(moduleFile));
       }
 
       const customModuleType =
@@ -151,7 +229,7 @@ export const moduleRouter = createTRPCRouter({
           },
           theme: "custom",
           files: {
-            create: file,
+            create: filesToCreate,
           },
           createdBy: {
             connect: {
@@ -220,25 +298,46 @@ export const moduleRouter = createTRPCRouter({
         };
       }
 
-      const filesToDisconnect = [];
-      const files = [];
+      const filesToDisconnect: Array<{ id: string }> = [];
+      const filesToCreate: FileItem[] = [];
+      const existingPdfFile = pickModulePdfFile(existingModule.files);
+      const existingCoverImageFile = pickCoverImageFile(existingModule.files);
+      const isImageBasedCover = Boolean(
+        base64File && isCoverType(type) && isImageUpload(base64File),
+      );
 
-      if (base64File && base64File !== "") {
-        const existingFile = pickModulePdfFile(existingModule.files);
-        if (existingFile) {
-          filesToDisconnect.push({ id: existingFile.id });
-        }
-        const fileContent = getBase64(base64File);
-        const fileBuffer = Buffer.from(fileContent, "base64");
-
-        files.push({
-          data: fileBuffer,
-          name: Naming.file("pdf"),
-          type,
+      if (!isCoverType(type) && existingCoverImageFile && !base64File) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Image-based cover modules need a replacement PDF before changing the module type",
         });
       }
 
-      const uploadedFiles = await uploadData(files);
+      if (base64File && base64File !== "") {
+        if (isImageBasedCover) {
+          if (existingCoverImageFile) {
+            filesToDisconnect.push({ id: existingCoverImageFile.id });
+          }
+          if (!existingPdfFile) {
+            filesToCreate.push(getCustomCoverTemplateFile());
+          }
+          filesToCreate.push(
+            await uploadModuleAsset(base64File, COVER_IMAGE_FILE_PREFIX),
+          );
+        } else {
+          if (existingPdfFile) {
+            filesToDisconnect.push({ id: existingPdfFile.id });
+          }
+          if (existingCoverImageFile) {
+            filesToDisconnect.push({ id: existingCoverImageFile.id });
+          }
+          filesToCreate.push(await uploadModuleAsset(base64File));
+        }
+      } else if (!isCoverType(type) && existingCoverImageFile) {
+        filesToDisconnect.push({ id: existingCoverImageFile.id });
+      }
+
       const bookPart = handleBookPart(type);
 
       const updatedModule = await ctx.db.module.update({
@@ -254,7 +353,7 @@ export const moduleRouter = createTRPCRouter({
             connect: tagIds?.map((id) => ({ id })),
           },
           files: {
-            create: uploadedFiles.length >= 1 ? uploadedFiles : undefined,
+            create: filesToCreate.length >= 1 ? filesToCreate : undefined,
             disconnect:
               filesToDisconnect.length >= 1 ? filesToDisconnect : undefined,
           },
@@ -289,21 +388,13 @@ export const moduleRouter = createTRPCRouter({
     return currentUser.modules
       .filter((m) => m.deletedAt === null)
       .map((moduleItem) => {
-        // Find thumbnail file
-        const thumbnailFile = moduleItem.files.find((file) =>
-          file.name?.startsWith("thumb_"),
-        );
-        const thumbnail = thumbnailFile
-          ? `https://cdn.pirrot.de${thumbnailFile.src}`
-          : "/default.png";
-
         return {
           id: moduleItem.id,
           name: moduleItem.name,
           type: moduleItem.type.name,
           theme: moduleItem.theme,
           part: moduleItem.part,
-          thumbnail,
+          thumbnail: getModuleThumbnailSrc(moduleItem.files),
         };
       });
   }),
@@ -335,10 +426,10 @@ export const moduleRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Module not found" });
       }
 
-      const thumbnail = foundModule?.files.find((f) =>
-        f.name?.startsWith("thumb_"),
-      );
-      return thumbnail?.src ?? "/default.png";
+      const previewFile =
+        foundModule.files.find((f) => f.name?.startsWith("thumb_")) ??
+        pickCoverImageFile(foundModule.files);
+      return previewFile?.src ?? "/default.png";
     }),
   getByTypes: publicProcedure
     .input(
@@ -372,19 +463,12 @@ export const moduleRouter = createTRPCRouter({
       const moduleResponse = foundModules.map((module) => {
         const { id, name, theme, files, type } = module;
 
-        const thumbnailFile = files.find((file) =>
-          file.name?.startsWith("thumb_"),
-        );
-        const thumbnail = thumbnailFile
-          ? `https://cdn.pirrot.de${thumbnailFile.src}`
-          : "/default.png";
-
         return {
           id,
           name,
           theme,
           type: type.name,
-          thumbnail,
+          thumbnail: getModuleThumbnailSrc(files),
         };
       });
 

@@ -165,6 +165,18 @@ function enforceVerificationLinkPolicy(url: string, request: Request): string {
   return parsedUrl.toString();
 }
 
+function buildVerificationConfirmationUrl(verificationUrl: string): string {
+  const parsedVerificationUrl = new URL(verificationUrl);
+  const confirmationUrl = new URL(
+    "/auth/confirm",
+    parsedVerificationUrl.origin,
+  );
+
+  confirmationUrl.searchParams.set("url", parsedVerificationUrl.toString());
+
+  return confirmationUrl.toString();
+}
+
 function verificationEmailText(params: { host: string; url: string }) {
   return `Sign in to ${params.host}\n${params.url}\n\nIf you did not request this email, you can ignore it.`;
 }
@@ -281,6 +293,8 @@ export const authConfig = {
           buildVerificationUrl(url, request),
           request,
         );
+        const confirmationUrl =
+          buildVerificationConfirmationUrl(verificationUrl);
         const host = new URL(verificationUrl).host;
         const transport = createTransport(provider.server);
 
@@ -288,8 +302,8 @@ export const authConfig = {
           to: identifier,
           from: provider.from,
           subject: `Sign in to ${host}`,
-          text: verificationEmailText({ host, url: verificationUrl }),
-          html: verificationEmailHtml({ host, url: verificationUrl }),
+          text: verificationEmailText({ host, url: confirmationUrl }),
+          html: verificationEmailHtml({ host, url: confirmationUrl }),
         });
 
         const failedRecipients = [

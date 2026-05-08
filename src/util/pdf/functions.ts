@@ -96,7 +96,10 @@ export async function validatePDFUpload(
 
 export const urlToFile = async (url: string, fileName: string) => {
     try {
-        const response = await fetch(`https://cdn.pirrot.de${url}`);
+        const targetUrl = /^https?:\/\//i.test(url)
+          ? url
+          : `https://cdn.pirrot.de${url}`;
+        const response = await fetch(targetUrl);
         if (!response.ok) throw new Error(`Failed to fetch the file: ${response.status} ${response.statusText} ${JSON.stringify(response)}`);
         const blob = await response.blob();
         // Use the provided fileName or extract it from the URL

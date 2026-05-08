@@ -42,6 +42,8 @@ import { useBookConfig } from "@/hooks/use-book-config";
 
 import { ToggleSwitch } from "./toggle-switch";
 import { SearchInput } from "./search-input";
+import FileUpload from "../config/_components/file-upload";
+import { fileToBase64 } from "@/util/pdf/functions";
 
 import { useRouter } from "next/navigation";
 import ConfigInfoForm from "./config-info-form";
@@ -80,6 +82,7 @@ type BindingOverflowEvent = {
 
 type AvailableModule = ModulePickerItem & {
   url?: string | null;
+  coverImageUrl?: string | null;
   thumbnail?: string | null;
   booksCount?: number;
   theme: string | null;
@@ -96,6 +99,117 @@ type LiveDelta = {
   pageDelta: number;
   priceDelta: number;
 };
+
+const A4_ASPECT_RATIO = 210 / 297;
+const A4_MAX_WIDTH_PX = 2480;
+const A4_MAX_HEIGHT_PX = 3508;
+
+async function loadImageFile(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Bild konnte nicht geladen werden."));
+    };
+    image.src = objectUrl;
+  });
+}
+
+function getCenteredAspectCropRect(
+  sourceWidth: number,
+  sourceHeight: number,
+  targetAspectRatio: number,
+): { x: number; y: number; width: number; height: number } {
+  const sourceAspectRatio = sourceWidth / sourceHeight;
+
+  if (Math.abs(sourceAspectRatio - targetAspectRatio) < 0.0001) {
+    return {
+      x: 0,
+      y: 0,
+      width: sourceWidth,
+      height: sourceHeight,
+    };
+  }
+
+  if (sourceAspectRatio > targetAspectRatio) {
+    const cropWidth = sourceHeight * targetAspectRatio;
+    return {
+      x: Math.round((sourceWidth - cropWidth) / 2),
+      y: 0,
+      width: Math.round(cropWidth),
+      height: sourceHeight,
+    };
+  }
+
+  const cropHeight = sourceWidth / targetAspectRatio;
+  return {
+    x: 0,
+    y: Math.round((sourceHeight - cropHeight) / 2),
+    width: sourceWidth,
+    height: Math.round(cropHeight),
+  };
+}
+
+async function cropImageToA4File(file: File): Promise<File> {
+  const image = await loadImageFile(file);
+  const cropRect = getCenteredAspectCropRect(
+    image.width,
+    image.height,
+    A4_ASPECT_RATIO,
+  );
+
+  const downscaleFactor = Math.min(
+    1,
+    A4_MAX_WIDTH_PX / cropRect.width,
+    A4_MAX_HEIGHT_PX / cropRect.height,
+  );
+
+  const outputWidth = Math.max(1, Math.round(cropRect.width * downscaleFactor));
+  const outputHeight = Math.max(
+    1,
+    Math.round(cropRect.height * downscaleFactor),
+  );
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Bild konnte nicht vorbereitet werden.");
+  }
+
+  context.drawImage(
+    image,
+    cropRect.x,
+    cropRect.y,
+    cropRect.width,
+    cropRect.height,
+    0,
+    0,
+    outputWidth,
+    outputHeight,
+  );
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (!result) {
+        reject(new Error("Bild konnte nicht exportiert werden."));
+        return;
+      }
+      resolve(result);
+    }, "image/png");
+  });
+
+  const baseName = file.name.replace(/\.[^/.]+$/, "").trim() || "cover";
+  return new File([blob], `${baseName}-a4.png`, { type: "image/png" });
+}
 
 const STEP_LABELS: Record<ConfigStepId, string> = {
   COVER: "Umschlag",
@@ -386,6 +500,14 @@ export default function BookConfig(props: {
   const [liveCalculationError, setLiveCalculationError] = useState<string>();
   const [liveDelta, setLiveDelta] = useState<LiveDelta | null>(null);
   const [previewConfigKey, setPreviewConfigKey] = useState<string | null>(null);
+  const [customCoverPreviewUrl, setCustomCoverPreviewUrl] = useState<
+    string | null
+  >(null);
+  const [customCoverUploadError, setCustomCoverUploadError] = useState<
+    string | null
+  >(null);
+  const [isUploadingCustomCover, setIsUploadingCustomCover] = useState(false);
+  const [customCoverUploadVersion, setCustomCoverUploadVersion] = useState(0);
   const calcRequestIdRef = useRef(0);
   const previousCalculationRef = useRef<CalculationSnapshot | null>(null);
 
@@ -396,6 +518,14 @@ export default function BookConfig(props: {
       }
     };
   }, [previewFileURL]);
+
+  useEffect(() => {
+    return () => {
+      if (customCoverPreviewUrl) {
+        URL.revokeObjectURL(customCoverPreviewUrl);
+      }
+    };
+  }, [customCoverPreviewUrl]);
 
   useEffect(() => {
     const userAgent = navigator.userAgent ?? "";
@@ -496,6 +626,7 @@ export default function BookConfig(props: {
         idx: 12345,
         type: FILTER_TYPES.COVER,
         pdfUrl: coverModule.url,
+        coverImageUrl: coverModule.coverImageUrl ?? undefined,
       },
     ];
   }, [moduleLookupById, pickedModules]);
@@ -673,9 +804,68 @@ export default function BookConfig(props: {
         router.refresh();
       },
     });
+  const { mutateAsync: createModule } = api.module.create.useMutation();
 
   function announceChange(message: string) {
     setLiveChangeNotice(message);
+  }
+
+  function resetCustomCoverUpload() {
+    setCustomCoverUploadError(null);
+    if (customCoverPreviewUrl) {
+      URL.revokeObjectURL(customCoverPreviewUrl);
+      setCustomCoverPreviewUrl(null);
+    }
+  }
+
+  async function handleCustomCoverImageUpload(file: File) {
+    if (isUploadingCustomCover) {
+      return;
+    }
+
+    if (!bookId) {
+      setCustomCoverUploadError("Buch-ID fehlt. Bitte Seite neu laden.");
+      return;
+    }
+
+    setIsUploadingCustomCover(true);
+    setCustomCoverUploadError(null);
+
+    try {
+      const croppedImage = await cropImageToA4File(file);
+      const nextPreviewUrl = URL.createObjectURL(croppedImage);
+
+      if (customCoverPreviewUrl) {
+        URL.revokeObjectURL(customCoverPreviewUrl);
+      }
+      setCustomCoverPreviewUrl(nextPreviewUrl);
+
+      const encodedFile = await fileToBase64(croppedImage);
+      const createdModule = await createModule({
+        name: `Bild Umschlag ${new Date().toISOString().slice(0, 10)}`,
+        type: FILTER_TYPES.COVER,
+        moduleFile: encodedFile,
+      });
+
+      await utils.config.init.invalidate({ bookId });
+      setPickedModules((prev) => ({
+        ...removeModuleFromBuckets(prev, createdModule.id),
+        COVER: [createdModule.id],
+      }));
+      setCurrentStep("COVER");
+      setIsBookInfoOpen(true);
+      announceChange(
+        "Bild-Umschlag erstellt und als aktiver Umschlag ausgewählt.",
+      );
+      setCustomCoverUploadVersion((prev) => prev + 1);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCustomCoverUploadError(
+        `Upload fehlgeschlagen: ${handleWarningText(message)}`,
+      );
+    } finally {
+      setIsUploadingCustomCover(false);
+    }
   }
 
   function clearSearch() {
@@ -1677,6 +1867,71 @@ export default function BookConfig(props: {
               {currentStep !== "CHECKOUT" ? (
                 <>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {currentStep === "COVER" ? (
+                      <div className="content-card flex flex-col gap-3 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-pirrot-blue-600">
+                              Option 1
+                            </p>
+                            <h3 className="text-lg font-bold">
+                              Eigenes Cover aus Bild
+                            </h3>
+                            <p className="text-info-800 text-sm">
+                              Das Bild wird automatisch auf A4-Proportion
+                              (210:297) mittig zugeschnitten und als Umschlag
+                              angelegt.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="field-shell min-h-56 p-1">
+                          <FileUpload
+                            key={`custom-cover-upload-${customCoverUploadVersion}`}
+                            fieldName={
+                              isUploadingCustomCover
+                                ? "Wird vorbereitet..."
+                                : "Bild für Umschlag hochladen"
+                            }
+                            accept={[
+                              "image/png",
+                              "image/jpeg",
+                              "image/jpg",
+                              "image/webp",
+                            ]}
+                            onPickedFile={(file) => {
+                              void handleCustomCoverImageUpload(file);
+                            }}
+                            resetFile={resetCustomCoverUpload}
+                          />
+                        </div>
+
+                        {customCoverPreviewUrl ? (
+                          <div className="field-shell bg-white p-2">
+                            <div className="mx-auto aspect-[210/297] max-h-64 w-full max-w-44 overflow-hidden rounded-lg border border-pirrot-blue-200">
+                              <img
+                                src={customCoverPreviewUrl}
+                                alt="A4 Cover Vorschau"
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {isUploadingCustomCover ? (
+                          <div className="field-shell flex items-center gap-2 p-2 text-sm">
+                            <LoaderCircle className="size-4 animate-spin" />
+                            Umschlag wird erstellt...
+                          </div>
+                        ) : null}
+
+                        {customCoverUploadError ? (
+                          <div className="border-pirrot-red-300 bg-pirrot-red-100/60 rounded-lg border px-3 py-2 text-sm">
+                            {customCoverUploadError}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {visibleModules.map((moduleItem) => (
                       <ModuleItem
                         key={moduleItem.id}
@@ -1691,7 +1946,7 @@ export default function BookConfig(props: {
                     ))}
                   </div>
 
-                  {visibleModules.length === 0 ? (
+                  {currentStep !== "COVER" && visibleModules.length === 0 ? (
                     <div className="content-card flex min-h-56 flex-col items-center justify-center gap-3 p-6 text-center">
                       <h3 className="text-2xl font-bold">Keine Module gefunden</h3>
                       <p className="text-info-800 max-w-lg">

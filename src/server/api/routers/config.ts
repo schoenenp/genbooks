@@ -22,7 +22,7 @@ import {
 } from "@/util/partner-link";
 import { type PartnerSessionMetadata } from "@/util/partner-program/session-metadata";
 import { logger } from "@/util/logger";
-import { pickModulePdfFile } from "@/util/module-files";
+import { pickCoverImageFile, pickModulePdfFile } from "@/util/module-files";
 import { enforceProcedureRateLimit } from "@/util/rate-limit";
 import {
   getBindingLimitMessage,
@@ -272,11 +272,19 @@ export const configRouter = createTRPCRouter({
         const moduleColorMap = new Map<ModuleId, ColorCode>();
         const pdfModules = bookForCost.modules.map((moduleItem) => {
           const type = moduleItem.module.type.name;
-          let pdfUrl =
+          const rawPdfUrl =
             pickModulePdfFile(moduleItem.module.files)?.src ??
             "/storage/notizen.pdf";
+          const coverImageFile = pickCoverImageFile(moduleItem.module.files);
+          const coverImageUrl = coverImageFile
+            ? /^https?:\/\//i.test(coverImageFile.src)
+              ? coverImageFile.src
+              : env.NEXT_PUBLIC_CDN_SERVER_URL + coverImageFile.src
+            : undefined;
 
-          pdfUrl = env.NEXT_PUBLIC_CDN_SERVER_URL + pdfUrl;
+          const pdfUrl = /^https?:\/\//i.test(rawPdfUrl)
+            ? rawPdfUrl
+            : env.NEXT_PUBLIC_CDN_SERVER_URL + rawPdfUrl;
           moduleColorMap.set(
             moduleItem.id,
             moduleItem.colorCode === "COLOR" ? 4 : 1,
@@ -287,6 +295,7 @@ export const configRouter = createTRPCRouter({
             idx: moduleItem.idx,
             type,
             pdfUrl,
+            coverImageUrl,
           };
         });
 
@@ -1108,16 +1117,22 @@ export const configRouter = createTRPCRouter({
 
         const thumbnailFile = files.find((f) => f.name?.startsWith("thumb_"));
         const moduleFile = pickModulePdfFile(files);
+        const coverImageFile = pickCoverImageFile(files);
 
         const thumbnail =
-          thumbnailFile && !thumbnailFile.src.startsWith("https://")
-            ? `https://cdn.pirrot.de${thumbnailFile.src}`
-            : (thumbnailFile?.src ?? "/default.png");
+          (thumbnailFile ?? coverImageFile) &&
+          !/^https?:\/\//i.test((thumbnailFile ?? coverImageFile)!.src)
+            ? `https://cdn.pirrot.de${(thumbnailFile ?? coverImageFile)!.src}`
+            : ((thumbnailFile ?? coverImageFile)?.src ?? "/default.png");
 
         const url =
-          moduleFile && !moduleFile.src.startsWith("https://")
+          moduleFile && !/^https?:\/\//i.test(moduleFile.src)
             ? `https://cdn.pirrot.de${moduleFile.src}`
             : (moduleFile?.src ?? "/storage/notizen.pdf");
+        const coverImageUrl =
+          coverImageFile && !/^https?:\/\//i.test(coverImageFile.src)
+            ? `https://cdn.pirrot.de${coverImageFile.src}`
+            : (coverImageFile?.src ?? null);
 
         return {
           id,
@@ -1127,6 +1142,7 @@ export const configRouter = createTRPCRouter({
           type: type.name,
           thumbnail,
           url,
+          coverImageUrl,
           createdAt,
           booksCount: moduleItem._count.books,
         };

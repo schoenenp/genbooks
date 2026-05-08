@@ -82,6 +82,7 @@ export default function PartnerPlannerPreview(props: { partnerOrderId: string })
         idx: moduleItem.idx,
         type: moduleItem.module.type.name,
         pdfUrl: moduleItem.modulePdfUrl,
+        coverImageUrl: moduleItem.coverImageUrl ?? undefined,
       })),
     [modules],
   );

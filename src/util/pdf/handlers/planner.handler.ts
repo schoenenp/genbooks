@@ -8,6 +8,45 @@ import { convertPdfToGrayscale } from "../grayscale";
 import { convertPdfToPreviewGrayscale } from "../preview-grayscale";
 import { estimatePlannerPageCount } from "./planner-page-count";
 
+function formatGermanLongDate(date: Date, includeYear: boolean): string {
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = date.toLocaleDateString("de-DE", { month: "long" });
+  const yearSuffix = includeYear ? ` ${date.getFullYear()}` : "";
+  return `${day}. ${month}${yearSuffix}`;
+}
+
+export function formatPlannerWeekRange(weekDates?: Date[]): string {
+  const start = weekDates?.[0];
+  const end = weekDates?.[4];
+
+  if (!start || !end) return "";
+
+  if (start.getFullYear() === end.getFullYear()) {
+    return `${formatGermanLongDate(start, false)} bis ${formatGermanLongDate(
+      end,
+      true,
+    )}`;
+  }
+
+  return `${formatGermanLongDate(start, true)} bis ${formatGermanLongDate(
+    end,
+    true,
+  )}`;
+}
+
+export function getIsoWeekNumber(date: Date): number {
+  const utcDate = new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
+  );
+  const dayNumber = utcDate.getUTCDay() || 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayNumber);
+
+  const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+  return Math.ceil(
+    (((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7,
+  );
+}
+
 /**
  * Handler for "wochenplaner" (weekly planner) modules.
  *
@@ -19,6 +58,8 @@ import { estimatePlannerPageCount } from "./planner-page-count";
  * Available tags (repeated per week):
  * - xA, xB, xC, xD, xE: Day dates (Mon-Fri) formatted as DD.MM
  * - xA_Date, xB_Date, xC_Date, xD_Date, xE_Date: Holiday names for each day
+ * - WEEK_FROMTO: Week range formatted as "01. Januar bis 05. Januar 2026"
+ * - WEEK_NUM: ISO calendar week number for the current planner week
  *
  * To add more tags, add them to the tags array and implement
  * the value getter using the weekDates from context.
@@ -40,9 +81,10 @@ class PlannerHandler extends BaseHandler {
     { fieldName: "xC_Date", getValue: (ctx) => this.getHoliday(ctx, 2) },
     { fieldName: "xD_Date", getValue: (ctx) => this.getHoliday(ctx, 3) },
     { fieldName: "xE_Date", getValue: (ctx) => this.getHoliday(ctx, 4) },
+    { fieldName: "WEEK_FROMTO", getValue: (ctx) => this.getWeekRange(ctx) },
+    { fieldName: "WEEK_NUM", getValue: (ctx) => this.getWeekNumber(ctx) },
 
     // Add more planner tags here as needed:
-    // { fieldName: "WEEK_NUMBER", getValue: (ctx) => this.getWeekNumber(ctx) },
     // { fieldName: "MONTH_NAME", getValue: (ctx) => this.getMonthName(ctx) },
   ];
 
@@ -64,6 +106,16 @@ class PlannerHandler extends BaseHandler {
     const date = ctx.weekDates?.[dayIndex];
     if (!date || !ctx.holidayMap) return "";
     return ctx.holidayMap.get(formatDate(date)) ?? "";
+  }
+
+  private getWeekRange(ctx: TagContext): string {
+    return formatPlannerWeekRange(ctx.weekDates);
+  }
+
+  private getWeekNumber(ctx: TagContext): string {
+    const weekStart = ctx.weekDates?.[0];
+    if (!weekStart) return "";
+    return `KW ${getIsoWeekNumber(weekStart).toString().padStart(2, "0")}`;
   }
 
   async process(
@@ -147,8 +199,8 @@ class PlannerHandler extends BaseHandler {
       const grayscaleBytes = previewMode
         ? await convertPdfToPreviewGrayscale(moduleBytes)
         : await convertPdfToGrayscale(moduleBytes, {
-            apiKey: grayscaleApiKey,
-          });
+          apiKey: grayscaleApiKey,
+        });
       outputDoc = await PDFDocument.load(grayscaleBytes);
     }
 
@@ -202,7 +254,8 @@ class PlannerHandler extends BaseHandler {
       periodStart: context.bookDetails.period.start,
       periodEnd: context.bookDetails.period.end,
       previewMode: context.previewMode,
-      currentPageCount: context.currentPageCount ?? context.finalPdf.getPageCount(),
+      currentPageCount:
+        context.currentPageCount ?? context.finalPdf.getPageCount(),
     });
   }
 }

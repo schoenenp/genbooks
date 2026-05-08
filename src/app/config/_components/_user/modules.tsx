@@ -62,6 +62,18 @@ export default function UserModules({
     }
 
     const fileToUpload = await fileToBase64(moduleFormState.moduleFile);
+    const isImageBasedCover =
+      moduleFormState.type.toLocaleLowerCase() === "umschlag" &&
+      moduleFormState.moduleFile.type.startsWith("image/");
+
+    if (isImageBasedCover) {
+      createModule({
+        name: moduleFormState.name,
+        type: moduleFormState.type,
+        moduleFile: fileToUpload,
+      });
+      return;
+    }
 
     const { valid, message } = await validatePDFUpload(
       fileToUpload,
@@ -87,12 +99,12 @@ export default function UserModules({
             Eigene Inhalte
           </p>
           <h3 className="text-3xl font-bold text-pirrot-blue-900">
-            PDFs direkt in den Planer aufnehmen
+            Eigene Module und Cover hochladen
           </h3>
           <p className="text-info-800 max-w-3xl">
             Laden Sie eigene Inhalte hoch und ordnen Sie diese direkt dem
-            passenden Buchteil zu. Nach dem Speichern erscheinen Ihre Module
-            ohne Extra-Bereich direkt in der normalen Auswahl.
+            passenden Buchteil zu. Fuer `Umschlag` reicht auch ein einzelnes
+            Bild, das automatisch in die Cover-Vorlage eingesetzt wird.
           </p>
         </div>
 
@@ -119,8 +131,8 @@ export default function UserModules({
               <div className="flex flex-col gap-2">
                 <h4 className="text-2xl font-bold">Neues Modul erstellen</h4>
                 <p className="text-info-800 text-sm">
-                  Hängen Sie eine PDF-Datei an und legen Sie fest, für welchen
-                  Buchteil das Modul gedacht ist.
+                  Hängen Sie eine PDF-Datei an oder laden Sie fuer einen
+                  benutzerdefinierten Umschlag nur ein Bild hoch.
                 </p>
               </div>
 
@@ -128,6 +140,16 @@ export default function UserModules({
                 <div className="field-shell p-3">
                   <FileUpload
                     fieldName="custom-upload"
+                    accept={
+                      moduleFormState.type.toLocaleLowerCase() === "umschlag"
+                        ? [
+                            "application/pdf",
+                            "image/png",
+                            "image/jpeg",
+                            "image/webp",
+                          ]
+                        : ["application/pdf"]
+                    }
                     resetFile={() =>
                       setModuleFormState((prev) => ({
                         ...prev,

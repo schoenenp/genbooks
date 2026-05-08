@@ -4,6 +4,7 @@ type ModuleFileLike = {
 };
 
 const LEGACY_PDF_NAME_PREFIXES = ["file_", "DATEI-", "file-"];
+const CUSTOM_COVER_IMAGE_PREFIXES = ["cover_image_", "cover-image_"];
 const IMAGE_FILE_EXTENSIONS = [
   ".png",
   ".jpg",
@@ -22,6 +23,23 @@ function normalizeFileName(file: ModuleFileLike): string {
 export function isThumbnailFile(file: ModuleFileLike): boolean {
   const fileName = normalizeFileName(file);
   return fileName.startsWith("thumb_") || fileName.startsWith("thumbnail_");
+}
+
+export function isCoverImageFile(file: ModuleFileLike): boolean {
+  const fileName = normalizeFileName(file);
+  if (isThumbnailFile(file)) {
+    return false;
+  }
+
+  if (
+    CUSTOM_COVER_IMAGE_PREFIXES.some((prefix) =>
+      fileName.startsWith(prefix.toLowerCase()),
+    )
+  ) {
+    return true;
+  }
+
+  return hasImageExtension(fileName) && file.type !== "PDF";
 }
 
 function hasImageExtension(fileName: string): boolean {
@@ -82,4 +100,16 @@ export function pickModulePdfFile<T extends ModuleFileLike>(
   }
 
   return selected;
+}
+
+export function pickCoverImageFile<T extends ModuleFileLike>(
+  files: readonly T[],
+): T | undefined {
+  for (const file of files) {
+    if (isCoverImageFile(file)) {
+      return file;
+    }
+  }
+
+  return undefined;
 }

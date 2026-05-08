@@ -80,13 +80,15 @@ const fieldExamples = [
       "xC",
       "xD",
       "xE",
+      "WEEK_FROMTO",
+      "WEEK_NUM",
       "xA_Date",
       "xB_Date",
       "xC_Date",
       "xD_Date",
       "xE_Date",
     ],
-    note: "Die Datumsfelder werden pro Woche wiederholt befüllt. Feiertage und Sondertage laufen über die *_Date-Felder.",
+    note: "Die Datumsfelder werden pro Woche wiederholt befüllt. `WEEK_FROMTO` liefert den Wochenbereich, `WEEK_NUM` die ISO-Kalenderwoche. Feiertage und Sondertage laufen über die *_Date-Felder.",
   },
 ] as const;
 
@@ -103,8 +105,8 @@ const moduleSamples = [
     title: "Wochenplaner",
     badge: "2 Seiten",
     accent: "bg-pirrot-green-100 text-pirrot-green-800",
-    templateFields: ["xA", "xB", "xC", "xA_Date"],
-    processedValues: ["08.09", "09.09", "10.09", "Schulfest"],
+    templateFields: ["xA", "xB", "WEEK_FROMTO", "WEEK_NUM", "xA_Date"],
+    processedValues: ["08.09", "09.09", "08. September bis 12. September 2026", "37", "Schulfest"],
     note: "Die Felder werden für jede Woche neu befüllt.",
   },
 ] as const;

@@ -16,7 +16,7 @@ export default function ModulePreview(props:{moduleId: string}){
     const rawPreview = moduleData.data
     const previewImage =
         typeof rawPreview === "string" && rawPreview.length > 0
-            ? rawPreview === "/default.png" || rawPreview.startsWith("https://")
+            ? rawPreview === "/default.png" || /^https?:\/\//i.test(rawPreview)
                 ? rawPreview
                 : `https://cdn.pirrot.de${rawPreview}`
             : "/default.png"

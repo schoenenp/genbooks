@@ -11,6 +11,7 @@ export interface PDFModule {
   type: string;
   idx: number;
   pdfUrl: string;
+  coverImageUrl?: string;
 }
 
 export type BookFormat = "DIN A4" | "DIN A5";

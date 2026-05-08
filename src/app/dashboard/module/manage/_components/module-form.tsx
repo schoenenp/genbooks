@@ -8,10 +8,8 @@ import { CheckCircleIcon, ClipboardCopyIcon } from "lucide-react";
 
 import FileUpload from "@/app/config/_components/file-upload";
 import { api } from "@/trpc/react";
-
-
 import { getPageRules } from "@/util/book/functions";
-import { pickModulePdfFile } from "@/util/module-files";
+import { pickCoverImageFile, pickModulePdfFile } from "@/util/module-files";
 import { urlToFile, fileToBase64, extractTextFields  } from "@/util/pdf/functions";
 
 type FileState = {
@@ -53,6 +51,14 @@ type PageData = {
     types: Promise<{ id: string; name: string; minPages: number; maxPages: number }[]>;
     tags: Promise<{ id: number; name: string; output: string | null }[]>
   };
+
+function isPdfLikeFile(file?: FileState["data"], src?: string): boolean {
+  if (file?.type === "application/pdf") {
+    return true;
+  }
+
+  return typeof src === "string" && src.toLowerCase().endsWith(".pdf");
+}
 
 // Improved Tag component
 function Tag({ id, name, output, onClick, variant = 'available' }: TagProps) {
@@ -135,26 +141,37 @@ function useModuleFormState(moduleId?: string, pageData?: PageData) {
       }
   
       // Initialize Main File and process if it's a PDF
-      const fileData = pickModulePdfFile(moduleItem.files);
+      const coverImageData =
+        moduleItem.type.name.toLocaleLowerCase() === "umschlag"
+          ? pickCoverImageFile(moduleItem.files)
+          : undefined;
+      const fileData = coverImageData ?? pickModulePdfFile(moduleItem.files);
       if (fileData) {
         const originalFile = await urlToFile(fileData.src, fileData.name ?? "");
         if (originalFile) {
-          const { file: processedFile, fields, modifiedPdf } = await processPdfFile(
-            originalFile,
-            tags,
-          );
-  
-          const extractedTags = fields
-            .map(f => tags?.find(tg => tg.name === f.name))
-            .filter((tag): tag is TagItem => tag !== undefined);
-          setAllowedTags(extractedTags);
-  
-          setFile({
-            data: processedFile,
-            src: fileData.src,
-            hasChanged: false,
-            modifiedPdf: modifiedPdf // Store the modified PDF
-          });
+          if (originalFile.type === "application/pdf") {
+            const { file: processedFile, fields, modifiedPdf } =
+              await processPdfFile(originalFile, tags);
+
+            const extractedTags = fields
+              .map(f => tags?.find(tg => tg.name === f.name))
+              .filter((tag): tag is TagItem => tag !== undefined);
+            setAllowedTags(extractedTags);
+
+            setFile({
+              data: processedFile,
+              src: fileData.src,
+              hasChanged: false,
+              modifiedPdf: modifiedPdf
+            });
+          } else {
+            setAllowedTags([]);
+            setFile({
+              data: originalFile,
+              src: fileData.src,
+              hasChanged: false,
+            });
+          }
         }
       }
     };
@@ -317,6 +334,11 @@ function extractTagsFromFields(
     }
     return file.data instanceof File ? URL.createObjectURL(file.data) : file.src;
   }, [file.data, file.src, file.modifiedPdf]);
+
+  const isPdfPreview = useMemo(
+    () => isPdfLikeFile(file.data, file.src),
+    [file.data, file.src],
+  );
   
   useEffect(() => {
     return () => {
@@ -334,11 +356,23 @@ function extractTagsFromFields(
 
 
   return (
-    <div className="flex h-full w-full flex-col gap-4 xl:flex-row">
-      <div className="content-card flex-1 p-4">
-        <h3 className="text-4xl uppercase text-pirrot-blue-800">manage</h3>
-        <div className="w-full text-pirrot-blue-800">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
+      <div className="content-card min-h-0 overflow-hidden">
+        <div className="flex h-full flex-col p-4 text-pirrot-blue-800 sm:p-5">
+          <div className="border-pirrot-blue-200/70 mb-5 border-b pb-4">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-pirrot-blue-500">
+              Module Workspace
+            </p>
+            <h3 className="text-3xl font-black uppercase text-pirrot-blue-800">
+              {moduleId ? "Modul bearbeiten" : "Neues Modul"}
+            </h3>
+            <p className="mt-2 text-sm text-info-700">
+              Verwalten Sie Metadaten, laden Sie die PDF hoch und pruefen Sie
+              erkannte Formularfelder direkt neben der Vorschau.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col gap-6">
             {/* Form Inputs */}
             <div className="w-full flex flex-col gap-1">
               <label>Name</label>
@@ -392,8 +426,8 @@ function extractTagsFromFields(
             </div>
 
             {/* File Uploads & Tag Displays */}
-            <div className="grid h-full w-full grid-cols-1 gap-2 md:grid-cols-2">
-              <div className="field-shell aspect-video p-0.5">
+            <div className="grid w-full grid-cols-1 gap-3">
+              <div className="field-shell min-h-48 p-0.5">
                 {file.data ? (
                   <div
                     className="group relative flex size-full cursor-pointer flex-col items-center justify-center rounded-sm border-2 border-solid border-pirrot-blue-800 bg-pirrot-blue-500/20 text-pirrot-blue-800 transition duration-500 hover:border-pirrot-blue-100"
@@ -414,25 +448,30 @@ function extractTagsFromFields(
                   />
                 )}
               </div>
-              <div className="field-shell flex aspect-video flex-col p-0.5">
-                <div className="flex h-full flex-col justify-between p-1">
-                  <h2 className="text-sm font-medium uppercase">Erkannte Tags</h2>
-                  <div className="field-shell flex max-h-44 w-full flex-col gap-1 overflow-y-auto p-1">
-                  {allowedTags.map((tag) => (
-  <Tag
-    key={tag.id}
-    {...tag}
-    variant="selected"
-    onClick={(removedTag) => handleTagToggle(removedTag, true)}
-  />
-))}
+              <div className="field-shell min-h-0 flex-1 p-0.5">
+                <div className="flex h-full min-h-56 flex-col p-1">
+                  <div className="flex items-center justify-between px-1 pb-2">
+                    <h2 className="text-sm font-medium uppercase">Erkannte Tags</h2>
+                    <span className="text-xs font-semibold text-info-600">
+                      {allowedTags.length}
+                    </span>
+                  </div>
+                  <div className="field-shell flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-1">
+                    {allowedTags.map((tag) => (
+                      <Tag
+                        key={tag.id}
+                        {...tag}
+                        variant="selected"
+                        onClick={(removedTag) => handleTagToggle(removedTag, true)}
+                      />
+                    ))}
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Form Actions */}
-            <div className="flex w-full gap-2">
+            <div className="mt-auto flex w-full gap-2">
               <Link
                 href="/dashboard?view=module"
                 className="btn-soft flex w-full items-center justify-center p-4 text-center"
@@ -446,8 +485,45 @@ function extractTagsFromFields(
           </form>
         </div>
       </div>
-      <div className="content-card flex h-screen flex-1 flex-col items-center justify-center overflow-hidden p-1">
-        {pdfFileUrl && <iframe src={pdfFileUrl + "#view=fit"} className="size-full" />}
+      <div className="content-card min-h-[65vh] overflow-hidden xl:min-h-0">
+        <div className="flex h-full flex-col">
+          <div className="border-pirrot-blue-200/70 flex items-center justify-between border-b px-4 py-3 sm:px-5">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-pirrot-blue-500">
+                Live Preview
+              </p>
+              <h2 className="text-lg font-black uppercase text-pirrot-blue-800">
+                PDF Vorschau
+              </h2>
+            </div>
+            <span className="text-xs text-info-600">
+              {file.data ? file.data.name : "Keine Datei"}
+            </span>
+          </div>
+          <div className="flex min-h-[55vh] flex-1 bg-white/45 p-2 sm:p-3">
+            {pdfFileUrl ? (
+              isPdfPreview ? (
+                <iframe
+                  src={pdfFileUrl + "#view=fit"}
+                  className="size-full rounded-xl bg-white"
+                />
+              ) : (
+                <div className="flex size-full items-center justify-center rounded-xl bg-white p-4">
+                  <img
+                    src={pdfFileUrl}
+                    alt="Modulvorschau"
+                    className="max-h-full max-w-full rounded-xl object-contain"
+                  />
+                </div>
+              )
+            ) : (
+              <div className="flex size-full items-center justify-center rounded-xl border border-dashed border-pirrot-blue-300 bg-pirrot-blue-50/60 p-8 text-center text-info-600">
+                Laden Sie eine PDF hoch, um die Vorschau auf voller Breite zu
+                nutzen.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

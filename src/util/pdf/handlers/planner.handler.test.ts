@@ -4,6 +4,7 @@ import {
   normalizePlannerDateKey,
 } from "./planner-date-merge";
 import { estimatePlannerPageCount } from "./planner-page-count";
+import { formatPlannerWeekRange, getIsoWeekNumber } from "./planner.handler";
 
 describe("normalizePlannerDateKey", () => {
   it("normalizes timestamps to YYYY-MM-DD", () => {
@@ -124,5 +125,40 @@ describe("planner page count estimation", () => {
     });
 
     expect(pageCount).toBe(9);
+  });
+});
+
+describe("planner week tags", () => {
+  it("formats the planner week range in German long-date form", () => {
+    const weekDates = [
+      new Date(2026, 0, 1),
+      new Date(2026, 0, 2),
+      new Date(2026, 0, 3),
+      new Date(2026, 0, 4),
+      new Date(2026, 0, 5),
+    ];
+
+    expect(formatPlannerWeekRange(weekDates)).toBe(
+      "01. Januar bis 05. Januar 2026",
+    );
+  });
+
+  it("includes the year on both sides when the planner week crosses a year boundary", () => {
+    const weekDates = [
+      new Date(2025, 11, 29),
+      new Date(2025, 11, 30),
+      new Date(2025, 11, 31),
+      new Date(2026, 0, 1),
+      new Date(2026, 0, 2),
+    ];
+
+    expect(formatPlannerWeekRange(weekDates)).toBe(
+      "29. Dezember 2025 bis 02. Januar 2026",
+    );
+  });
+
+  it("returns ISO calendar week numbers for planner weeks", () => {
+    expect(getIsoWeekNumber(new Date(2025, 11, 29))).toBe(1);
+    expect(getIsoWeekNumber(new Date(2026, 0, 5))).toBe(2);
   });
 });

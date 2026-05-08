@@ -23,10 +23,10 @@ export default async function ModuleManage(props: {
 
 return (
     <HydrateClient>
-    <main className="relative flex min-h-screen flex-col items-center overflow-hidden text-info-900">
+    <main className="relative flex min-h-screen flex-col overflow-hidden text-info-900">
        <div className="subtle-grid pointer-events-none absolute inset-0 opacity-35" />
        <Navigation />
-       <div className="section-shell z-10 flex h-full flex-col gap-4 overflow-y-auto py-10">
+       <div className="z-10 flex flex-1 flex-col gap-4 overflow-hidden px-4 pb-4 pt-6 sm:px-6 lg:px-8">
         <div className="w-full">
        <h1 className="text-4xl font-black uppercase">Module</h1>
         </div>

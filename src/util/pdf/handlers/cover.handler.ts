@@ -1,8 +1,15 @@
 import { PDFDocument } from "pdf-lib";
+import { logger } from "@/util/logger";
 import { BaseHandler } from "./base.handler";
 import type { TagDefinition, TagContext, HandlerResult } from "../types";
 import { convertPdfToGrayscale } from "../grayscale";
 import { convertPdfToPreviewGrayscale } from "../preview-grayscale";
+
+const COVER_IMAGE_FIELD_NAMES = [
+  "COVER_IMAGE",
+  "CUSTOM_IMAGE",
+  "IMAGE",
+] as const;
 
 /**
  * Handler for "umschlag" (cover) modules.
@@ -61,6 +68,7 @@ class CoverHandler extends BaseHandler {
     // Fill form fields
     const form = coverDoc.getForm();
     this.fillTags(form, context);
+    await this.injectCustomCoverImage(coverDoc, context);
     form.flatten();
 
     let processedDoc = coverDoc;
@@ -93,6 +101,75 @@ class CoverHandler extends BaseHandler {
   async calculatePageCount(): Promise<number> {
     // Cover always contributes 4 pages (2 front + 2 back)
     return 4;
+  }
+
+  private async injectCustomCoverImage(
+    coverDoc: PDFDocument,
+    context: TagContext,
+  ): Promise<void> {
+    const imageUrl = context.moduleItem.coverImageUrl;
+    if (!imageUrl) {
+      return;
+    }
+
+    const buttonField = this.findCoverImageButton(coverDoc);
+    if (!buttonField) {
+      throw new Error(
+        `Custom cover image placeholder not found. Expected one of: ${COVER_IMAGE_FIELD_NAMES.join(", ")}`,
+      );
+    }
+
+    const imageBytes = await this.fetchImageBytes(imageUrl);
+    const embeddedImage = await this.embedCoverImage(coverDoc, imageBytes);
+    buttonField.setImage(embeddedImage);
+  }
+
+  private findCoverImageButton(coverDoc: PDFDocument) {
+    const form = coverDoc.getForm();
+
+    for (const fieldName of COVER_IMAGE_FIELD_NAMES) {
+      try {
+        return form.getButton(fieldName);
+      } catch {
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  private async fetchImageBytes(imageUrl: string): Promise<Uint8Array> {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      logger.warn("custom_cover_image_fetch_failed", {
+        imageUrl,
+        status: response.status,
+      });
+      throw new Error("Failed to fetch custom cover image");
+    }
+
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  private async embedCoverImage(
+    coverDoc: PDFDocument,
+    imageBytes: Uint8Array,
+  ) {
+    const signature = Array.from(imageBytes.subarray(0, 8))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+
+    if (signature.startsWith("89504e47")) {
+      return coverDoc.embedPng(imageBytes);
+    }
+
+    if (signature.startsWith("ffd8ff")) {
+      return coverDoc.embedJpg(imageBytes);
+    }
+
+    throw new Error(
+      "Unsupported custom cover image format. Use PNG or JPEG for cover uploads.",
+    );
   }
 }
 

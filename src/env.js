@@ -38,6 +38,7 @@ export const env = createEnv({
     CANCEL_SECRET: z.string(),
     UPLOAD_URL_LINK: z.string(),
     UPLOAD_API_KEY: z.string(),
+    CUSTOM_COVER_TEMPLATE_URL: z.string().optional(),
     GHOST_GRAYSCALE_API_KEY: z.string().optional(),
     DATABASE_URL: z.string().url(),
     NODE_ENV: z
@@ -89,6 +90,7 @@ export const env = createEnv({
     EMAIL_SERVER_PORT: process.env.EMAIL_SERVER_PORT,
     UPLOAD_URL_LINK: process.env.UPLOAD_URL_LINK,
     UPLOAD_API_KEY: process.env.UPLOAD_API_KEY,
+    CUSTOM_COVER_TEMPLATE_URL: process.env.CUSTOM_COVER_TEMPLATE_URL,
     GHOST_GRAYSCALE_API_KEY: process.env.GHOST_GRAYSCALE_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
     AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,

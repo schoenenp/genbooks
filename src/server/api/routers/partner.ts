@@ -19,7 +19,7 @@ import {
 } from "@/util/partner-link";
 import { logger } from "@/util/logger";
 import { enforceProcedureRateLimit } from "@/util/rate-limit";
-import { pickModulePdfFile } from "@/util/module-files";
+import { pickCoverImageFile, pickModulePdfFile } from "@/util/module-files";
 import {
   createPartnerClaimToken,
   getPartnerClaimExpiry,
@@ -3958,11 +3958,17 @@ export const partnerRouter = createTRPCRouter({
           ...order.book,
           modules: order.book.modules.map((moduleItem) => {
             const pickedFile = pickModulePdfFile(moduleItem.module.files);
+            const pickedCoverImage = pickCoverImageFile(moduleItem.module.files);
             const modulePdfUrl = pickedFile
-              ? pickedFile.src.startsWith("https://")
+              ? /^https?:\/\//i.test(pickedFile.src)
                 ? pickedFile.src
                 : `${env.NEXT_PUBLIC_CDN_SERVER_URL}${pickedFile.src}`
               : `${env.NEXT_PUBLIC_CDN_SERVER_URL}/storage/notizen.pdf`;
+            const coverImageUrl = pickedCoverImage
+              ? /^https?:\/\//i.test(pickedCoverImage.src)
+                ? pickedCoverImage.src
+                : `${env.NEXT_PUBLIC_CDN_SERVER_URL}${pickedCoverImage.src}`
+              : null;
             return {
               ...moduleItem,
               module: {
@@ -3972,6 +3978,7 @@ export const partnerRouter = createTRPCRouter({
                 type: moduleItem.module.type,
               },
               modulePdfUrl,
+              coverImageUrl,
             };
           }),
         },
