@@ -7,6 +7,7 @@ type ModalType =
   | "name"
   | "preview"
   | "binding-overflow"
+  | "custom-cover"
   | "login-prompt"
   | undefined;
 

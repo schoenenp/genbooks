@@ -9,8 +9,13 @@ import {
   publicProcedure,
 } from "@/server/api/trpc";
 import { getBase64, uploadData, type FileItem } from "@/util/upload/functions";
-import { pickCoverImageFile, pickModulePdfFile } from "@/util/module-files";
+import {
+  isThumbnailFile,
+  pickCoverImageFile,
+  pickModulePdfFile,
+} from "@/util/module-files";
 import { validatePDFUpload } from "@/util/pdf/functions";
+import { createCustomCoverPdf } from "@/util/pdf/custom-cover";
 import { handleBookPart } from "@/util/book/functions";
 import {
   buildModuleFeedVisibilityWhere,
@@ -18,7 +23,8 @@ import {
 } from "./module-visibility";
 
 const COVER_TYPE = "umschlag";
-const COVER_IMAGE_FILE_PREFIX = "cover_image_";
+const CUSTOM_COVER_FILE_PREFIX = "file_custom_cover_";
+const CUSTOM_COVER_THUMB_PREFIX = "thumb_custom_cover_";
 
 function normalizeType(type: string): string {
   return type.toLocaleLowerCase();
@@ -59,7 +65,9 @@ function toModuleAssetSrc(src: string): string {
   return /^https?:\/\//i.test(src) ? src : `https://cdn.pirrot.de${src}`;
 }
 
-function getModuleThumbnailSrc(files: Array<{ name: string | null; src: string }>): string {
+function getModuleThumbnailSrc(
+  files: Array<{ name: string | null; src: string }>,
+): string {
   const thumbnailFile = files.find((file) => file.name?.startsWith("thumb_"));
   const coverImageFile = pickCoverImageFile(files);
   const previewFile = thumbnailFile ?? coverImageFile;
@@ -67,7 +75,7 @@ function getModuleThumbnailSrc(files: Array<{ name: string | null; src: string }
   return previewFile ? toModuleAssetSrc(previewFile.src) : "/default.png";
 }
 
-function getCustomCoverTemplateFile(): FileItem {
+async function getCustomCoverTemplateBytes(): Promise<Uint8Array> {
   if (!env.CUSTOM_COVER_TEMPLATE_URL) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
@@ -76,12 +84,15 @@ function getCustomCoverTemplateFile(): FileItem {
     });
   }
 
-  return {
-    name: "file_custom_cover_template.pdf",
-    src: env.CUSTOM_COVER_TEMPLATE_URL,
-    type: "PDF",
-    size: 0,
-  };
+  const response = await fetch(env.CUSTOM_COVER_TEMPLATE_URL);
+  if (!response.ok) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `Failed to fetch custom cover template: ${response.status}`,
+    });
+  }
+
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 async function uploadModuleAsset(
@@ -106,6 +117,48 @@ async function uploadModuleAsset(
   }
 
   return uploadedFile;
+}
+
+async function uploadRawModuleAsset(
+  fileBuffer: Buffer,
+  extension: string,
+  fileNamePrefix: string,
+): Promise<FileItem> {
+  const uploadedFiles = await uploadData([
+    {
+      data: fileBuffer,
+      name: `${fileNamePrefix}${Naming.file(extension)}`,
+    },
+  ]);
+
+  const uploadedFile = uploadedFiles[0];
+  if (!uploadedFile) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "File upload failed",
+    });
+  }
+
+  return uploadedFile;
+}
+
+async function createCustomCoverFiles(
+  base64Image: string,
+): Promise<FileItem[]> {
+  const imageBuffer = Buffer.from(getBase64(base64Image), "base64");
+  const coverPdfBytes = await createCustomCoverPdf(
+    await getCustomCoverTemplateBytes(),
+    imageBuffer,
+  );
+
+  return [
+    await uploadRawModuleAsset(
+      Buffer.from(coverPdfBytes),
+      "pdf",
+      CUSTOM_COVER_FILE_PREFIX,
+    ),
+    await uploadModuleAsset(base64Image, CUSTOM_COVER_THUMB_PREFIX),
+  ];
 }
 
 export const moduleRouter = createTRPCRouter({
@@ -182,12 +235,12 @@ export const moduleRouter = createTRPCRouter({
       const isImageBasedCover = isCoverType(type) && isImageUpload(moduleFile);
 
       if (isImageBasedCover) {
-        filesToCreate.push(getCustomCoverTemplateFile());
-        filesToCreate.push(
-          await uploadModuleAsset(moduleFile, COVER_IMAGE_FILE_PREFIX),
-        );
+        filesToCreate.push(...(await createCustomCoverFiles(moduleFile)));
       } else {
-        const { valid, message } = await validatePDFUpload(moduleFile, bookPart);
+        const { valid, message } = await validatePDFUpload(
+          moduleFile,
+          bookPart,
+        );
 
         if (!valid) {
           throw new TRPCError({
@@ -302,6 +355,8 @@ export const moduleRouter = createTRPCRouter({
       const filesToCreate: FileItem[] = [];
       const existingPdfFile = pickModulePdfFile(existingModule.files);
       const existingCoverImageFile = pickCoverImageFile(existingModule.files);
+      const existingThumbnailFiles =
+        existingModule.files.filter(isThumbnailFile);
       const isImageBasedCover = Boolean(
         base64File && isCoverType(type) && isImageUpload(base64File),
       );
@@ -319,12 +374,13 @@ export const moduleRouter = createTRPCRouter({
           if (existingCoverImageFile) {
             filesToDisconnect.push({ id: existingCoverImageFile.id });
           }
-          if (!existingPdfFile) {
-            filesToCreate.push(getCustomCoverTemplateFile());
+          if (existingPdfFile) {
+            filesToDisconnect.push({ id: existingPdfFile.id });
           }
-          filesToCreate.push(
-            await uploadModuleAsset(base64File, COVER_IMAGE_FILE_PREFIX),
+          filesToDisconnect.push(
+            ...existingThumbnailFiles.map((file) => ({ id: file.id })),
           );
+          filesToCreate.push(...(await createCustomCoverFiles(base64File)));
         } else {
           if (existingPdfFile) {
             filesToDisconnect.push({ id: existingPdfFile.id });
@@ -332,6 +388,9 @@ export const moduleRouter = createTRPCRouter({
           if (existingCoverImageFile) {
             filesToDisconnect.push({ id: existingCoverImageFile.id });
           }
+          filesToDisconnect.push(
+            ...existingThumbnailFiles.map((file) => ({ id: file.id })),
+          );
           filesToCreate.push(await uploadModuleAsset(base64File));
         }
       } else if (!isCoverType(type) && existingCoverImageFile) {

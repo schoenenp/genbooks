@@ -476,20 +476,17 @@ export default function BookConfig(props: {
 
   const [searchFilterValue, setSearchFilterValue] = useState("");
   const [currentStep, setCurrentStep] = useState<ConfigStepId>("COVER");
-  const [moduleColorMap, setModuleColorMap] = useState<Map<ModuleId, ColorCode>>(
-    () => {
-      const next = new Map<ModuleId, ColorCode>();
-      if (existingBook?.modules) {
-        for (const moduleItem of existingBook.modules) {
-          next.set(
-            moduleItem.moduleId,
-            moduleItem.colorCode === "COLOR" ? 4 : 1,
-          );
-        }
+  const [moduleColorMap, setModuleColorMap] = useState<
+    Map<ModuleId, ColorCode>
+  >(() => {
+    const next = new Map<ModuleId, ColorCode>();
+    if (existingBook?.modules) {
+      for (const moduleItem of existingBook.modules) {
+        next.set(moduleItem.moduleId, moduleItem.colorCode === "COLOR" ? 4 : 1);
       }
-      return next;
-    },
-  );
+    }
+    return next;
+  });
   const [isRefreshingPreview, setIsRefreshingPreview] = useState(false);
   const [useMobilePdfFallback, setUseMobilePdfFallback] = useState(false);
   const [bindingOverflowEvent, setBindingOverflowEvent] =
@@ -507,6 +504,7 @@ export default function BookConfig(props: {
   const [customCoverUploadError, setCustomCoverUploadError] = useState<
     string | null
   >(null);
+  const [customCoverFile, setCustomCoverFile] = useState<File | null>(null);
   const [isUploadingCustomCover, setIsUploadingCustomCover] = useState(false);
   const [customCoverUploadVersion, setCustomCoverUploadVersion] = useState(0);
   const calcRequestIdRef = useRef(0);
@@ -676,7 +674,9 @@ export default function BookConfig(props: {
     const resolveModules = (ids: string[]) =>
       ids
         .map((id) => moduleLookupById.get(id))
-        .filter((moduleItem): moduleItem is AvailableModule => Boolean(moduleItem));
+        .filter((moduleItem): moduleItem is AvailableModule =>
+          Boolean(moduleItem),
+        );
 
     return {
       cover: resolveModules(pickedModules.COVER),
@@ -696,7 +696,9 @@ export default function BookConfig(props: {
     [pickedModules],
   );
 
-  const currentStepConfig = configSteps.find((step) => step.id === currentStep)!;
+  const currentStepConfig = configSteps.find(
+    (step) => step.id === currentStep,
+  )!;
   const currentStepIndex = CONFIG_STEP_ORDER.indexOf(currentStep);
   const currentBucket = getStepBucket(currentStep);
   const currentStepSelectedIds = useMemo(
@@ -713,7 +715,10 @@ export default function BookConfig(props: {
   );
 
   const bindingAvailabilityById = useMemo(() => {
-    const availability = new Map<string, { disabled: boolean; reason?: string }>();
+    const availability = new Map<
+      string,
+      { disabled: boolean; reason?: string }
+    >();
 
     for (const moduleItem of allModules) {
       if (!isBindingModuleLike(moduleItem)) {
@@ -731,7 +736,8 @@ export default function BookConfig(props: {
         disabled: !isAllowed,
         reason: isAllowed
           ? undefined
-          : (getBindingLimitMessageForModule(moduleItem, totalPagesCount) ?? undefined),
+          : (getBindingLimitMessageForModule(moduleItem, totalPagesCount) ??
+            undefined),
       });
     }
 
@@ -742,7 +748,9 @@ export default function BookConfig(props: {
     if (!bindingOverflowEvent) return [];
     return bindingOverflowEvent.suggestedBindingIds
       .map((id) => moduleLookupById.get(id))
-      .filter((moduleItem): moduleItem is AvailableModule => Boolean(moduleItem));
+      .filter((moduleItem): moduleItem is AvailableModule =>
+        Boolean(moduleItem),
+      );
   }, [bindingOverflowEvent, moduleLookupById]);
 
   const isConfigComplete =
@@ -813,6 +821,7 @@ export default function BookConfig(props: {
 
   function resetCustomCoverUpload() {
     setCustomCoverUploadError(null);
+    setCustomCoverFile(null);
     if (customCoverPreviewUrl) {
       URL.revokeObjectURL(customCoverPreviewUrl);
       setCustomCoverPreviewUrl(null);
@@ -840,8 +849,34 @@ export default function BookConfig(props: {
         URL.revokeObjectURL(customCoverPreviewUrl);
       }
       setCustomCoverPreviewUrl(nextPreviewUrl);
+      setCustomCoverFile(croppedImage);
+      setModalId("custom-cover");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setCustomCoverUploadError(
+        `Upload fehlgeschlagen: ${formatCustomCoverError(message)}`,
+      );
+      setCustomCoverUploadVersion((prev) => prev + 1);
+    } finally {
+      setIsUploadingCustomCover(false);
+    }
+  }
 
-      const encodedFile = await fileToBase64(croppedImage);
+  async function confirmCustomCoverCreation() {
+    if (isUploadingCustomCover || !customCoverFile) {
+      return;
+    }
+
+    if (!bookId) {
+      setCustomCoverUploadError("Buch-ID fehlt. Bitte Seite neu laden.");
+      return;
+    }
+
+    setIsUploadingCustomCover(true);
+    setCustomCoverUploadError(null);
+
+    try {
+      const encodedFile = await fileToBase64(customCoverFile);
       const createdModule = await createModule({
         name: `Bild Umschlag ${new Date().toISOString().slice(0, 10)}`,
         type: FILTER_TYPES.COVER,
@@ -858,11 +893,13 @@ export default function BookConfig(props: {
       announceChange(
         "Bild-Umschlag erstellt und als aktiver Umschlag ausgewählt.",
       );
+      setModalId(undefined);
+      resetCustomCoverUpload();
       setCustomCoverUploadVersion((prev) => prev + 1);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setCustomCoverUploadError(
-        `Upload fehlgeschlagen: ${handleWarningText(message)}`,
+        `Upload fehlgeschlagen: ${formatCustomCoverError(message)}`,
       );
     } finally {
       setIsUploadingCustomCover(false);
@@ -882,39 +919,47 @@ export default function BookConfig(props: {
     return null;
   }
 
-  const triggerBindingOverflowIfNeeded = useCallback((
-    nextTotalPagesCount: number,
-  ): boolean => {
-    const selectedBindingId = pickedModules.BINDING[0];
-    if (!selectedBindingId || nextTotalPagesCount <= 0) return false;
+  const triggerBindingOverflowIfNeeded = useCallback(
+    (nextTotalPagesCount: number): boolean => {
+      const selectedBindingId = pickedModules.BINDING[0];
+      if (!selectedBindingId || nextTotalPagesCount <= 0) return false;
 
-    const selectedBinding = moduleLookupById.get(selectedBindingId);
-    if (!selectedBinding || !isBindingModuleLike(selectedBinding)) return false;
+      const selectedBinding = moduleLookupById.get(selectedBindingId);
+      if (!selectedBinding || !isBindingModuleLike(selectedBinding))
+        return false;
 
-    if (isBindingAllowedForModule(selectedBinding, nextTotalPagesCount)) {
-      setBindingOverflowEvent(null);
-      return false;
-    }
+      if (isBindingAllowedForModule(selectedBinding, nextTotalPagesCount)) {
+        setBindingOverflowEvent(null);
+        return false;
+      }
 
-    const suggestedBindingIds = allModules
-      .filter((moduleItem) => {
-        if (!isBindingModuleLike(moduleItem)) return false;
-        if (moduleItem.id === selectedBinding.id) return false;
-        return isBindingAllowedForModule(moduleItem, nextTotalPagesCount);
-      })
-      .slice(0, 2)
-      .map((moduleItem) => moduleItem.id);
+      const suggestedBindingIds = allModules
+        .filter((moduleItem) => {
+          if (!isBindingModuleLike(moduleItem)) return false;
+          if (moduleItem.id === selectedBinding.id) return false;
+          return isBindingAllowedForModule(moduleItem, nextTotalPagesCount);
+        })
+        .slice(0, 2)
+        .map((moduleItem) => moduleItem.id);
 
-    setPickedModules((prev) => ({ ...prev, BINDING: [] }));
-    setBindingOverflowEvent({
-      invalidBindingId: selectedBinding.id,
-      invalidBindingName: selectedBinding.name,
-      totalPages: nextTotalPagesCount,
-      suggestedBindingIds,
-    });
-    setModalId("binding-overflow");
-    return true;
-  }, [allModules, moduleLookupById, pickedModules.BINDING, setModalId, setPickedModules]);
+      setPickedModules((prev) => ({ ...prev, BINDING: [] }));
+      setBindingOverflowEvent({
+        invalidBindingId: selectedBinding.id,
+        invalidBindingName: selectedBinding.name,
+        totalPages: nextTotalPagesCount,
+        suggestedBindingIds,
+      });
+      setModalId("binding-overflow");
+      return true;
+    },
+    [
+      allModules,
+      moduleLookupById,
+      pickedModules.BINDING,
+      setModalId,
+      setPickedModules,
+    ],
+  );
 
   useEffect(() => {
     if (!hasLiveCalcBaseConfig) {
@@ -996,7 +1041,8 @@ export default function BookConfig(props: {
           triggerBindingOverflowIfNeeded(nextCalculation.fullPageCount);
         } catch (error) {
           if (requestId !== calcRequestIdRef.current) return;
-          const message = error instanceof Error ? error.message : String(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
           setLiveCalculationError(handleWarningText(message));
         } finally {
           if (requestId === calcRequestIdRef.current) {
@@ -1084,11 +1130,15 @@ export default function BookConfig(props: {
 
     const result = usePreviewMode
       ? await processPdfModulesPreview(
-        pdfBookDetails,
-        pdfModulesForSelection,
-        options,
-      )
-      : await processPdfModules(pdfBookDetails, pdfModulesForSelection, options);
+          pdfBookDetails,
+          pdfModulesForSelection,
+          options,
+        )
+      : await processPdfModules(
+          pdfBookDetails,
+          pdfModulesForSelection,
+          options,
+        );
 
     const blob = new Blob([result.pdfFile as BlobPart], {
       type: "application/pdf",
@@ -1158,6 +1208,37 @@ export default function BookConfig(props: {
     }
   }
 
+  function formatCustomCoverError(text: string): string {
+    const normalized = text.toLocaleLowerCase();
+
+    if (
+      normalized.includes("placeholder") ||
+      normalized.includes("cover_image") ||
+      normalized.includes("custom_image")
+    ) {
+      return "Die Umschlagvorlage hat kein Bildfeld für den Bild-Umschlag.";
+    }
+
+    if (
+      normalized.includes("unsupported custom cover image format") ||
+      normalized.includes("embed") ||
+      normalized.includes("png") ||
+      normalized.includes("jpeg")
+    ) {
+      return "Das Bild konnte nicht in den Umschlag eingesetzt werden. Bitte PNG oder JPEG verwenden.";
+    }
+
+    if (
+      normalized.includes("custom_cover_template_url") ||
+      normalized.includes("custom cover template") ||
+      normalized.includes("cover template")
+    ) {
+      return "Die Umschlagvorlage konnte nicht geladen werden.";
+    }
+
+    return text;
+  }
+
   function handlePickedItem(pickedItem: { id: string; type: string }) {
     const pickedModule = moduleLookupById.get(pickedItem.id);
     if (!pickedModule) return;
@@ -1177,7 +1258,10 @@ export default function BookConfig(props: {
         const next = removeModuleFromBuckets(prev, pickedModule.id);
         return {
           ...next,
-          [targetContentBucket]: [...next[targetContentBucket], pickedModule.id],
+          [targetContentBucket]: [
+            ...next[targetContentBucket],
+            pickedModule.id,
+          ],
         };
       });
       announceChange(
@@ -1188,7 +1272,9 @@ export default function BookConfig(props: {
     }
 
     if (currentBucketForModule) {
-      setPickedModules((prev) => removeModuleFromBuckets(prev, pickedModule.id));
+      setPickedModules((prev) =>
+        removeModuleFromBuckets(prev, pickedModule.id),
+      );
       announceChange(
         `${pickedModule.name} wurde aus dem ${getBucketLabel(currentBucketForModule)} entfernt.`,
       );
@@ -1212,7 +1298,10 @@ export default function BookConfig(props: {
     setPickedModules((prev) => {
       const next = removeModuleFromBuckets(prev, pickedModule.id);
 
-      if (isCoverModuleLike(pickedModule) || normalizedType === FILTER_TYPES.COVER) {
+      if (
+        isCoverModuleLike(pickedModule) ||
+        normalizedType === FILTER_TYPES.COVER
+      ) {
         announceChange(`${pickedModule.name} wurde als Umschlag gesetzt.`);
         return { ...next, COVER: [pickedModule.id] };
       }
@@ -1261,9 +1350,13 @@ export default function BookConfig(props: {
       case "PLANNER":
         return completionStatus.hasCoverModule;
       case "POST":
-        return completionStatus.hasCoverModule && completionStatus.hasPlannerModule;
+        return (
+          completionStatus.hasCoverModule && completionStatus.hasPlannerModule
+        );
       case "BINDING":
-        return completionStatus.hasCoverModule && completionStatus.hasPlannerModule;
+        return (
+          completionStatus.hasCoverModule && completionStatus.hasPlannerModule
+        );
       case "CHECKOUT":
         return isConfigComplete;
     }
@@ -1404,18 +1497,18 @@ export default function BookConfig(props: {
               initialFormState={
                 existingBook
                   ? {
-                    id: existingBook.id,
-                    name: existingBook.bookTitle,
-                    sub: existingBook.subTitle,
-                    country: existingBook.country,
-                    region: existingBook.region,
-                    period: {
-                      start: existingBook.planStart
-                        .toISOString()
-                        .slice(0, 16),
-                      end: existingBook.planEnd?.toISOString().slice(0, 16),
-                    },
-                  }
+                      id: existingBook.id,
+                      name: existingBook.bookTitle,
+                      sub: existingBook.subTitle,
+                      country: existingBook.country,
+                      region: existingBook.region,
+                      period: {
+                        start: existingBook.planStart
+                          .toISOString()
+                          .slice(0, 16),
+                        end: existingBook.planEnd?.toISOString().slice(0, 16),
+                      },
+                    }
                   : undefined
               }
             />
@@ -1445,8 +1538,8 @@ export default function BookConfig(props: {
                 <div>
                   <h3 className="text-2xl font-bold">Eigene Inhalte</h3>
                   <p className="text-info-800 text-sm">
-                    Eigene PDFs anlegen und direkt in die normale
-                    Modulauswahl übernehmen.
+                    Eigene PDFs anlegen und direkt in die normale Modulauswahl
+                    übernehmen.
                   </p>
                 </div>
                 <button
@@ -1470,6 +1563,96 @@ export default function BookConfig(props: {
             </div>
           </div>
         ) : null;
+      case "custom-cover":
+        return (
+          <div className="content-card text-info-950 w-full max-w-2xl p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-2xl font-bold">Bild-Umschlag erstellen</h3>
+                <p className="text-info-800 text-sm">
+                  Vorschau des zugeschnittenen Coverbilds. Beim Bestätigen wird
+                  daraus ein vierseitiger Umschlag erstellt und ausgewählt.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalId(undefined);
+                  resetCustomCoverUpload();
+                  setCustomCoverUploadVersion((prev) => prev + 1);
+                }}
+                className="btn-soft rounded p-2"
+                disabled={isUploadingCustomCover}
+              >
+                <XIcon className="size-6" />
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-[220px_1fr]">
+              <div className="field-shell bg-white p-2">
+                <div className="border-pirrot-blue-200 relative mx-auto aspect-[210/297] w-full max-w-[200px] overflow-hidden rounded-lg border">
+                  {customCoverPreviewUrl ? (
+                    <NextImage
+                      src={customCoverPreviewUrl}
+                      alt="A4 Cover Vorschau"
+                      fill
+                      sizes="200px"
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex flex-col justify-between gap-4">
+                <div className="field-shell p-3">
+                  <p className="text-info-800 text-xs font-bold tracking-[0.16em] uppercase">
+                    Moduldatei
+                  </p>
+                  <p className="mt-1 font-bold">
+                    {customCoverFile?.name ?? "Bild-Umschlag"}
+                  </p>
+                  <p className="text-info-800 mt-2 text-sm">
+                    Das gespeicherte Modul wird aus der Umschlagvorlage, diesem
+                    Bild und leeren Ergänzungsseiten im Format DIN A4 plus
+                    Anschnitt erzeugt.
+                  </p>
+                </div>
+
+                {customCoverUploadError ? (
+                  <div className="border-pirrot-red-300 bg-pirrot-red-100/60 rounded-lg border px-3 py-2 text-sm">
+                    {customCoverUploadError}
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalId(undefined);
+                      resetCustomCoverUpload();
+                      setCustomCoverUploadVersion((prev) => prev + 1);
+                    }}
+                    className="btn-soft px-3 py-2"
+                    disabled={isUploadingCustomCover}
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void confirmCustomCoverCreation()}
+                    className="btn-solid flex items-center gap-2 px-3 py-2"
+                    disabled={isUploadingCustomCover || !customCoverFile}
+                  >
+                    Erstellen
+                    {isUploadingCustomCover ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : null}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
       case "binding-overflow":
         return (
           <div className="content-card text-info-950 w-full max-w-2xl p-4">
@@ -1610,7 +1793,7 @@ export default function BookConfig(props: {
   };
   const partnerCampaignExpiresAt =
     existingBook.sourceType === "PARTNER_TEMPLATE" &&
-      partnerBookMeta.partnerCampaignExpiresAt
+    partnerBookMeta.partnerCampaignExpiresAt
       ? new Date(partnerBookMeta.partnerCampaignExpiresAt)
       : null;
   const hasPartnerOrderBeenSubmitted =
@@ -1662,7 +1845,9 @@ export default function BookConfig(props: {
                 <p className={`text-xl font-bold ${STEP_ACCENTS[currentStep]}`}>
                   {STEP_LABELS[currentStep]}
                 </p>
-                <p className="text-info-800 text-sm">{currentStepConfig.desc}</p>
+                <p className="text-info-800 text-sm">
+                  {currentStepConfig.desc}
+                </p>
               </div>
 
               {currentStep !== "CHECKOUT" ? (
@@ -1688,7 +1873,7 @@ export default function BookConfig(props: {
                 </p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="field-shell p-2">
-                    <p className="text-info-800 text-[11px] uppercase tracking-wide">
+                    <p className="text-info-800 text-[11px] tracking-wide uppercase">
                       Seiten
                     </p>
                     <p className="text-lg font-bold">{totalPagesCount}</p>
@@ -1699,7 +1884,7 @@ export default function BookConfig(props: {
                     ) : null}
                   </div>
                   <div className="field-shell p-2">
-                    <p className="text-info-800 text-[11px] uppercase tracking-wide">
+                    <p className="text-info-800 text-[11px] tracking-wide uppercase">
                       Preis
                     </p>
                     <p className="text-lg font-bold">
@@ -1813,15 +1998,16 @@ export default function BookConfig(props: {
                       type="button"
                       disabled={!isAccessible || isMakingPreview}
                       onClick={() => void handleStepChange(step.id)}
-                      className={`min-w-48 rounded-[1.1rem] border px-4 py-3 text-left transition ${isCurrentStep
-                        ? `${getStepThemeClasses(step.id)} bg-white shadow-md`
-                        : isComplete
-                          ? "border-pirrot-green-300 bg-pirrot-green-100/60 shadow-sm"
-                          : `field-shell ${getStepThemeClasses(step.id)}`
-                        } ${!isAccessible ? "cursor-not-allowed opacity-50" : "hover:-translate-y-0.5 hover:shadow-md"}`}
+                      className={`min-w-48 rounded-[1.1rem] border px-4 py-3 text-left transition ${
+                        isCurrentStep
+                          ? `${getStepThemeClasses(step.id)} bg-white shadow-md`
+                          : isComplete
+                            ? "border-pirrot-green-300 bg-pirrot-green-100/60 shadow-sm"
+                            : `field-shell ${getStepThemeClasses(step.id)}`
+                      } ${!isAccessible ? "cursor-not-allowed opacity-50" : "hover:-translate-y-0.5 hover:shadow-md"}`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="field-shell inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-wide">
+                        <span className="field-shell inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-bold tracking-wide uppercase">
                           {getStepIcon(step.id)}
                           {String(index + 1).padStart(2, "0")}
                         </span>
@@ -1831,7 +2017,9 @@ export default function BookConfig(props: {
                           </span>
                         ) : null}
                       </div>
-                      <div className={`mt-2 font-bold ${STEP_ACCENTS[step.id]}`}>
+                      <div
+                        className={`mt-2 font-bold ${STEP_ACCENTS[step.id]}`}
+                      >
                         {step.title}
                       </div>
                       <p className="text-info-800 mt-1 text-xs">{step.desc}</p>
@@ -1848,15 +2036,20 @@ export default function BookConfig(props: {
             ) : null}
 
             <div className="flex flex-col gap-4">
-              <div className={`content-card p-4 ${getStepThemeClasses(currentStep)}`}>
+              <div
+                className={`content-card p-4 ${getStepThemeClasses(currentStep)}`}
+              >
                 <div className="flex flex-col gap-2">
-                  <div className="field-shell w-fit rounded-full flex gap-1 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em]">
+                  <div className="field-shell flex w-fit gap-1 rounded-full px-3 py-1 text-[11px] font-bold tracking-[0.18em] uppercase">
                     {getStepIcon(currentStep)}
                     <span className="ml-2 inline-block">
-                      Schritt {currentStepIndex + 1} von {CONFIG_STEP_ORDER.length}
+                      Schritt {currentStepIndex + 1} von{" "}
+                      {CONFIG_STEP_ORDER.length}
                     </span>
                   </div>
-                  <h2 className={`text-3xl font-bold ${STEP_ACCENTS[currentStep]}`}>
+                  <h2
+                    className={`text-3xl font-bold ${STEP_ACCENTS[currentStep]}`}
+                  >
                     {currentStepConfig.title}
                   </h2>
                   <p className="text-info-800 max-w-3xl">
@@ -1872,7 +2065,7 @@ export default function BookConfig(props: {
                       <div className="content-card flex flex-col gap-3 p-3">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-pirrot-blue-600">
+                            <p className="text-pirrot-blue-600 text-xs font-bold tracking-[0.16em] uppercase">
                               Option 1
                             </p>
                             <h3 className="text-lg font-bold">
@@ -1907,25 +2100,10 @@ export default function BookConfig(props: {
                           />
                         </div>
 
-                        {customCoverPreviewUrl ? (
-                          <div className="field-shell bg-white p-2">
-                            <div className="relative mx-auto aspect-[210/297] max-h-64 w-full max-w-44 overflow-hidden rounded-lg border border-pirrot-blue-200">
-                              <NextImage
-                                src={customCoverPreviewUrl}
-                                alt="A4 Cover Vorschau"
-                                fill
-                                sizes="176px"
-                                className="object-cover"
-                                unoptimized
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-
                         {isUploadingCustomCover ? (
                           <div className="field-shell flex items-center gap-2 p-2 text-sm">
                             <LoaderCircle className="size-4 animate-spin" />
-                            Umschlag wird erstellt...
+                            Bild wird vorbereitet...
                           </div>
                         ) : null}
 
@@ -1939,10 +2117,15 @@ export default function BookConfig(props: {
                     {visibleModules.map((moduleItem) => (
                       <ModuleItem
                         key={moduleItem.id}
-                        isPicked={isConfigModuleSelected(pickedModules, moduleItem.id)}
+                        isPicked={isConfigModuleSelected(
+                          pickedModules,
+                          moduleItem.id,
+                        )}
                         item={moduleItem}
                         onPickedItem={handlePickedItem}
-                        isDisabled={bindingAvailabilityById.get(moduleItem.id)?.disabled}
+                        isDisabled={
+                          bindingAvailabilityById.get(moduleItem.id)?.disabled
+                        }
                         disabledReason={
                           bindingAvailabilityById.get(moduleItem.id)?.reason
                         }
@@ -1952,10 +2135,12 @@ export default function BookConfig(props: {
 
                   {currentStep !== "COVER" && visibleModules.length === 0 ? (
                     <div className="content-card flex min-h-56 flex-col items-center justify-center gap-3 p-6 text-center">
-                      <h3 className="text-2xl font-bold">Keine Module gefunden</h3>
+                      <h3 className="text-2xl font-bold">
+                        Keine Module gefunden
+                      </h3>
                       <p className="text-info-800 max-w-lg">
-                        Passen Sie die Suche an oder wechseln Sie den Schritt, um
-                        weitere Module zu sehen.
+                        Passen Sie die Suche an oder wechseln Sie den Schritt,
+                        um weitere Module zu sehen.
                       </p>
                     </div>
                   ) : null}
@@ -1966,7 +2151,9 @@ export default function BookConfig(props: {
                     <div className="content-card flex flex-col gap-3 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <h3 className="text-2xl font-bold">Zusammenfassung</h3>
+                          <h3 className="text-2xl font-bold">
+                            Zusammenfassung
+                          </h3>
                           <p className="text-info-800 max-w-2xl text-sm">
                             Prüfen Sie Ihren Planer vor dem Bestellen. Die
                             Vorschau und die Kosten basieren auf der zuletzt
@@ -1999,19 +2186,19 @@ export default function BookConfig(props: {
 
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                         <div className="field-shell p-3">
-                          <p className="text-info-800 text-xs uppercase tracking-wide">
+                          <p className="text-info-800 text-xs tracking-wide uppercase">
                             Format
                           </p>
                           <p className="text-xl font-bold">{pickedFormat}</p>
                         </div>
                         <div className="field-shell p-3">
-                          <p className="text-info-800 text-xs uppercase tracking-wide">
+                          <p className="text-info-800 text-xs tracking-wide uppercase">
                             Stückzahl
                           </p>
                           <p className="text-xl font-bold">{orderAmount}x</p>
                         </div>
                         <div className="field-shell p-3">
-                          <p className="text-info-800 text-xs uppercase tracking-wide">
+                          <p className="text-info-800 text-xs tracking-wide uppercase">
                             Seiten
                           </p>
                           <p className="text-xl font-bold">
@@ -2024,7 +2211,7 @@ export default function BookConfig(props: {
                           ) : null}
                         </div>
                         <div className="field-shell p-3">
-                          <p className="text-info-800 text-xs uppercase tracking-wide">
+                          <p className="text-info-800 text-xs tracking-wide uppercase">
                             Gesamtpreis
                           </p>
                           <p className="text-xl font-bold">
@@ -2050,8 +2237,8 @@ export default function BookConfig(props: {
                       ) : null}
                       {isCheckoutPreviewStale ? (
                         <div className="border-warning-300 bg-warning-100/60 rounded-xl border px-3 py-2 text-sm">
-                          Die Vorschau ist nach Ihren letzten Änderungen veraltet.
-                          Bitte berechnen Sie den Checkout erneut.
+                          Die Vorschau ist nach Ihren letzten Änderungen
+                          veraltet. Bitte berechnen Sie den Checkout erneut.
                         </div>
                       ) : null}
                     </div>
@@ -2206,7 +2393,9 @@ export default function BookConfig(props: {
                     className="field-shell w-full px-3 py-2.5"
                     type="number"
                     min={1}
-                    onChange={(event) => setOrderAmount(Number(event.target.value))}
+                    onChange={(event) =>
+                      setOrderAmount(Number(event.target.value))
+                    }
                     value={orderAmount}
                   />
                 </div>
@@ -2244,7 +2433,9 @@ export default function BookConfig(props: {
                     />
                   </button>
                 </div>
-                <div className={`field-shell p-3 ${isCostOpen ? "" : "hidden"}`}>
+                <div
+                  className={`field-shell p-3 ${isCostOpen ? "" : "hidden"}`}
+                >
                   <div className="flex flex-col gap-1 text-sm">
                     <h3>Seiten gesamt: {totalPagesCount}</h3>
                     {liveDelta ? (
@@ -2255,7 +2446,8 @@ export default function BookConfig(props: {
                     <h5>Kosten: {(previewPrice.total / 100).toFixed(2)} €</h5>
                     {liveDelta ? (
                       <p className="text-info-800 text-xs">
-                        Preisänderung: {formatSignedEuroCents(liveDelta.priceDelta)}
+                        Preisänderung:{" "}
+                        {formatSignedEuroCents(liveDelta.priceDelta)}
                       </p>
                     ) : null}
                     <h5>
@@ -2267,7 +2459,9 @@ export default function BookConfig(props: {
                       </p>
                     ) : null}
                     {liveCalculationError ? (
-                      <p className="text-pirrot-red-500">{liveCalculationError}</p>
+                      <p className="text-pirrot-red-500">
+                        {liveCalculationError}
+                      </p>
                     ) : null}
                     {isCheckoutPreviewStale ? (
                       <p className="text-warning-800">
