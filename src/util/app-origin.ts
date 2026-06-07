@@ -1,22 +1,37 @@
 const isProduction = process.env.NODE_ENV === "production";
 const localhostHosts = new Set(["localhost", "127.0.0.1", "::1"]);
 
+type ConfiguredAppOriginOptions = {
+  includeLocalhost?: boolean;
+};
+
 function trimTrailingSlash(value: string) {
   return value.replace(/\/$/, "");
 }
 
-function splitConfiguredOrigins(value: string | undefined) {
-  if (!value) return [];
+function isUnsetEnvValue(value: string | undefined) {
+  const normalizedValue = value?.trim().toLowerCase();
+  return (
+    !normalizedValue ||
+    normalizedValue === "undefined" ||
+    normalizedValue === "null"
+  );
+}
 
-  return value
+function splitConfiguredOrigins(value: string | undefined) {
+  if (isUnsetEnvValue(value)) return [];
+
+  const originList = value ?? "";
+  return originList
+    .trim()
     .split(",")
     .map((entry) => entry.trim())
-    .filter(Boolean);
+    .filter((entry) => !isUnsetEnvValue(entry));
 }
 
 function coerceUrl(value: string) {
   const normalizedValue = trimTrailingSlash(value.trim());
-  if (!normalizedValue) return null;
+  if (isUnsetEnvValue(normalizedValue)) return null;
 
   try {
     if (normalizedValue.includes("://")) return new URL(normalizedValue);
@@ -24,6 +39,11 @@ function coerceUrl(value: string) {
   } catch {
     return null;
   }
+}
+
+export function isLocalhostOrigin(value: string): boolean {
+  const url = coerceUrl(value);
+  return Boolean(url && localhostHosts.has(url.hostname.toLowerCase()));
 }
 
 export function normalizeAppOrigin(value: string): string | null {
@@ -41,7 +61,10 @@ export function normalizeAppOrigin(value: string): string | null {
   return url.origin;
 }
 
-export function getConfiguredAppOrigins() {
+export function getConfiguredAppOrigins(
+  options: ConfiguredAppOriginOptions = {},
+) {
+  const includeLocalhost = options.includeLocalhost ?? true;
   const configuredOrigins = [
     ...splitConfiguredOrigins(process.env.APP_ALLOWED_ORIGINS),
     process.env.APP_FALLBACK_ORIGIN,
@@ -55,6 +78,7 @@ export function getConfiguredAppOrigins() {
 
     const normalizedOrigin = normalizeAppOrigin(configuredOrigin);
     if (!normalizedOrigin) continue;
+    if (!includeLocalhost && isLocalhostOrigin(normalizedOrigin)) continue;
 
     normalizedOrigins.add(normalizedOrigin);
   }
@@ -62,9 +86,18 @@ export function getConfiguredAppOrigins() {
   return [...normalizedOrigins];
 }
 
-export function getConfiguredAppOrigin() {
-  const [configuredOrigin] = getConfiguredAppOrigins();
+export function getConfiguredAppOrigin(
+  options: ConfiguredAppOriginOptions = {},
+) {
+  const includeLocalhost = options.includeLocalhost ?? true;
+  const [configuredOrigin] = getConfiguredAppOrigins({ includeLocalhost });
   if (configuredOrigin) return configuredOrigin;
+
+  if (!includeLocalhost && isProduction) {
+    throw new Error(
+      "No non-local app origin is configured. Set APP_FALLBACK_ORIGIN, APP_ALLOWED_ORIGINS, AUTH_URL, or NEXTAUTH_URL to the canonical production origin.",
+    );
+  }
 
   return "http://127.0.0.1:3000";
 }
@@ -92,6 +125,18 @@ export function getRequestAppOrigin(headers: Headers): string | null {
   return `${protocol}//${parsedHost.hostname.toLowerCase()}`;
 }
 
+export function getAllowedRequestAppOrigin(headers: Headers): string | null {
+  const requestOrigin = getRequestAppOrigin(headers);
+  if (!requestOrigin) return null;
+  if (!isProduction) return requestOrigin;
+  if (isLocalhostOrigin(requestOrigin)) return requestOrigin;
+
+  const allowedOrigins = new Set(
+    getConfiguredAppOrigins({ includeLocalhost: false }),
+  );
+  return allowedOrigins.has(requestOrigin) ? requestOrigin : null;
+}
+
 type AllowedOriginOptions = {
   headers?: Headers;
   extraOrigins?: Iterable<string>;
@@ -104,14 +149,18 @@ export function toAllowedAppOrigin(
   const normalizedOrigin = normalizeAppOrigin(value);
   if (!normalizedOrigin) return null;
 
-  const hostname = new URL(normalizedOrigin).hostname.toLowerCase();
-  if (!isProduction && localhostHosts.has(hostname)) return normalizedOrigin;
-
-  const allowedOrigins = new Set<string>(getConfiguredAppOrigins());
+  if (!isProduction) return normalizedOrigin;
 
   const requestOrigin = options.headers
-    ? getRequestAppOrigin(options.headers)
+    ? getAllowedRequestAppOrigin(options.headers)
     : null;
+  const allowLocalhost = options.headers
+    ? Boolean(requestOrigin && isLocalhostOrigin(requestOrigin))
+    : isLocalhostOrigin(normalizedOrigin);
+  const allowedOrigins = new Set<string>(
+    getConfiguredAppOrigins({ includeLocalhost: allowLocalhost }),
+  );
+
   if (requestOrigin) {
     allowedOrigins.add(requestOrigin);
   }
@@ -119,6 +168,7 @@ export function toAllowedAppOrigin(
   for (const extraOrigin of options.extraOrigins ?? []) {
     const normalizedExtraOrigin = normalizeAppOrigin(extraOrigin);
     if (!normalizedExtraOrigin) continue;
+    if (isLocalhostOrigin(normalizedExtraOrigin) && !allowLocalhost) continue;
     allowedOrigins.add(normalizedExtraOrigin);
   }
 
@@ -127,7 +177,16 @@ export function toAllowedAppOrigin(
 }
 
 export function getAppOriginFromHeaders(headers: Headers) {
-  return getRequestAppOrigin(headers) ?? getConfiguredAppOrigin();
+  const requestOrigin = getRequestAppOrigin(headers);
+  const allowedRequestOrigin = getAllowedRequestAppOrigin(headers);
+  if (allowedRequestOrigin) return allowedRequestOrigin;
+
+  return getConfiguredAppOrigin({
+    includeLocalhost:
+      !isProduction ||
+      !requestOrigin ||
+      Boolean(requestOrigin && isLocalhostOrigin(requestOrigin)),
+  });
 }
 
 export function buildAppUrl(origin: string, path: string) {

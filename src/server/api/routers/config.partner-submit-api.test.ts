@@ -22,6 +22,7 @@ mock.module("@/util/pdf/calculator", () => ({
 
 mock.module("@/util/module-files", () => ({
   pickModulePdfFile: () => ({ src: "/planner.pdf" }),
+  pickCoverImageFile: () => undefined,
 }));
 
 mock.module("@/util/book/clone-book", () => ({

@@ -28,6 +28,32 @@ describe("canAccessBookForSetupOrder", () => {
     ).toBeFalse();
   });
 
+  it("allows template-share planners only for the owning user", () => {
+    expect(
+      canAccessBookForSetupOrder({
+        bookOwnerId: "user_1",
+        sessionUserId: "user_1",
+        bookSourceType: "TEMPLATE_SHARE",
+      }),
+    ).toBeTrue();
+
+    expect(
+      canAccessBookForSetupOrder({
+        bookOwnerId: "user_1",
+        sessionUserId: "user_2",
+        bookSourceType: "TEMPLATE_SHARE",
+      }),
+    ).toBeFalse();
+
+    expect(
+      canAccessBookForSetupOrder({
+        bookOwnerId: null,
+        sessionUserId: "user_1",
+        bookSourceType: "TEMPLATE_SHARE",
+      }),
+    ).toBeFalse();
+  });
+
   it("denies guest access for owned books", () => {
     expect(
       canAccessBookForSetupOrder({

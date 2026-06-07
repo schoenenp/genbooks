@@ -41,12 +41,14 @@ model Book {
   clientRef   String?      @default("pirrot")
   customDates CustomDate[]
 
-  sourceType             BookSourceType @default(STANDARD)
-  partnerClaimId         String?        @unique
+  sourceType             BookSourceType      @default(STANDARD)
+  partnerClaimId         String?             @unique
   partnerPromotionCodeId String?
   partnerSnapshotBookId  String?
-  partnerClaim           PartnerClaim?  @relation("PartnerClaimBook", fields: [partnerClaimId], references: [id], onDelete: SetNull)
+  partnerClaim           PartnerClaim?       @relation("PartnerClaimBook", fields: [partnerClaimId], references: [id], onDelete: SetNull)
   partnerOrder           PartnerOrder?
+  templateShares         TemplateShare[]     @relation("TemplateShareTemplate")
+  templateShareClaim     TemplateShareClaim? @relation("TemplateShareClaimBook")
 }
 
 model BookModule {
@@ -166,6 +168,8 @@ model User {
   partnerNotifications     PartnerNotification[]
   partnerOrderTransitions  PartnerOrderTransition[] @relation("PartnerOrderTransitionsActor")
   partnerSettlementBatches PartnerSettlementBatch[] @relation("PartnerSettlementBatches")
+  templateSharesCreated    TemplateShare[]          @relation("TemplateSharesCreated")
+  templateShareClaims      TemplateShareClaim[]     @relation("TemplateShareClaims")
 
   locations Location[]
 }
@@ -398,6 +402,12 @@ enum PartnerClaimStatus {
 enum BookSourceType {
   STANDARD
   PARTNER_TEMPLATE
+  TEMPLATE_SHARE
+}
+
+enum TemplateShareKind {
+  LINK
+  INVITE
 }
 
 enum PartnerOrderStatus {
@@ -576,4 +586,40 @@ model PartnerClaim {
 
   @@index([email, status])
   @@index([promotionCodeId, status])
+}
+
+model TemplateShare {
+  id             String            @id @default(cuid())
+  templateId     String
+  template       Book              @relation("TemplateShareTemplate", fields: [templateId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User              @relation("TemplateSharesCreated", fields: [createdById], references: [id], onDelete: Cascade)
+  kind           TemplateShareKind @default(LINK)
+  recipientEmail String?
+  tokenHash      String            @unique
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  claims TemplateShareClaim[]
+
+  @@index([templateId, kind, expiresAt])
+  @@index([createdById, createdAt])
+  @@index([recipientEmail])
+}
+
+model TemplateShareClaim {
+  id        String        @id @default(cuid())
+  shareId   String
+  share     TemplateShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation("TemplateShareClaims", fields: [userId], references: [id], onDelete: Cascade)
+  bookId    String        @unique
+  book      Book          @relation("TemplateShareClaimBook", fields: [bookId], references: [id], onDelete: Cascade)
+  email     String
+  claimedAt DateTime      @default(now())
+
+  @@unique([shareId, userId])
+  @@index([email])
 }

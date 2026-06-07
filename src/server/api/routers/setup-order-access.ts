@@ -1,7 +1,7 @@
 export function canAccessBookForSetupOrder(params: {
   bookOwnerId: string | null;
   sessionUserId?: string;
-  bookSourceType?: "STANDARD" | "PARTNER_TEMPLATE";
+  bookSourceType?: "STANDARD" | "PARTNER_TEMPLATE" | "TEMPLATE_SHARE";
   partnerClaimUserId?: string | null;
   isPublic?: boolean;
 }): boolean {
@@ -28,6 +28,10 @@ export function canAccessBookForSetupOrder(params: {
       return false;
     }
     return true;
+  }
+
+  if (bookSourceType === "TEMPLATE_SHARE") {
+    return Boolean(sessionUserId && bookOwnerId === sessionUserId);
   }
 
   if (!bookOwnerId) {
