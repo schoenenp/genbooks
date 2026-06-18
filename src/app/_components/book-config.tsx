@@ -1203,13 +1203,18 @@ export default function BookConfig(props: {
   }
 
   function handleWarningText(text: string): string {
+    const normalizedText = text.trim();
+    if (!normalizedText) {
+      return configWarningTexts.default;
+    }
+
     switch (true) {
-      case text.toLocaleLowerCase().includes("cover"):
+      case normalizedText.toLocaleLowerCase().includes("cover"):
         return configWarningTexts.cover;
-      case text.toLocaleLowerCase().includes("planner"):
-        return configWarningTexts.planner;
+      case normalizedText.toLocaleLowerCase().includes("planner"):
+        return `${configWarningTexts.planner} (${normalizedText})`;
       default:
-        return text;
+        return normalizedText;
     }
   }
 
@@ -2043,7 +2048,6 @@ export default function BookConfig(props: {
               {currentStep !== "CHECKOUT" ? (
                 <>
                   <div className="flex flex-col gap-4">
-
                     {isPrimaryModuleStep ? (
                       <ModuleCarousel
                         items={visibleModules}
@@ -2061,7 +2065,7 @@ export default function BookConfig(props: {
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                         <button
                           onClick={() => setModalId("custom-modules")}
-                          className="flex flex-col content-card justify-center items-center"
+                          className="content-card flex flex-col items-center justify-center"
                         >
                           <Plus />
                           Eigenes Modul
@@ -2099,9 +2103,8 @@ export default function BookConfig(props: {
                             Eigenes Cover aus Bild
                           </h3>
                           <p className="text-info-800 text-sm">
-                            Das Bild wird automatisch auf A4-Proportion
-                            ( ~5:7 ) mittig zugeschnitten und als Umschlag
-                            angelegt.
+                            Das Bild wird automatisch auf A4-Proportion ( ~5:7 )
+                            mittig zugeschnitten und als Umschlag angelegt.
                           </p>
                         </div>
                       </div>
@@ -2332,7 +2335,7 @@ export default function BookConfig(props: {
                     </div>
                   </div>
 
-                  <div className="content-card flex min-h-[420px] flex-col gap-3 p-4">
+                  <div className="content-card flex max-h-[70vh] lg:sticky lg:top-80 flex-col gap-3 p-4">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="text-xl font-bold">Druckvorschau</h3>
                       {isRefreshingPreview ? (
@@ -2343,7 +2346,7 @@ export default function BookConfig(props: {
                       <>
                         {renderPreviewDisclaimer()}
                         {useMobilePdfFallback ? (
-                          renderMobilePdfFallback("min-h-0 flex-1")
+                          renderMobilePdfFallback("flex-1")
                         ) : (
                           <div className="min-h-0 flex-1">
                             <iframe
@@ -2351,7 +2354,7 @@ export default function BookConfig(props: {
                               title="PDF Preview"
                               width="100%"
                               height="100%"
-                              className="border-info-950/5 h-full w-full border"
+                              className="border-info-950/5 w-full aspect-5/7 border"
                             />
                           </div>
                         )}
@@ -2592,5 +2595,8 @@ export default function BookConfig(props: {
 export const configWarningTexts = {
   cover:
     "Umschläge müssen genau 4 Seiten haben. Beachten Sie die Datei größe. (max. 5MB)",
-  planner: "",
+  planner:
+    "Der Planer konnte nicht für den Checkout vorbereitet werden. Bitte prüfen Sie die ausgewählten Planer-Module und versuchen Sie es erneut.",
+  default:
+    "Der Checkout konnte nicht vorbereitet werden. Bitte versuchen Sie es erneut.",
 };

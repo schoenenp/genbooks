@@ -449,7 +449,7 @@ export const configRouter = createTRPCRouter({
           campaignPartnerUserId !== effectivePartnerClaims.partnerUserId ||
           campaignMetadata.templateId !== effectivePartnerClaims.templateId ||
           campaignMetadata.snapshotBookId !==
-          effectivePartnerClaims.snapshotBookId
+            effectivePartnerClaims.snapshotBookId
         ) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -790,10 +790,10 @@ export const configRouter = createTRPCRouter({
             data: {
               user: ctx.session?.user
                 ? {
-                  connect: {
-                    id: ctx.session.user.id,
-                  },
-                }
+                    connect: {
+                      id: ctx.session.user.id,
+                    },
+                  }
                 : undefined,
               bookOrder: {
                 connect: {
@@ -930,51 +930,56 @@ export const configRouter = createTRPCRouter({
 
       const sessionParams = isPickup
         ? {
-          ...baseParams,
+            ...baseParams,
 
-          phone_number_collection: { enabled: true },
-        }
+            phone_number_collection: { enabled: true },
+          }
         : ({
-          ...baseParams,
-          shipping_address_collection: {
-            allowed_countries: ["DE", "AT", "NL", "LU", "FR", "ES", "IT"],
-          },
-
-          shipping_options: [
-            {
-              shipping_rate_data: {
-                type: "fixed_amount",
-                tax_behavior: "inclusive",
-                fixed_amount: { amount: 1000, currency: "eur" },
-                display_name: "Standardversand",
-                delivery_estimate: {
-                  minimum: { unit: "business_day", value: 14 },
-                  maximum: { unit: "business_day", value: 21 },
-                },
-              },
+            ...baseParams,
+            shipping_address_collection: {
+              allowed_countries: ["DE", "AT", "NL", "LU", "FR", "ES", "IT"],
             },
 
-            {
-              shipping_rate_data: {
-                type: "fixed_amount",
-                tax_behavior: "inclusive",
-                fixed_amount: { amount: 3000, currency: "eur" },
-                display_name: "Expressversand",
-                delivery_estimate: {
-                  minimum: { unit: "business_day", value: 7 },
-                  maximum: { unit: "business_day", value: 10 },
+            shipping_options: [
+              {
+                shipping_rate_data: {
+                  type: "fixed_amount",
+                  tax_behavior: "inclusive",
+                  fixed_amount: { amount: 1000, currency: "eur" },
+                  display_name: "Standardversand",
+                  delivery_estimate: {
+                    minimum: { unit: "business_day", value: 14 },
+                    maximum: { unit: "business_day", value: 21 },
+                  },
                 },
               },
-            },
-          ],
-        } as Stripe.Checkout.SessionCreateParams);
+
+              {
+                shipping_rate_data: {
+                  type: "fixed_amount",
+                  tax_behavior: "inclusive",
+                  fixed_amount: { amount: 3000, currency: "eur" },
+                  display_name: "Expressversand",
+                  delivery_estimate: {
+                    minimum: { unit: "business_day", value: 7 },
+                    maximum: { unit: "business_day", value: 10 },
+                  },
+                },
+              },
+            ],
+          } as Stripe.Checkout.SessionCreateParams);
 
       let checkout;
       try {
         checkout = await stripeClient.checkout.sessions.create(sessionParams, {
           idempotencyKey: `checkout_session_${createdPayment.id}`,
         });
-      } catch {
+      } catch (error) {
+        logger.error("stripe_checkout_session_create_failed", {
+          paymentId: createdPayment.id,
+          orderId: createdOrderId,
+          error,
+        });
         await db.payment
           .update({
             where: { id: createdPayment.id },
@@ -1040,12 +1045,12 @@ export const configRouter = createTRPCRouter({
       const canAccessExistingBook = !existingBook
         ? true
         : canAccessBookForSetupOrder({
-          bookOwnerId: existingBook.createdById,
-          sessionUserId,
-          bookSourceType: existingBook.sourceType,
-          partnerClaimUserId: existingBook.partnerClaim?.userId,
-          isPublic: existingBook.isPublic,
-        });
+            bookOwnerId: existingBook.createdById,
+            sessionUserId,
+            bookSourceType: existingBook.sourceType,
+            partnerClaimUserId: existingBook.partnerClaim?.userId,
+            isPublic: existingBook.isPublic,
+          });
 
       if (!canAccessExistingBook) {
         return null;
@@ -1053,10 +1058,10 @@ export const configRouter = createTRPCRouter({
 
       let hydratedBook:
         | (NonNullable<typeof existingBook> & {
-          partnerCampaignExpiresAt?: Date | null;
-          partnerOrderSubmittedAt?: Date | null;
-          partnerOrderStatus?: string | null;
-        })
+            partnerCampaignExpiresAt?: Date | null;
+            partnerOrderSubmittedAt?: Date | null;
+            partnerOrderStatus?: string | null;
+          })
         | null = existingBook;
       if (
         existingBook?.sourceType === "PARTNER_TEMPLATE" &&
