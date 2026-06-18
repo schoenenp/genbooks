@@ -27,6 +27,7 @@ import NextImage from "next/image";
 import { api } from "@/trpc/react";
 import LoadingSpinner from "./loading-spinner";
 import ModuleItem, { type ModulePickerItem } from "./module-item";
+import ModuleCarousel from "./module-carousel";
 import ModuleChanger, { type ColorCode, type ModuleId } from "./module-changer";
 import {
   calculatePdfPageCounts,
@@ -705,6 +706,10 @@ export default function BookConfig(props: {
     () => (currentBucket ? pickedModules[currentBucket] : []),
     [currentBucket, pickedModules],
   );
+  const isPrimaryModuleStep =
+    currentStep === "COVER" ||
+    currentStep === "PLANNER" ||
+    currentStep === "BINDING";
 
   const matchingTips = useMemo(
     () =>
@@ -1130,15 +1135,15 @@ export default function BookConfig(props: {
 
     const result = usePreviewMode
       ? await processPdfModulesPreview(
-          pdfBookDetails,
-          pdfModulesForSelection,
-          options,
-        )
+        pdfBookDetails,
+        pdfModulesForSelection,
+        options,
+      )
       : await processPdfModules(
-          pdfBookDetails,
-          pdfModulesForSelection,
-          options,
-        );
+        pdfBookDetails,
+        pdfModulesForSelection,
+        options,
+      );
 
     const blob = new Blob([result.pdfFile as BlobPart], {
       type: "application/pdf",
@@ -1497,18 +1502,18 @@ export default function BookConfig(props: {
               initialFormState={
                 existingBook
                   ? {
-                      id: existingBook.id,
-                      name: existingBook.bookTitle,
-                      sub: existingBook.subTitle,
-                      country: existingBook.country,
-                      region: existingBook.region,
-                      period: {
-                        start: existingBook.planStart
-                          .toISOString()
-                          .slice(0, 16),
-                        end: existingBook.planEnd?.toISOString().slice(0, 16),
-                      },
-                    }
+                    id: existingBook.id,
+                    name: existingBook.bookTitle,
+                    sub: existingBook.subTitle,
+                    country: existingBook.country,
+                    region: existingBook.region,
+                    period: {
+                      start: existingBook.planStart
+                        .toISOString()
+                        .slice(0, 16),
+                      end: existingBook.planEnd?.toISOString().slice(0, 16),
+                    },
+                  }
                   : undefined
               }
             />
@@ -1793,7 +1798,7 @@ export default function BookConfig(props: {
   };
   const partnerCampaignExpiresAt =
     existingBook.sourceType === "PARTNER_TEMPLATE" &&
-    partnerBookMeta.partnerCampaignExpiresAt
+      partnerBookMeta.partnerCampaignExpiresAt
       ? new Date(partnerBookMeta.partnerCampaignExpiresAt)
       : null;
   const hasPartnerOrderBeenSubmitted =
@@ -1998,13 +2003,12 @@ export default function BookConfig(props: {
                       type="button"
                       disabled={!isAccessible || isMakingPreview}
                       onClick={() => void handleStepChange(step.id)}
-                      className={`min-w-48 rounded-[1.1rem] border px-4 py-3 text-left transition ${
-                        isCurrentStep
-                          ? `${getStepThemeClasses(step.id)} bg-white shadow-md`
-                          : isComplete
-                            ? "border-pirrot-green-300 bg-pirrot-green-100/60 shadow-sm"
-                            : `field-shell ${getStepThemeClasses(step.id)}`
-                      } ${!isAccessible ? "cursor-not-allowed opacity-50" : "hover:-translate-y-0.5 hover:shadow-md"}`}
+                      className={`min-w-48 rounded-[1.1rem] border px-4 py-3 text-left transition ${isCurrentStep
+                        ? `${getStepThemeClasses(step.id)} bg-white shadow-md`
+                        : isComplete
+                          ? "border-pirrot-green-300 bg-pirrot-green-100/60 shadow-sm"
+                          : `field-shell ${getStepThemeClasses(step.id)}`
+                        } ${!isAccessible ? "cursor-not-allowed opacity-50" : "hover:-translate-y-0.5 hover:shadow-md"}`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="field-shell inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-bold tracking-wide uppercase">
@@ -2036,104 +2040,108 @@ export default function BookConfig(props: {
             ) : null}
 
             <div className="flex flex-col gap-4">
-              <div
-                className={`content-card p-4 ${getStepThemeClasses(currentStep)}`}
-              >
-                <div className="flex flex-col gap-2">
-                  <div className="field-shell flex w-fit gap-1 rounded-full px-3 py-1 text-[11px] font-bold tracking-[0.18em] uppercase">
-                    {getStepIcon(currentStep)}
-                    <span className="ml-2 inline-block">
-                      Schritt {currentStepIndex + 1} von{" "}
-                      {CONFIG_STEP_ORDER.length}
-                    </span>
-                  </div>
-                  <h2
-                    className={`text-3xl font-bold ${STEP_ACCENTS[currentStep]}`}
-                  >
-                    {currentStepConfig.title}
-                  </h2>
-                  <p className="text-info-800 max-w-3xl">
-                    {currentStepConfig.desc}
-                  </p>
-                </div>
-              </div>
-
               {currentStep !== "CHECKOUT" ? (
                 <>
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {currentStep === "COVER" ? (
-                      <div className="content-card flex flex-col gap-3 p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-pirrot-blue-600 text-xs font-bold tracking-[0.16em] uppercase">
-                              Option 1
-                            </p>
-                            <h3 className="text-lg font-bold">
-                              Eigenes Cover aus Bild
-                            </h3>
-                            <p className="text-info-800 text-sm">
-                              Das Bild wird automatisch auf A4-Proportion
-                              (210:297) mittig zugeschnitten und als Umschlag
-                              angelegt.
-                            </p>
-                          </div>
-                        </div>
+                  <div className="flex flex-col gap-4">
 
-                        <div className="field-shell min-h-56 p-1">
-                          <FileUpload
-                            key={`custom-cover-upload-${customCoverUploadVersion}`}
-                            fieldName={
-                              isUploadingCustomCover
-                                ? "Wird vorbereitet..."
-                                : "Bild für Umschlag hochladen"
-                            }
-                            accept={[
-                              "image/png",
-                              "image/jpeg",
-                              "image/jpg",
-                              "image/webp",
-                            ]}
-                            onPickedFile={(file) => {
-                              void handleCustomCoverImageUpload(file);
-                            }}
-                            resetFile={resetCustomCoverUpload}
-                          />
-                        </div>
-
-                        {isUploadingCustomCover ? (
-                          <div className="field-shell flex items-center gap-2 p-2 text-sm">
-                            <LoaderCircle className="size-4 animate-spin" />
-                            Bild wird vorbereitet...
-                          </div>
-                        ) : null}
-
-                        {customCoverUploadError ? (
-                          <div className="border-pirrot-red-300 bg-pirrot-red-100/60 rounded-lg border px-3 py-2 text-sm">
-                            {customCoverUploadError}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                    {visibleModules.map((moduleItem) => (
-                      <ModuleItem
-                        key={moduleItem.id}
-                        isPicked={isConfigModuleSelected(
-                          pickedModules,
-                          moduleItem.id,
-                        )}
-                        item={moduleItem}
-                        onPickedItem={handlePickedItem}
-                        isDisabled={
-                          bindingAvailabilityById.get(moduleItem.id)?.disabled
+                    {isPrimaryModuleStep ? (
+                      <ModuleCarousel
+                        items={visibleModules}
+                        isPicked={(moduleId) =>
+                          isConfigModuleSelected(pickedModules, moduleId)
                         }
-                        disabledReason={
-                          bindingAvailabilityById.get(moduleItem.id)?.reason
+                        onPickedItem={handlePickedItem}
+                        getDisabledState={(moduleId) =>
+                          bindingAvailabilityById.get(moduleId) ?? {
+                            disabled: false,
+                          }
                         }
                       />
-                    ))}
+                    ) : (
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        <button
+                          onClick={() => setModalId("custom-modules")}
+                          className="flex flex-col content-card justify-center items-center"
+                        >
+                          <Plus />
+                          Eigenes Modul
+                        </button>
+                        {visibleModules.map((moduleItem) => (
+                          <ModuleItem
+                            key={moduleItem.id}
+                            isPicked={isConfigModuleSelected(
+                              pickedModules,
+                              moduleItem.id,
+                            )}
+                            item={moduleItem}
+                            onPickedItem={handlePickedItem}
+                            isDisabled={
+                              bindingAvailabilityById.get(moduleItem.id)
+                                ?.disabled
+                            }
+                            disabledReason={
+                              bindingAvailabilityById.get(moduleItem.id)?.reason
+                            }
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {currentStep !== "COVER" && visibleModules.length === 0 ? (
+                  {currentStep === "COVER" ? (
+                    <div className="content-card flex flex-col gap-3 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-pirrot-blue-600 text-xs font-bold tracking-[0.16em] uppercase">
+                            Alternativ
+                          </p>
+                          <h3 className="text-lg font-bold">
+                            Eigenes Cover aus Bild
+                          </h3>
+                          <p className="text-info-800 text-sm">
+                            Das Bild wird automatisch auf A4-Proportion
+                            ( ~5:7 ) mittig zugeschnitten und als Umschlag
+                            angelegt.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="field-shell min-h-56 p-1">
+                        <FileUpload
+                          key={`custom-cover-upload-${customCoverUploadVersion}`}
+                          fieldName={
+                            isUploadingCustomCover
+                              ? "Wird vorbereitet..."
+                              : "Bild für Umschlag hochladen"
+                          }
+                          accept={[
+                            "image/png",
+                            "image/jpeg",
+                            "image/jpg",
+                            "image/webp",
+                          ]}
+                          onPickedFile={(file) => {
+                            void handleCustomCoverImageUpload(file);
+                          }}
+                          resetFile={resetCustomCoverUpload}
+                        />
+                      </div>
+
+                      {isUploadingCustomCover ? (
+                        <div className="field-shell flex items-center gap-2 p-2 text-sm">
+                          <LoaderCircle className="size-4 animate-spin" />
+                          Bild wird vorbereitet...
+                        </div>
+                      ) : null}
+
+                      {customCoverUploadError ? (
+                        <div className="border-pirrot-red-300 bg-pirrot-red-100/60 rounded-lg border px-3 py-2 text-sm">
+                          {customCoverUploadError}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {visibleModules.length === 0 ? (
                     <div className="content-card flex min-h-56 flex-col items-center justify-center gap-3 p-6 text-center">
                       <h3 className="text-2xl font-bold">
                         Keine Module gefunden

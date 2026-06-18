@@ -1,122 +1,294 @@
-import { type BookPart, PrismaClient, Visibility } from '@prisma/client';
-import { faker } from '@faker-js/faker';
+import {
+  type BookPart,
+  type ModuleType,
+  PrismaClient,
+  Visibility,
+} from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-function getRandomPicsumUrl(): string {
-  const id = Math.floor(Math.random() * 1000);
-  return `https://picsum.photos/id/${id}/640/480`;
+type ModuleTypeSeed = {
+  name: string;
+  minPages: number;
+  maxPages: number;
+};
+
+type ExampleModuleSeed = {
+  id: string;
+  name: string;
+  typeName: string;
+  part: BookPart;
+  theme: string | null;
+  thumbnail: string;
+};
+
+const SEED_ID_PREFIX = "seed-example";
+const MOCK_PDF_URL = "/storage/notizen.pdf";
+
+const moduleTypes: ModuleTypeSeed[] = [
+  { name: "umschlag", minPages: 4, maxPages: 4 },
+  { name: "bindung", minPages: 2, maxPages: 8 },
+  { name: "wochenplaner", minPages: 4, maxPages: 92 },
+  { name: "sonstige", minPages: 1, maxPages: -1 },
+];
+
+const thumbnails = [
+  "/assets/gen/pirgen_bg.png",
+  "/assets/gen/pirgen_calendar.png",
+  "/assets/gen/pirgen_img.png",
+  "/assets/gen/pirgen_l_planner.png",
+  "/assets/gen/pirgen_minimal.png",
+  "/assets/gen/pirgen_official.png",
+  "/assets/gen/pirgen_planner_double.png",
+  "/assets/gen/pirgen_r_planner.png",
+  "/assets/gen/pirgen_schedule.png",
+  "/assets/gen/pirgen_sponsor.png",
+  "/assets/gen/pirgen_text.png",
+  "/assets/screenshots/acrobat_form_5.png",
+];
+
+const coverModules: Omit<ExampleModuleSeed, "id" | "typeName" | "part">[] = [
+  {
+    name: "Umschlag Klassisch Blau",
+    theme: "klassisch",
+    thumbnail: thumbnails[0]!,
+  },
+  {
+    name: "Umschlag Minimal Hell",
+    theme: "minimal",
+    thumbnail: thumbnails[4]!,
+  },
+  {
+    name: "Umschlag Schuljahr Farben",
+    theme: "farbenfroh",
+    thumbnail: thumbnails[2]!,
+  },
+  {
+    name: "Umschlag Offiziell",
+    theme: "offiziell",
+    thumbnail: thumbnails[5]!,
+  },
+];
+
+const plannerModules: Omit<ExampleModuleSeed, "id" | "typeName" | "part">[] = [
+  {
+    name: "Wochenplaner Kompakt",
+    theme: "kompakt",
+    thumbnail: thumbnails[1]!,
+  },
+  {
+    name: "Wochenplaner Doppelseite",
+    theme: "doppelseite",
+    thumbnail: thumbnails[6]!,
+  },
+  {
+    name: "Wochenplaner Links",
+    theme: "linke seite",
+    thumbnail: thumbnails[3]!,
+  },
+  {
+    name: "Wochenplaner Rechts",
+    theme: "rechte seite",
+    thumbnail: thumbnails[7]!,
+  },
+];
+
+const otherModuleNames = [
+  "Notizen Liniert",
+  "Notizen Kariert",
+  "Notizen Blanko",
+  "Kontaktliste",
+  "Klassenliste",
+  "Sitzplan",
+  "Geburtstagskalender",
+  "Ferienuebersicht",
+  "Stundenplan",
+  "Projektplanung",
+  "Hausaufgabenliste",
+  "Elterngespraeche",
+  "Konferenznotizen",
+  "Vertretungsplan",
+  "Bewertungsraster",
+  "Leseliste",
+  "Materialliste",
+  "Ausflugplanung",
+  "Checkliste Schulstart",
+  "Checkliste Halbjahr",
+  "Zielplanung",
+  "Reflexion Woche",
+  "Reflexion Monat",
+  "Freie Seiten",
+  "Rasterseiten",
+  "Dokumentation",
+  "Jahresrueckblick",
+];
+
+const bindingModules: Omit<ExampleModuleSeed, "id" | "typeName" | "part">[] = [
+  {
+    name: "Klammerheftbindung",
+    theme: "klammerheftbindung",
+    thumbnail: thumbnails[8]!,
+  },
+  {
+    name: "Kunststoffspirale",
+    theme: "kunststoffspirale",
+    thumbnail: thumbnails[9]!,
+  },
+  {
+    name: "Hot-Melt-Bindung",
+    theme: "hot-melt-bindung",
+    thumbnail: thumbnails[10]!,
+  },
+  {
+    name: "Premium-Fadenbindung",
+    theme: "premium",
+    thumbnail: thumbnails[11]!,
+  },
+];
+
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/ß/g, "ss")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-function getMockPdfUrl(): string {
-  return `/storage/notizen.pdf`;
+function buildExampleModules(): ExampleModuleSeed[] {
+  const covers = coverModules.map((moduleItem, index) => ({
+    ...moduleItem,
+    id: `${SEED_ID_PREFIX}-cover-${index + 1}`,
+    typeName: "umschlag",
+    part: "COVER" as const,
+  }));
+
+  const planners = plannerModules.map((moduleItem, index) => ({
+    ...moduleItem,
+    id: `${SEED_ID_PREFIX}-planner-${index + 1}`,
+    typeName: "wochenplaner",
+    part: "PLANNER" as const,
+  }));
+
+  const others = otherModuleNames.map((name, index) => ({
+    id: `${SEED_ID_PREFIX}-other-${String(index + 1).padStart(2, "0")}`,
+    name,
+    typeName: "sonstige",
+    part: "DEFAULT" as const,
+    theme:
+      index % 3 === 0 ? "organisation" : index % 3 === 1 ? "notizen" : null,
+    thumbnail: thumbnails[index % thumbnails.length]!,
+  }));
+
+  const bindings = bindingModules.map((moduleItem, index) => ({
+    ...moduleItem,
+    id: `${SEED_ID_PREFIX}-binding-${index + 1}`,
+    typeName: "bindung",
+    part: "BINDING" as const,
+  }));
+
+  return [...covers, ...planners, ...others, ...bindings];
 }
-function getRandomModuleName(): string {
-    const firstWord = faker.word.adjective(5);
-    const secondWord = faker.word.noun(6);
-    const number = faker.number.int({ min: 1000, max: 9999 }).toString().padStart(4, '0');
-    const combinedWord = `${firstWord}_${secondWord}_${number}`
-    return combinedWord.toLocaleLowerCase();
-  }
 
-async function seed() {
-  // Define module types
-  const moduleTypes = [
-    { name: 'umschlag', minPages: 4, maxPages: 4 },
-    { name: 'bindung', minPages: 2, maxPages: 8 },
-    { name: 'wochenplaner', minPages: 4, maxPages: 92 },
-    { name: 'sonstige', minPages: 1, maxPages: -1 },
-    { name: 'notizbuch', minPages: 50, maxPages: 200 },
-    { name: 'kalender', minPages: 12, maxPages: 24 },
-    { name: 'tagebuch', minPages: 100, maxPages: 365 },
-    { name: 'planer', minPages: 10, maxPages: 50 },
-    { name: 'skizzenbuch', minPages: 20, maxPages: 100 },
-    { name: 'fotobuch', minPages: 10, maxPages: 80 },
-  ];
+async function ensureModuleTypes(): Promise<Map<string, ModuleType>> {
+  const typeMap = new Map<string, ModuleType>();
 
-  function handleBookPart(type: string): BookPart {
-    switch (type.toLocaleLowerCase()) {
-      case "umschlag":
-        return "COVER"
-      case "wochenplaner":
-        return "PLANNER"
-      case "bindung":
-        return "BINDING"
-      default:
-        return "DEFAULT"
-    }
-  }
-
-
-  for (const type of moduleTypes) {
+  for (const typeSeed of moduleTypes) {
     const existingType = await prisma.moduleType.findFirst({
-      where:{
-        name:type.name.toLocaleLowerCase()
-      }
-    })
+      where: { name: typeSeed.name },
+    });
 
-    if(existingType) {
-      console.log("type exists")
-    }else{
-      await prisma.moduleType.create({
-          data:{
-         
-            name: type.name.toLocaleLowerCase(),
-            minPages: type.minPages,
-            maxPages: type.maxPages,
-          }
-      })
-    }
+    const moduleType = existingType
+      ? await prisma.moduleType.update({
+          where: { id: existingType.id },
+          data: {
+            minPages: typeSeed.minPages,
+            maxPages: typeSeed.maxPages,
+            deletedAt: null,
+          },
+        })
+      : await prisma.moduleType.create({
+          data: typeSeed,
+        });
 
+    typeMap.set(typeSeed.name, moduleType);
   }
 
-  // Fetch created module types
-  const createdTypes = await prisma.moduleType.findMany();
-  const themes = ['modern', 'classic', 'minimal', 'vintage', 'colorful', null];
-  const defaultType = createdTypes.find(t => t.name === "sonstige");
+  return typeMap;
+}
 
-  // Generate modules
-  for (let i = 0; i < 1000; i++) {
-    const randomType = faker.helpers.arrayElement(createdTypes) ?? defaultType;
-    const randomTheme = faker.helpers.arrayElement(themes);
-    const moduleName = getRandomModuleName();
-    const vis = ["PUBLIC", "SHARED", "PRIVATE"]
-    const randomNumber = Math.floor(Math.random() * 3)
+async function deletePreviousExampleSeed(): Promise<void> {
+  await prisma.module.deleteMany({
+    where: {
+      id: {
+        startsWith: SEED_ID_PREFIX,
+      },
+    },
+  });
+
+  await prisma.file.deleteMany({
+    where: {
+      id: {
+        startsWith: SEED_ID_PREFIX,
+      },
+    },
+  });
+}
+
+async function seed(): Promise<void> {
+  const typeMap = await ensureModuleTypes();
+  const exampleModules = buildExampleModules();
+
+  await deletePreviousExampleSeed();
+
+  for (const moduleItem of exampleModules) {
+    const moduleType = typeMap.get(moduleItem.typeName);
+    if (!moduleType) {
+      throw new Error(`Missing module type: ${moduleItem.typeName}`);
+    }
+
+    const moduleSlug = slugify(moduleItem.name);
+
     await prisma.module.create({
       data: {
-        visible: vis[randomNumber] as Visibility,
-        name: moduleName,
-        part: handleBookPart(randomType.name),
-        typeId: randomType?.id ?? defaultType!.id,
-        theme: randomTheme,
-        createdAt: faker.date.past(),
-        updatedAt: faker.date.recent(),
+        id: moduleItem.id,
+        visible: Visibility.PUBLIC,
+        name: moduleItem.name,
+        part: moduleItem.part,
+        typeId: moduleType.id,
+        theme: moduleItem.theme,
         files: {
           create: [
             {
-              name: "file_" + faker.system.fileName({ extensionCount: 0 }) + '.pdf',
+              id: `${moduleItem.id}-pdf`,
+              name: `file_${moduleSlug}.pdf`,
               size: 1,
-              src: getMockPdfUrl(),
-              type: 'PDF',
+              src: MOCK_PDF_URL,
+              type: "PDF",
             },
             {
-              name: "thumb_" + faker.system.fileName({ extensionCount: 0 }) + '.png',
+              id: `${moduleItem.id}-thumb`,
+              name: `thumb_${moduleSlug}.png`,
               size: 2,
-              src: getRandomPicsumUrl(),
-              type: 'IMAGE_PNG',
-            }
-          ]
-        }
+              src: moduleItem.thumbnail,
+              type: "IMAGE_PNG",
+            },
+          ],
+        },
       },
     });
   }
 
-  console.log('Seeded 1000 modules with associated files from mockup sources.');
+  console.log(
+    "Seeded example modules: 4 Umschlag, 4 Wochenplaner, 27 Sonstige, 4 Bindung.",
+  );
 }
 
 seed()
-  .catch((e) => {
-    console.error(e);
+  .catch((error) => {
+    console.error(error);
     process.exit(1);
   })
   .finally(() => {
