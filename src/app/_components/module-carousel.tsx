@@ -33,6 +33,8 @@ function getAccentClasses(moduleType: string): {
   bar: string;
   badge: string;
   text: string;
+  indicatorActive: string;
+  indicatorIdle: string;
 } {
   switch (moduleType.toLocaleLowerCase()) {
     case "umschlag":
@@ -40,24 +42,32 @@ function getAccentClasses(moduleType: string): {
         bar: "bg-pirrot-blue-300",
         badge: "bg-pirrot-blue-100 text-pirrot-blue-800",
         text: "text-pirrot-blue-700",
+        indicatorActive: "bg-pirrot-blue-600",
+        indicatorIdle: "bg-pirrot-blue-200 hover:bg-pirrot-blue-300",
       };
     case "wochenplaner":
       return {
         bar: "bg-pirrot-green-300",
         badge: "bg-pirrot-green-100 text-pirrot-green-800",
         text: "text-pirrot-green-700",
+        indicatorActive: "bg-pirrot-green-600",
+        indicatorIdle: "bg-pirrot-green-200 hover:bg-pirrot-green-300",
       };
     case "bindung":
       return {
         bar: "bg-warning-300",
         badge: "bg-warning-100 text-warning-800",
         text: "text-warning-800",
+        indicatorActive: "bg-warning-600",
+        indicatorIdle: "bg-warning-200 hover:bg-warning-300",
       };
     default:
       return {
         bar: "bg-pirrot-red-300",
         badge: "bg-pirrot-red-100 text-pirrot-red-700",
         text: "text-pirrot-red-600",
+        indicatorActive: "bg-pirrot-red-600",
+        indicatorIdle: "bg-pirrot-red-200 hover:bg-pirrot-red-300",
       };
   }
 }
@@ -117,6 +127,10 @@ export default function ModuleCarousel(props: ModuleCarouselProps) {
 
   if (props.items.length === 0) return null;
 
+  const carouselAccent = getAccentClasses(
+    props.items[selectedIndex]?.type ?? props.items[0]?.type ?? "",
+  );
+
   return (
     <>
       <Modal selector="modal-hook" show={previewModule !== null}>
@@ -147,8 +161,6 @@ export default function ModuleCarousel(props: ModuleCarouselProps) {
       </Modal>
 
       <section className="content-card overflow-hidden p-3">
-
-
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex max-w-full gap-2 overflow-x-auto py-1">
             {props.items.map((item, index) => (
@@ -156,10 +168,11 @@ export default function ModuleCarousel(props: ModuleCarouselProps) {
                 key={item.id}
                 type="button"
                 onClick={() => scrollTo(index)}
-                className={`h-2.5 shrink-0 rounded-full transition-all ${selectedIndex === index
-                  ? "bg-pirrot-blue-600 w-8"
-                  : "bg-pirrot-blue-200 hover:bg-pirrot-blue-300 w-2.5"
-                  }`}
+                className={`h-2.5 shrink-0 rounded-full transition-all ${
+                  selectedIndex === index
+                    ? `${carouselAccent.indicatorActive} w-8`
+                    : `${carouselAccent.indicatorIdle} w-2.5`
+                }`}
                 aria-label={`Zu Modul ${index + 1}`}
               />
             ))}
@@ -308,11 +321,13 @@ export default function ModuleCarousel(props: ModuleCarouselProps) {
                                 type: item.type,
                               })
                             }
-                            className={`flex items-center justify-between gap-2 p-3 ${selected ? "btn-soft" : "btn-solid"
-                              } ${disabledState.disabled
+                            className={`flex items-center justify-between gap-2 p-3 ${
+                              selected ? "btn-soft" : "btn-solid"
+                            } ${
+                              disabledState.disabled
                                 ? "cursor-not-allowed opacity-60"
                                 : ""
-                              }`}
+                            }`}
                           >
                             {selected ? (
                               <>

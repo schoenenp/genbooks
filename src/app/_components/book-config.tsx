@@ -231,6 +231,9 @@ const STEP_ACCENTS: Record<ConfigStepId, string> = {
   CHECKOUT: "text-info-900",
 };
 
+const STICKY_STEP_HEADER_TOP_OFFSET_PX = 8;
+const CHECKOUT_PREVIEW_STICKY_GAP_PX = 16;
+
 function getBindingRuleKey(
   moduleItem: Pick<AvailableModule, "theme" | "name">,
 ): string {
@@ -346,6 +349,26 @@ function getStepBucket(step: ConfigStepId): ConfigModuleBucket | null {
     case "BINDING":
       return "BINDING";
     case "CHECKOUT":
+      return null;
+  }
+}
+
+function isAutoAdvanceStep(step: ConfigStepId): boolean {
+  return step === "COVER" || step === "PLANNER" || step === "BINDING";
+}
+
+function getAutoAdvanceStepForModule(
+  step: ConfigStepId,
+  moduleItem: Pick<AvailableModule, "type" | "part">,
+): ConfigStepId | null {
+  switch (step) {
+    case "COVER":
+      return isCoverModuleLike(moduleItem) ? "COVER" : null;
+    case "PLANNER":
+      return isPlannerModuleLike(moduleItem) ? "PLANNER" : null;
+    case "BINDING":
+      return isBindingModuleLike(moduleItem) ? "BINDING" : null;
+    default:
       return null;
   }
 }
@@ -477,6 +500,8 @@ export default function BookConfig(props: {
 
   const [searchFilterValue, setSearchFilterValue] = useState("");
   const [currentStep, setCurrentStep] = useState<ConfigStepId>("COVER");
+  const [pendingAutoAdvanceStep, setPendingAutoAdvanceStep] =
+    useState<ConfigStepId | null>(null);
   const [moduleColorMap, setModuleColorMap] = useState<
     Map<ModuleId, ColorCode>
   >(() => {
@@ -508,6 +533,12 @@ export default function BookConfig(props: {
   const [customCoverFile, setCustomCoverFile] = useState<File | null>(null);
   const [isUploadingCustomCover, setIsUploadingCustomCover] = useState(false);
   const [customCoverUploadVersion, setCustomCoverUploadVersion] = useState(0);
+  const [checkoutPreviewStickyTop, setCheckoutPreviewStickyTop] = useState(
+    STICKY_STEP_HEADER_TOP_OFFSET_PX + CHECKOUT_PREVIEW_STICKY_GAP_PX,
+  );
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  const stickyStepHeaderRef = useRef<HTMLDivElement>(null);
+  const prepareCheckoutStepRef = useRef<(() => Promise<void>) | null>(null);
   const calcRequestIdRef = useRef(0);
   const previousCalculationRef = useRef<CalculationSnapshot | null>(null);
 
@@ -548,6 +579,49 @@ export default function BookConfig(props: {
     }, 2600);
     return () => window.clearTimeout(timeout);
   }, [liveChangeNotice]);
+
+  useEffect(() => {
+    mainContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [currentStep]);
+
+  useEffect(() => {
+    const updateStickyOffset = () => {
+      const headerHeight =
+        stickyStepHeaderRef.current?.getBoundingClientRect().height ?? 0;
+      setCheckoutPreviewStickyTop(
+        Math.ceil(headerHeight) +
+          STICKY_STEP_HEADER_TOP_OFFSET_PX +
+          CHECKOUT_PREVIEW_STICKY_GAP_PX,
+      );
+    };
+
+    updateStickyOffset();
+    window.addEventListener("resize", updateStickyOffset);
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined" && stickyStepHeaderRef.current
+        ? new ResizeObserver(updateStickyOffset)
+        : null;
+    if (resizeObserver && stickyStepHeaderRef.current) {
+      resizeObserver.observe(stickyStepHeaderRef.current);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateStickyOffset);
+      resizeObserver?.disconnect();
+    };
+  }, [currentStep]);
+
+  const activateStep = useCallback(
+    (stepId: ConfigStepId) => {
+      if (stepId !== currentStep) {
+        setSearchFilterValue("");
+        setOnlyPickedModules(false);
+      }
+      setCurrentStep(stepId);
+    },
+    [currentStep, setOnlyPickedModules],
+  );
 
   const allModules = useMemo<AvailableModule[]>(
     () => modules as AvailableModule[],
@@ -893,7 +967,8 @@ export default function BookConfig(props: {
         ...removeModuleFromBuckets(prev, createdModule.id),
         COVER: [createdModule.id],
       }));
-      setCurrentStep("COVER");
+      activateStep("COVER");
+      setPendingAutoAdvanceStep("COVER");
       setIsBookInfoOpen(true);
       announceChange(
         "Bild-Umschlag erstellt und als aktiver Umschlag ausgewählt.",
@@ -1135,15 +1210,15 @@ export default function BookConfig(props: {
 
     const result = usePreviewMode
       ? await processPdfModulesPreview(
-        pdfBookDetails,
-        pdfModulesForSelection,
-        options,
-      )
+          pdfBookDetails,
+          pdfModulesForSelection,
+          options,
+        )
       : await processPdfModules(
-        pdfBookDetails,
-        pdfModulesForSelection,
-        options,
-      );
+          pdfBookDetails,
+          pdfModulesForSelection,
+          options,
+        );
 
     const blob = new Blob([result.pdfFile as BlobPart], {
       type: "application/pdf",
@@ -1173,7 +1248,7 @@ export default function BookConfig(props: {
       setIsMakingPreview(true);
       await generateCheckoutPreview(false);
       await handleSaveConfig();
-      setCurrentStep("CHECKOUT");
+      activateStep("CHECKOUT");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const warning = handleWarningText(message);
@@ -1305,6 +1380,11 @@ export default function BookConfig(props: {
       return;
     }
 
+    const autoAdvanceStep = getAutoAdvanceStepForModule(
+      currentStep,
+      pickedModule,
+    );
+
     setPickedModules((prev) => {
       const next = removeModuleFromBuckets(prev, pickedModule.id);
 
@@ -1346,6 +1426,10 @@ export default function BookConfig(props: {
     }
     if (modalId === "binding-overflow") {
       setModalId(undefined);
+    }
+
+    if (autoAdvanceStep) {
+      setPendingAutoAdvanceStep(autoAdvanceStep);
     }
 
     setIsBookInfoOpen(true);
@@ -1412,7 +1496,7 @@ export default function BookConfig(props: {
       await prepareCheckoutStep();
       return;
     }
-    setCurrentStep(stepId);
+    activateStep(stepId);
   }
 
   async function handleNextStep() {
@@ -1430,8 +1514,61 @@ export default function BookConfig(props: {
 
   function handlePreviousStep() {
     if (currentStepIndex <= 0) return;
-    setCurrentStep(CONFIG_STEP_ORDER[currentStepIndex - 1]!);
+    activateStep(CONFIG_STEP_ORDER[currentStepIndex - 1]!);
   }
+
+  prepareCheckoutStepRef.current = prepareCheckoutStep;
+
+  useEffect(() => {
+    if (!pendingAutoAdvanceStep) return;
+
+    if (
+      currentStep !== pendingAutoAdvanceStep ||
+      !isAutoAdvanceStep(pendingAutoAdvanceStep)
+    ) {
+      setPendingAutoAdvanceStep(null);
+      return;
+    }
+
+    const isReady =
+      pendingAutoAdvanceStep === "COVER"
+        ? completionStatus.hasCoverModule
+        : pendingAutoAdvanceStep === "PLANNER"
+          ? completionStatus.hasPlannerModule
+          : isConfigComplete;
+
+    if (!isReady || isMakingPreview) return;
+
+    const nextStepIndex = CONFIG_STEP_ORDER.indexOf(pendingAutoAdvanceStep) + 1;
+    const nextStep = CONFIG_STEP_ORDER[nextStepIndex];
+
+    if (!nextStep) {
+      setPendingAutoAdvanceStep(null);
+      return;
+    }
+
+    const timeout = window.setTimeout(
+      () => {
+        setPendingAutoAdvanceStep(null);
+        if (nextStep === "CHECKOUT") {
+          void prepareCheckoutStepRef.current?.();
+          return;
+        }
+        activateStep(nextStep);
+      },
+      pendingAutoAdvanceStep === "BINDING" ? 500 : 420,
+    );
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    activateStep,
+    completionStatus.hasCoverModule,
+    completionStatus.hasPlannerModule,
+    currentStep,
+    isConfigComplete,
+    isMakingPreview,
+    pendingAutoAdvanceStep,
+  ]);
 
   function handleConfigWarning(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
@@ -1507,18 +1644,18 @@ export default function BookConfig(props: {
               initialFormState={
                 existingBook
                   ? {
-                    id: existingBook.id,
-                    name: existingBook.bookTitle,
-                    sub: existingBook.subTitle,
-                    country: existingBook.country,
-                    region: existingBook.region,
-                    period: {
-                      start: existingBook.planStart
-                        .toISOString()
-                        .slice(0, 16),
-                      end: existingBook.planEnd?.toISOString().slice(0, 16),
-                    },
-                  }
+                      id: existingBook.id,
+                      name: existingBook.bookTitle,
+                      sub: existingBook.subTitle,
+                      country: existingBook.country,
+                      region: existingBook.region,
+                      period: {
+                        start: existingBook.planStart
+                          .toISOString()
+                          .slice(0, 16),
+                        end: existingBook.planEnd?.toISOString().slice(0, 16),
+                      },
+                    }
                   : undefined
               }
             />
@@ -1803,7 +1940,7 @@ export default function BookConfig(props: {
   };
   const partnerCampaignExpiresAt =
     existingBook.sourceType === "PARTNER_TEMPLATE" &&
-      partnerBookMeta.partnerCampaignExpiresAt
+    partnerBookMeta.partnerCampaignExpiresAt
       ? new Date(partnerBookMeta.partnerCampaignExpiresAt)
       : null;
   const hasPartnerOrderBeenSubmitted =
@@ -1858,6 +1995,12 @@ export default function BookConfig(props: {
                 <p className="text-info-800 text-sm">
                   {currentStepConfig.desc}
                 </p>
+                <div className="field-shell flex items-start gap-2 p-2 text-sm">
+                  <InfoIcon
+                    className={`mt-0.5 size-4 shrink-0 ${STEP_ACCENTS[currentStep]}`}
+                  />
+                  <p className="text-info-800">{currentStepConfig.hint}</p>
+                </div>
               </div>
 
               {currentStep !== "CHECKOUT" ? (
@@ -1922,7 +2065,10 @@ export default function BookConfig(props: {
           ) : null}
         </div>
 
-        <div className="flex w-full max-w-screen-2xl flex-[5] flex-col gap-8 overflow-y-auto">
+        <div
+          ref={mainContentRef}
+          className="flex w-full max-w-screen-2xl flex-[5] flex-col gap-8 overflow-y-auto"
+        >
           <div className="flex w-full flex-col gap-8 p-2 lg:p-4">
             {showPartnerTemplateBanner ? (
               <div className="bg-pirrot-green-100 border-pirrot-green-300 flex flex-col items-start justify-between gap-4 rounded-lg border p-4 sm:flex-row sm:items-center">
@@ -1946,7 +2092,7 @@ export default function BookConfig(props: {
               </div>
             ) : null}
 
-            <div className="content-card sticky top-2 z-[59] flex w-full flex-col gap-4 p-3">
+            <div className="content-card flex w-full flex-col gap-4 p-3">
               <div className="pb-1">
                 <Link
                   href="/"
@@ -1995,8 +2141,13 @@ export default function BookConfig(props: {
               </div>
 
               <hr className="w-full rounded-full border border-white/50" />
+            </div>
 
-              <div className="flex gap-2 overflow-x-auto py-2">
+            <div
+              ref={stickyStepHeaderRef}
+              className="content-card sticky top-2 z-[59] flex w-full flex-col gap-2 p-2"
+            >
+              <div className="flex gap-2 overflow-x-auto px-1 pt-2 pb-2">
                 {configSteps.map((step, index) => {
                   const isCurrentStep = step.id === currentStep;
                   const isComplete = isStepComplete(step.id);
@@ -2008,12 +2159,14 @@ export default function BookConfig(props: {
                       type="button"
                       disabled={!isAccessible || isMakingPreview}
                       onClick={() => void handleStepChange(step.id)}
-                      className={`min-w-48 rounded-[1.1rem] border px-4 py-3 text-left transition ${isCurrentStep
-                        ? `${getStepThemeClasses(step.id)} bg-white shadow-md`
-                        : isComplete
-                          ? "border-pirrot-green-300 bg-pirrot-green-100/60 shadow-sm"
-                          : `field-shell ${getStepThemeClasses(step.id)}`
-                        } ${!isAccessible ? "cursor-not-allowed opacity-50" : "hover:-translate-y-0.5 hover:shadow-md"}`}
+                      title={step.desc}
+                      className={`min-w-36 rounded-xl border px-3 py-2 text-left transition ${
+                        isCurrentStep
+                          ? `${getStepThemeClasses(step.id)} bg-white shadow-md`
+                          : isComplete
+                            ? "border-pirrot-green-300 bg-pirrot-green-100/60 shadow-sm"
+                            : `field-shell ${getStepThemeClasses(step.id)}`
+                      } ${!isAccessible ? "cursor-not-allowed opacity-50" : "hover:-translate-y-0.5 hover:shadow-md"}`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="field-shell inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-bold tracking-wide uppercase">
@@ -2027,14 +2180,24 @@ export default function BookConfig(props: {
                         ) : null}
                       </div>
                       <div
-                        className={`mt-2 font-bold ${STEP_ACCENTS[step.id]}`}
+                        className={`mt-1 truncate text-sm font-bold ${STEP_ACCENTS[step.id]}`}
                       >
                         {step.title}
                       </div>
-                      <p className="text-info-800 mt-1 text-xs">{step.desc}</p>
                     </button>
                   );
                 })}
+              </div>
+
+              <div
+                className={`field-shell flex items-center gap-2 px-3 py-2 ${getStepThemeClasses(currentStep)}`}
+              >
+                <InfoIcon
+                  className={`size-4 shrink-0 ${STEP_ACCENTS[currentStep]}`}
+                />
+                <p className="text-info-800 min-w-0 text-sm leading-snug">
+                  {currentStepConfig.hint}
+                </p>
               </div>
             </div>
 
@@ -2330,12 +2493,15 @@ export default function BookConfig(props: {
                         quantity={orderAmount}
                         format={pickedFormat}
                         partnerToken={partnerToken}
-                        onAbortForm={() => setCurrentStep("BINDING")}
+                        onAbortForm={() => activateStep("BINDING")}
                       />
                     </div>
                   </div>
 
-                  <div className="content-card flex max-h-[70vh] lg:sticky lg:top-80 flex-col gap-3 p-4">
+                  <div
+                    className="content-card flex max-h-[70vh] flex-col gap-3 p-4 lg:sticky"
+                    style={{ top: checkoutPreviewStickyTop }}
+                  >
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="text-xl font-bold">Druckvorschau</h3>
                       {isRefreshingPreview ? (
@@ -2354,7 +2520,7 @@ export default function BookConfig(props: {
                               title="PDF Preview"
                               width="100%"
                               height="100%"
-                              className="border-info-950/5 w-full aspect-5/7 border"
+                              className="border-info-950/5 aspect-5/7 w-full border"
                             />
                           </div>
                         )}
