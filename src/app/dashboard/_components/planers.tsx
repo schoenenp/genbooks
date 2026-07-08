@@ -6,6 +6,7 @@ import {
   ClipboardCopy,
   LoaderCircle,
   Mail,
+  PlusIcon,
   Send,
   TrashIcon,
 } from "lucide-react";
@@ -347,6 +348,186 @@ export default function PlanerSection() {
           </p>
         ) : null}
       </div>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+        <Link
+          href="/"
+          aria-label="Neuen Planer erstellen"
+          title="Neuen Planer erstellen"
+          className="content-card text-pirrot-blue-500 hover:text-pirrot-blue-700 flex min-h-48 cursor-pointer items-center justify-center p-1"
+        >
+          <PlusIcon className="size-8" />
+        </Link>
+        {userBooks.map((book, index) => {
+          const isDeletingThisBook =
+            deleteBook.isPending && pendingDeleteBookId === book.id;
+          const isTogglingThisBook =
+            toggleTemplate.isPending && pendingToggleBookId === book.id;
+          const isCreatingShareLink =
+            createShareLink.isPending && pendingShareBookId === book.id;
+          const isSendingInvite =
+            sendTemplateInvite.isPending && pendingInviteBookId === book.id;
+          const shareLink = shareLinksByBookId[book.id] ?? "";
+          const inviteEmail = inviteEmailsByBookId[book.id] ?? "";
+          const shareFeedback = shareFeedbackByBookId[book.id];
+          return (
+            <div
+              className="field-shell stagger-item flex min-h-48 flex-col p-3"
+              key={book.id}
+              style={{ animationDelay: `${(index + 1) * 60}ms` }}
+            >
+              <Link
+                className="text-info-900 hover:text-pirrot-blue-700 font-bold"
+                href={`/config?bookId=${book.id}`}
+              >
+                {book.name}
+              </Link>
+
+              {/* Template Toggle */}
+              {isStaff && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-pirrot-blue-950 text-xs font-bold uppercase">
+                    Template
+                  </span>
+                  <ToggleSwitch
+                    /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+                    checked={(book as any).isTemplate}
+                    /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+                    onChange={(checked) => handleToggle(book.id, checked)}
+                    disabled={isTogglingThisBook}
+                  />
+                  {isTogglingThisBook && (
+                    <LoaderCircle className="text-info-700 size-4 animate-spin" />
+                  )}
+                </div>
+              )}
+
+              {/* Public Toggle - only show for templates */}
+              {isStaff && book.isTemplate && (
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="text-pirrot-blue-950 text-xs font-bold uppercase">
+                    Öffentlich
+                  </span>
+                  <ToggleSwitch
+                    /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+                    checked={(book as any).isPublic}
+                    /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
+                    onChange={(checked) => handleTogglePublic(book.id, checked)}
+                    disabled={isTogglingThisBook}
+                  />
+                  {isTogglingThisBook && (
+                    <LoaderCircle className="text-info-700 size-4 animate-spin" />
+                  )}
+                </div>
+              )}
+
+              {isStaff && book.isTemplate && (
+                <div className="border-pirrot-blue-300/30 bg-pirrot-blue-50/40 mt-3 flex flex-col gap-2 rounded border p-2">
+                  <p className="text-pirrot-blue-950 text-xs font-bold uppercase">
+                    Teilen
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      createShareLink.mutate({ templateId: book.id })
+                    }
+                    disabled={isCreatingShareLink}
+                    className="btn-soft inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs uppercase disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isCreatingShareLink ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : (
+                      <ClipboardCopy className="size-4" />
+                    )}
+                    Link erstellen
+                  </button>
+                  {shareLink ? (
+                    <div className="flex min-w-0 items-center gap-2">
+                      <input
+                        type="text"
+                        value={shareLink}
+                        readOnly
+                        className="field-shell min-w-0 flex-1 px-2 py-1 text-xs"
+                        aria-label="Template-Link"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void copyShareLink(book.id, shareLink)}
+                        className="btn-soft inline-flex size-9 shrink-0 items-center justify-center rounded-md"
+                        aria-label="Template-Link kopieren"
+                        title="Template-Link kopieren"
+                      >
+                        <ClipboardCopy className="size-4" />
+                      </button>
+                    </div>
+                  ) : null}
+                  <form
+                    onSubmit={(event) => handleSendInvite(event, book.id)}
+                    className="flex min-w-0 flex-col gap-2"
+                  >
+                    <label
+                      htmlFor={`template-invite-${book.id}`}
+                      className="text-pirrot-blue-950 text-xs font-semibold"
+                    >
+                      Einladung per E-Mail
+                    </label>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="relative min-w-0 flex-1">
+                        <Mail className="text-info-700 absolute top-1/2 left-2 size-4 -translate-y-1/2" />
+                        <input
+                          id={`template-invite-${book.id}`}
+                          name="email"
+                          type="email"
+                          value={inviteEmail}
+                          onChange={(event) =>
+                            updateInviteEmail(book.id, event.target.value)
+                          }
+                          placeholder="email@schule.de"
+                          className="field-shell w-full min-w-0 py-2 pr-2 pl-8 text-xs"
+                          required
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isSendingInvite || !inviteEmail.trim()}
+                        className="btn-soft inline-flex size-9 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label="Einladung senden"
+                        title="Einladung senden"
+                      >
+                        {isSendingInvite ? (
+                          <LoaderCircle className="size-4 animate-spin" />
+                        ) : (
+                          <Send className="size-4" />
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                  {shareFeedback ? (
+                    <p className="text-info-700 text-xs">{shareFeedback}</p>
+                  ) : null}
+                </div>
+              )}
+
+              <div className="mt-auto flex gap-2">
+                <Link
+                  className="btn-soft flex items-center justify-center rounded-md px-3 text-xs uppercase"
+                  href={`/config?bookId=${book.id}`}
+                >
+                  Bearbeiten
+                </Link>
+                <button
+                  type="button"
+                  disabled={isDeletingThisBook}
+                  id={book.id}
+                  onClick={handleDeleteBook}
+                  className="btn-soft cursor-pointer rounded-md px-3 py-1 text-xs uppercase"
+                >
+                  {isDeletingThisBook ? <LoadingSpinner /> : <TrashIcon />}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
       {userBooks.length === 0 ? (
         <DashboardEmptyState
           icon={BookOpenText}
@@ -355,182 +536,7 @@ export default function PlanerSection() {
           actionHref="/"
           actionLabel="Planer erstellen"
         />
-      ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          {userBooks.map((book, index) => {
-            const isDeletingThisBook =
-              deleteBook.isPending && pendingDeleteBookId === book.id;
-            const isTogglingThisBook =
-              toggleTemplate.isPending && pendingToggleBookId === book.id;
-            const isCreatingShareLink =
-              createShareLink.isPending && pendingShareBookId === book.id;
-            const isSendingInvite =
-              sendTemplateInvite.isPending && pendingInviteBookId === book.id;
-            const shareLink = shareLinksByBookId[book.id] ?? "";
-            const inviteEmail = inviteEmailsByBookId[book.id] ?? "";
-            const shareFeedback = shareFeedbackByBookId[book.id];
-            return (
-              <div
-                className="field-shell stagger-item flex min-h-48 flex-col p-3"
-                key={book.id}
-                style={{ animationDelay: `${index * 60}ms` }}
-              >
-                <Link
-                  className="text-info-900 hover:text-pirrot-blue-700 font-bold"
-                  href={`/config?bookId=${book.id}`}
-                >
-                  {book.name}
-                </Link>
-
-                {/* Template Toggle */}
-                {isStaff && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-pirrot-blue-950 text-xs font-bold uppercase">
-                      Template
-                    </span>
-                    <ToggleSwitch
-                      /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
-                      checked={(book as any).isTemplate}
-                      /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
-                      onChange={(checked) => handleToggle(book.id, checked)}
-                      disabled={isTogglingThisBook}
-                    />
-                    {isTogglingThisBook && (
-                      <LoaderCircle className="text-info-700 size-4 animate-spin" />
-                    )}
-                  </div>
-                )}
-
-                {/* Public Toggle - only show for templates */}
-                {isStaff && book.isTemplate && (
-                  <div className="mt-1 flex items-center gap-2">
-                    <span className="text-pirrot-blue-950 text-xs font-bold uppercase">
-                      Öffentlich
-                    </span>
-                    <ToggleSwitch
-                      /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
-                      checked={(book as any).isPublic}
-                      /* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment */
-                      onChange={(checked) =>
-                        handleTogglePublic(book.id, checked)
-                      }
-                      disabled={isTogglingThisBook}
-                    />
-                    {isTogglingThisBook && (
-                      <LoaderCircle className="text-info-700 size-4 animate-spin" />
-                    )}
-                  </div>
-                )}
-
-                {isStaff && book.isTemplate && (
-                  <div className="border-pirrot-blue-300/30 bg-pirrot-blue-50/40 mt-3 flex flex-col gap-2 rounded border p-2">
-                    <p className="text-pirrot-blue-950 text-xs font-bold uppercase">
-                      Teilen
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        createShareLink.mutate({ templateId: book.id })
-                      }
-                      disabled={isCreatingShareLink}
-                      className="btn-soft inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs uppercase disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isCreatingShareLink ? (
-                        <LoaderCircle className="size-4 animate-spin" />
-                      ) : (
-                        <ClipboardCopy className="size-4" />
-                      )}
-                      Link erstellen
-                    </button>
-                    {shareLink ? (
-                      <div className="flex min-w-0 items-center gap-2">
-                        <input
-                          type="text"
-                          value={shareLink}
-                          readOnly
-                          className="field-shell min-w-0 flex-1 px-2 py-1 text-xs"
-                          aria-label="Template-Link"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void copyShareLink(book.id, shareLink)}
-                          className="btn-soft inline-flex size-9 shrink-0 items-center justify-center rounded-md"
-                          aria-label="Template-Link kopieren"
-                          title="Template-Link kopieren"
-                        >
-                          <ClipboardCopy className="size-4" />
-                        </button>
-                      </div>
-                    ) : null}
-                    <form
-                      onSubmit={(event) => handleSendInvite(event, book.id)}
-                      className="flex min-w-0 flex-col gap-2"
-                    >
-                      <label
-                        htmlFor={`template-invite-${book.id}`}
-                        className="text-pirrot-blue-950 text-xs font-semibold"
-                      >
-                        Einladung per E-Mail
-                      </label>
-                      <div className="flex min-w-0 items-center gap-2">
-                        <div className="relative min-w-0 flex-1">
-                          <Mail className="text-info-700 absolute top-1/2 left-2 size-4 -translate-y-1/2" />
-                          <input
-                            id={`template-invite-${book.id}`}
-                            name="email"
-                            type="email"
-                            value={inviteEmail}
-                            onChange={(event) =>
-                              updateInviteEmail(book.id, event.target.value)
-                            }
-                            placeholder="email@schule.de"
-                            className="field-shell w-full min-w-0 py-2 pr-2 pl-8 text-xs"
-                            required
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          disabled={isSendingInvite || !inviteEmail.trim()}
-                          className="btn-soft inline-flex size-9 shrink-0 items-center justify-center rounded-md disabled:cursor-not-allowed disabled:opacity-60"
-                          aria-label="Einladung senden"
-                          title="Einladung senden"
-                        >
-                          {isSendingInvite ? (
-                            <LoaderCircle className="size-4 animate-spin" />
-                          ) : (
-                            <Send className="size-4" />
-                          )}
-                        </button>
-                      </div>
-                    </form>
-                    {shareFeedback ? (
-                      <p className="text-info-700 text-xs">{shareFeedback}</p>
-                    ) : null}
-                  </div>
-                )}
-
-                <div className="mt-auto flex gap-2">
-                  <Link
-                    className="btn-soft flex items-center justify-center rounded-md px-3 text-xs uppercase"
-                    href={`/config?bookId=${book.id}`}
-                  >
-                    Bearbeiten
-                  </Link>
-                  <button
-                    type="button"
-                    disabled={isDeletingThisBook}
-                    id={book.id}
-                    onClick={handleDeleteBook}
-                    className="btn-soft cursor-pointer rounded-md px-3 py-1 text-xs uppercase"
-                  >
-                    {isDeletingThisBook ? <LoadingSpinner /> : <TrashIcon />}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }
