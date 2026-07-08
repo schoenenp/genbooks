@@ -189,15 +189,3 @@ function getFileTypeFromBuffer(buffer: Buffer): string | null {
 
   return null; // Unknown file type
 }
-
-export function getBase64(file: string) {
-  const base64Content = file.includes(";base64,")
-    ? file.split(";base64,")[1]
-    : file;
-
-  if (!base64Content) {
-    throw new Error("Invalid Base64 string: no content found");
-  }
-
-  return base64Content;
-}

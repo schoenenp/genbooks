@@ -54,7 +54,7 @@ const pageRules = [
 const quickRules = [
   "Formularfelder exakt platzieren",
   "Feldnamen sauber benennen",
-  "PDF möglichst unter 5 MB halten",
+  "PDF möglichst unter 10 MB halten",
 ] as const;
 
 const toolCards = [
@@ -171,7 +171,7 @@ const checklist = [
   "Keine Doppelseiten verwenden, Module nur als Einzelseiten anlegen",
   "Modulformat 216 x 303 mm verwenden, also DIN A4 plus 3 mm Anschnitt je Seite",
   "Vor dem Upload testen, ob das PDF wirklich interaktive Formularfelder enthält",
-  "PDF-Dateien möglichst unter 5 MB halten, damit der Upload stabil bleibt",
+  "PDF-Dateien möglichst unter 10 MB halten, damit der Upload stabil bleibt",
   "Im Dashboard nach dem Upload die erkannten Tags und die PDF-Vorschau prüfen",
 ] as const;
 
@@ -620,8 +620,8 @@ export default async function ModuleDocsPage() {
             </p>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               <strong>Hinweis zur Upload-Größe:</strong> Halten Sie Ihre PDFs
-              möglichst unter 5 MB. Größere Dateien können beim Upload
-              scheitern oder die Verarbeitung unnötig verlangsamen. Reduzieren
+              unter 10 MB. Größere Dateien werden beim Upload
+              abgelehnt. Reduzieren
               Sie eingebettete Bilder, vermeiden Sie unnötig hohe Auflösungen
               und exportieren Sie nur die tatsächlich benötigten Seiten.
             </div>
@@ -669,7 +669,7 @@ export default async function ModuleDocsPage() {
                 Upload-Hinweis
               </h3>
               <p className="text-sm text-info-700">
-                PDF-Dateien möglichst unter 5 MB halten und Bilder sauber
+                PDF-Dateien möglichst unter 10 MB halten und Bilder sauber
                 komprimieren.
               </p>
             </div>

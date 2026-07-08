@@ -1,21 +1,16 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 
-import { env } from "@/env";
-import { Naming } from "@/util/naming";
 import {
   createTRPCRouter,
   protectedProcedure,
   publicProcedure,
 } from "@/server/api/trpc";
-import { getBase64, uploadData, type FileItem } from "@/util/upload/functions";
 import {
   isThumbnailFile,
   pickCoverImageFile,
   pickModulePdfFile,
 } from "@/util/module-files";
-import { validatePDFUpload } from "@/util/pdf/functions";
-import { createCustomCoverPdf } from "@/util/pdf/custom-cover";
 import { handleBookPart } from "@/util/book/functions";
 import {
   buildModuleFeedVisibilityWhere,
@@ -23,8 +18,17 @@ import {
 } from "./module-visibility";
 
 const COVER_TYPE = "umschlag";
-const CUSTOM_COVER_FILE_PREFIX = "file_custom_cover_";
-const CUSTOM_COVER_THUMB_PREFIX = "thumb_custom_cover_";
+
+// Metadata of a file already stored via /api/module-files. Raw bytes never
+// travel through tRPC; the route handler validated and uploaded them.
+const uploadedFileInput = z.object({
+  name: z.string().nullable().optional(),
+  src: z.string(),
+  type: z.enum(["PDF", "IMAGE_PNG", "IMAGE_JPEG"]),
+  size: z.number().int().nonnegative(),
+});
+
+type UploadedFileInput = z.infer<typeof uploadedFileInput>;
 
 function normalizeType(type: string): string {
   return type.toLocaleLowerCase();
@@ -32,33 +36,6 @@ function normalizeType(type: string): string {
 
 function isCoverType(type: string): boolean {
   return normalizeType(type) === COVER_TYPE;
-}
-
-function getMimeTypeFromDataUrl(input: string): string | null {
-  const match = /^data:([^;]+);base64,/i.exec(input);
-  return match?.[1] ?? null;
-}
-
-function isImageUpload(input: string): boolean {
-  const mimeType = getMimeTypeFromDataUrl(input);
-  return mimeType?.startsWith("image/") ?? false;
-}
-
-function getUploadExtension(input: string): string {
-  const mimeType = getMimeTypeFromDataUrl(input);
-  switch (mimeType) {
-    case "image/png":
-      return "png";
-    case "image/webp":
-      return "webp";
-    case "image/gif":
-      return "gif";
-    default:
-      if (mimeType?.includes("jpeg") || mimeType?.includes("jpg")) {
-        return "jpg";
-      }
-      return "pdf";
-  }
 }
 
 function toModuleAssetSrc(src: string): string {
@@ -73,92 +50,6 @@ function getModuleThumbnailSrc(
   const previewFile = thumbnailFile ?? coverImageFile;
 
   return previewFile ? toModuleAssetSrc(previewFile.src) : "/default.png";
-}
-
-async function getCustomCoverTemplateBytes(): Promise<Uint8Array> {
-  if (!env.CUSTOM_COVER_TEMPLATE_URL) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message:
-        "Missing CUSTOM_COVER_TEMPLATE_URL for image-based custom cover modules",
-    });
-  }
-
-  const response = await fetch(env.CUSTOM_COVER_TEMPLATE_URL);
-  if (!response.ok) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Failed to fetch custom cover template: ${response.status}`,
-    });
-  }
-
-  return new Uint8Array(await response.arrayBuffer());
-}
-
-async function uploadModuleAsset(
-  base64File: string,
-  fileNamePrefix?: string,
-): Promise<FileItem> {
-  const fileBuffer = Buffer.from(getBase64(base64File), "base64");
-  const extension = getUploadExtension(base64File);
-  const uploadedFiles = await uploadData([
-    {
-      data: fileBuffer,
-      name: `${fileNamePrefix ?? ""}${Naming.file(extension)}`,
-    },
-  ]);
-
-  const uploadedFile = uploadedFiles[0];
-  if (!uploadedFile) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "File upload failed",
-    });
-  }
-
-  return uploadedFile;
-}
-
-async function uploadRawModuleAsset(
-  fileBuffer: Buffer,
-  extension: string,
-  fileNamePrefix: string,
-): Promise<FileItem> {
-  const uploadedFiles = await uploadData([
-    {
-      data: fileBuffer,
-      name: `${fileNamePrefix}${Naming.file(extension)}`,
-    },
-  ]);
-
-  const uploadedFile = uploadedFiles[0];
-  if (!uploadedFile) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "File upload failed",
-    });
-  }
-
-  return uploadedFile;
-}
-
-async function createCustomCoverFiles(
-  base64Image: string,
-): Promise<FileItem[]> {
-  const imageBuffer = Buffer.from(getBase64(base64Image), "base64");
-  const coverPdfBytes = await createCustomCoverPdf(
-    await getCustomCoverTemplateBytes(),
-    imageBuffer,
-  );
-
-  return [
-    await uploadRawModuleAsset(
-      Buffer.from(coverPdfBytes),
-      "pdf",
-      CUSTOM_COVER_FILE_PREFIX,
-    ),
-    await uploadModuleAsset(base64Image, CUSTOM_COVER_THUMB_PREFIX),
-  ];
 }
 
 export const moduleRouter = createTRPCRouter({
@@ -214,12 +105,13 @@ export const moduleRouter = createTRPCRouter({
       z.object({
         name: z.string(),
         type: z.string(),
-        moduleFile: z.string().min(1),
+        uploadedFile: uploadedFileInput,
+        uploadedThumbnail: uploadedFileInput.optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const { db, session } = ctx;
-      const { name, type, moduleFile } = input;
+      const { name, type, uploadedFile, uploadedThumbnail } = input;
       const currentUser = await db.user.findUnique({
         where: {
           id: session.user.id,
@@ -230,26 +122,9 @@ export const moduleRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
       }
 
-      const bookPart = handleBookPart(type);
-      const filesToCreate: FileItem[] = [];
-      const isImageBasedCover = isCoverType(type) && isImageUpload(moduleFile);
-
-      if (isImageBasedCover) {
-        filesToCreate.push(...(await createCustomCoverFiles(moduleFile)));
-      } else {
-        const { valid, message } = await validatePDFUpload(
-          moduleFile,
-          bookPart,
-        );
-
-        if (!valid) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: message ?? "Invalid PDF upload",
-          });
-        }
-
-        filesToCreate.push(await uploadModuleAsset(moduleFile));
+      const filesToCreate: UploadedFileInput[] = [uploadedFile];
+      if (uploadedThumbnail) {
+        filesToCreate.push(uploadedThumbnail);
       }
 
       const customModuleType =
@@ -299,12 +174,14 @@ export const moduleRouter = createTRPCRouter({
         id: z.string(),
         name: z.string().min(1).max(40),
         type: z.string(),
-        file: z.string().optional(),
+        uploadedFile: uploadedFileInput.optional(),
+        uploadedThumbnail: uploadedFileInput.optional(),
         tagIds: z.number().array().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { id, name, type, file: base64File, tagIds } = input;
+      const { id, name, type, uploadedFile, uploadedThumbnail, tagIds } =
+        input;
       const existingModule = await ctx.db.module.findFirst({
         where: {
           id,
@@ -352,16 +229,13 @@ export const moduleRouter = createTRPCRouter({
       }
 
       const filesToDisconnect: Array<{ id: string }> = [];
-      const filesToCreate: FileItem[] = [];
+      const filesToCreate: UploadedFileInput[] = [];
       const existingPdfFile = pickModulePdfFile(existingModule.files);
       const existingCoverImageFile = pickCoverImageFile(existingModule.files);
       const existingThumbnailFiles =
         existingModule.files.filter(isThumbnailFile);
-      const isImageBasedCover = Boolean(
-        base64File && isCoverType(type) && isImageUpload(base64File),
-      );
 
-      if (!isCoverType(type) && existingCoverImageFile && !base64File) {
+      if (!isCoverType(type) && existingCoverImageFile && !uploadedFile) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message:
@@ -369,29 +243,19 @@ export const moduleRouter = createTRPCRouter({
         });
       }
 
-      if (base64File && base64File !== "") {
-        if (isImageBasedCover) {
-          if (existingCoverImageFile) {
-            filesToDisconnect.push({ id: existingCoverImageFile.id });
-          }
-          if (existingPdfFile) {
-            filesToDisconnect.push({ id: existingPdfFile.id });
-          }
-          filesToDisconnect.push(
-            ...existingThumbnailFiles.map((file) => ({ id: file.id })),
-          );
-          filesToCreate.push(...(await createCustomCoverFiles(base64File)));
-        } else {
-          if (existingPdfFile) {
-            filesToDisconnect.push({ id: existingPdfFile.id });
-          }
-          if (existingCoverImageFile) {
-            filesToDisconnect.push({ id: existingCoverImageFile.id });
-          }
-          filesToDisconnect.push(
-            ...existingThumbnailFiles.map((file) => ({ id: file.id })),
-          );
-          filesToCreate.push(await uploadModuleAsset(base64File));
+      if (uploadedFile) {
+        if (existingPdfFile) {
+          filesToDisconnect.push({ id: existingPdfFile.id });
+        }
+        if (existingCoverImageFile) {
+          filesToDisconnect.push({ id: existingCoverImageFile.id });
+        }
+        filesToDisconnect.push(
+          ...existingThumbnailFiles.map((file) => ({ id: file.id })),
+        );
+        filesToCreate.push(uploadedFile);
+        if (uploadedThumbnail) {
+          filesToCreate.push(uploadedThumbnail);
         }
       } else if (!isCoverType(type) && existingCoverImageFile) {
         filesToDisconnect.push({ id: existingCoverImageFile.id });

@@ -6,7 +6,8 @@ import { AlertTriangle, CircleQuestionMark, UploadCloud, XIcon } from "lucide-re
 import FileUpload from "../file-upload";
 import { api } from "@/trpc/react";
 import { useState } from "react";
-import { fileToBase64, validatePDFUpload } from "@/util/pdf/functions";
+import { validatePDFUpload } from "@/util/pdf/functions";
+import { uploadModuleFiles } from "@/util/upload/client";
 import type { BookPart } from "@prisma/client";
 import { getPageRules } from "@/util/book/functions";
 import LoadingSpinner from "@/app/_components/loading-spinner";
@@ -21,6 +22,7 @@ export default function UserModules({
   onCreated?: () => void;
 }) {
   const [moduleFormError, setModuleFormError] = useState<string | undefined>();
+  const [isUploading, setIsUploading] = useState(false);
 
   const [moduleFormState, setModuleFormState] = useState({
     name: "",
@@ -57,37 +59,51 @@ export default function UserModules({
     event.preventDefault();
     event.stopPropagation();
 
-    if (!moduleFormState.moduleFile) {
+    if (!moduleFormState.moduleFile || isUploading) {
       return;
     }
 
-    const fileToUpload = await fileToBase64(moduleFormState.moduleFile);
     const isImageBasedCover =
       moduleFormState.type.toLocaleLowerCase() === "umschlag" &&
       moduleFormState.moduleFile.type.startsWith("image/");
 
-    if (isImageBasedCover) {
-      createModule({
-        name: moduleFormState.name,
-        type: moduleFormState.type,
-        moduleFile: fileToUpload,
-      });
-      return;
+    if (!isImageBasedCover) {
+      const { valid, message } = await validatePDFUpload(
+        await moduleFormState.moduleFile.arrayBuffer(),
+        moduleFormState.type.toLocaleUpperCase() as BookPart,
+      );
+
+      if (!valid) {
+        setModuleFormError(message);
+        return;
+      }
     }
 
-    const { valid, message } = await validatePDFUpload(
-      fileToUpload,
-      moduleFormState.type.toLocaleUpperCase() as BookPart,
-    );
+    setIsUploading(true);
+    try {
+      const { file: uploadedFile, thumbnail: uploadedThumbnail } =
+        await uploadModuleFiles({
+          type: moduleFormState.type,
+          file: moduleFormState.moduleFile,
+        });
 
-    if (valid) {
+      if (!uploadedFile) {
+        setModuleFormError("Upload fehlgeschlagen");
+        return;
+      }
+
       createModule({
         name: moduleFormState.name,
         type: moduleFormState.type,
-        moduleFile: fileToUpload,
+        uploadedFile,
+        uploadedThumbnail,
       });
-    } else {
-      setModuleFormError(message);
+    } catch (error) {
+      setModuleFormError(
+        error instanceof Error ? error.message : "Upload fehlgeschlagen",
+      );
+    } finally {
+      setIsUploading(false);
     }
   }
 
@@ -108,7 +124,7 @@ export default function UserModules({
           </p>
         </div>
 
-        {moduleFormError || isPending ? (
+        {moduleFormError || isPending || isUploading ? (
           <div
             onClick={handleCloseError}
             className="content-card relative flex aspect-video w-full flex-col items-center justify-center gap-3 p-4 text-center lg:py-16"
@@ -123,7 +139,7 @@ export default function UserModules({
               </button>
             ) : null}
             {moduleFormError ? <p className="max-w-xl">{moduleFormError}</p> : null}
-            {isPending ? <LoadingSpinner /> : null}
+            {isPending || isUploading ? <LoadingSpinner /> : null}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.05fr_0.95fr]">
@@ -214,7 +230,7 @@ export default function UserModules({
                   </div>
 
                   <button
-                    disabled={isPending}
+                    disabled={isPending || isUploading}
                     type="submit"
                     className="btn-solid mt-auto px-4 py-2 disabled:opacity-30"
                   >

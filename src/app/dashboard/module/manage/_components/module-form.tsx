@@ -11,7 +11,8 @@ import FileUpload from "@/app/config/_components/file-upload";
 import { api } from "@/trpc/react";
 import { getPageRules } from "@/util/book/functions";
 import { pickCoverImageFile, pickModulePdfFile } from "@/util/module-files";
-import { urlToFile, fileToBase64, extractTextFields  } from "@/util/pdf/functions";
+import { urlToFile, extractTextFields  } from "@/util/pdf/functions";
+import { uploadModuleFiles } from "@/util/upload/client";
 
 type FileState = {
   data?: File;
@@ -223,6 +224,8 @@ export default function ModuleForm({ moduleId }: { moduleId?: string }) {
 }[]>([]);
 
   const [isTypePickerOpen, setIsTypePickerOpen] = useState(false);
+  const [submitError, setSubmitError] = useState<string | undefined>();
+  const [isUploading, setIsUploading] = useState(false);
 
   
 useEffect(() => {
@@ -306,24 +309,42 @@ function extractTagsFromFields(
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isUploading) return;
+    setSubmitError(undefined);
 
-    const [base64file] = await Promise.all([
-      file.data && file.hasChanged ? fileToBase64(file.data) : "",
-    ]);
+    setIsUploading(true);
+    try {
+      const uploadedFiles = await uploadModuleFiles({
+        type,
+        file: file.data && file.hasChanged ? file.data : undefined,
+      });
 
-    if (moduleId) {
-      await updateModule.mutateAsync({
-        id: moduleId,
-        name,
-        type,
-        file: base64file,
-      });
-    } else {
-      await createModule.mutateAsync({
-        name,
-        type,
-        moduleFile: base64file
-      });
+      if (moduleId) {
+        await updateModule.mutateAsync({
+          id: moduleId,
+          name,
+          type,
+          uploadedFile: uploadedFiles.file,
+          uploadedThumbnail: uploadedFiles.thumbnail,
+        });
+      } else {
+        if (!uploadedFiles.file) {
+          setSubmitError("Bitte laden Sie eine Moduldatei hoch.");
+          return;
+        }
+        await createModule.mutateAsync({
+          name,
+          type,
+          uploadedFile: uploadedFiles.file,
+          uploadedThumbnail: uploadedFiles.thumbnail,
+        });
+      }
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "Upload fehlgeschlagen",
+      );
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -472,6 +493,11 @@ function extractTagsFromFields(
             </div>
 
             {/* Form Actions */}
+            {submitError ? (
+              <p className="rounded border border-pirrot-red-400 bg-pirrot-red-100 p-3 text-sm text-pirrot-red-600">
+                {submitError}
+              </p>
+            ) : null}
             <div className="mt-auto flex w-full gap-2">
               <Link
                 href="/dashboard?view=module"
@@ -479,8 +505,18 @@ function extractTagsFromFields(
               >
                 Abbruch
               </Link>
-              <button type="submit" className="btn-solid w-full p-4">
-                {moduleId ? "Updaten" : "Speichern"}
+              <button
+                type="submit"
+                disabled={
+                  isUploading || createModule.isPending || updateModule.isPending
+                }
+                className="btn-solid w-full p-4 disabled:opacity-30"
+              >
+                {isUploading || createModule.isPending || updateModule.isPending
+                  ? "Speichert..."
+                  : moduleId
+                    ? "Updaten"
+                    : "Speichern"}
               </button>
             </div>
           </form>

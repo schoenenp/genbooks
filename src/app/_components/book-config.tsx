@@ -45,7 +45,7 @@ import { useBookConfig } from "@/hooks/use-book-config";
 import { ToggleSwitch } from "./toggle-switch";
 import { SearchInput } from "./search-input";
 import FileUpload from "../config/_components/file-upload";
-import { fileToBase64 } from "@/util/pdf/functions";
+import { uploadModuleFiles } from "@/util/upload/client";
 
 import { useRouter } from "next/navigation";
 import ConfigInfoForm from "./config-info-form";
@@ -955,11 +955,21 @@ export default function BookConfig(props: {
     setCustomCoverUploadError(null);
 
     try {
-      const encodedFile = await fileToBase64(customCoverFile);
+      const { file: uploadedFile, thumbnail: uploadedThumbnail } =
+        await uploadModuleFiles({
+          type: FILTER_TYPES.COVER,
+          file: customCoverFile,
+        });
+
+      if (!uploadedFile) {
+        throw new Error("Upload fehlgeschlagen");
+      }
+
       const createdModule = await createModule({
         name: `Bild Umschlag ${new Date().toISOString().slice(0, 10)}`,
         type: FILTER_TYPES.COVER,
-        moduleFile: encodedFile,
+        uploadedFile,
+        uploadedThumbnail,
       });
 
       await utils.config.init.invalidate({ bookId });

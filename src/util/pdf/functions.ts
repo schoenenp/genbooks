@@ -55,10 +55,10 @@ export const fileToBase64 = (file: File): Promise<string> => {
 
 
 export async function validatePDFUpload(
-  file: string, 
+  file: string | ArrayBuffer | Uint8Array,
   part: BookPart
-): Promise<{ 
-  valid: boolean, 
+): Promise<{
+  valid: boolean,
   message?: string
  }>{
 
