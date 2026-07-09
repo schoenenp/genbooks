@@ -4,9 +4,20 @@ import type { TagDefinition, TagContext, HandlerResult } from "../types";
 import { formatDate, generateWeekDates, getA4WithBleeding } from "../helpers";
 import { getHolidays, type DateItem } from "../../book/functions";
 import { normalizeDate } from "../helpers";
-import { convertPdfToGrayscale } from "../grayscale";
+import {
+  convertPdfToGrayscale,
+  GRAYSCALE_UPLOAD_LIMIT_BYTES,
+} from "../grayscale";
 import { convertPdfToPreviewGrayscale } from "../preview-grayscale";
 import { estimatePlannerPageCount } from "./planner-page-count";
+
+// Target size for a single grayscale upload. Every duplicated week re-embeds
+// the template's resources, so the serialized batch grows roughly linearly
+// with the week count; the headroom below the hard API limit absorbs the
+// per-week text and structural overhead on top of that estimate.
+const GRAYSCALE_BATCH_TARGET_BYTES = Math.floor(
+  GRAYSCALE_UPLOAD_LIMIT_BYTES * 0.75,
+);
 
 function formatGermanLongDate(date: Date, includeYear: boolean): string {
   const day = date.getDate().toString().padStart(2, "0");
@@ -159,14 +170,36 @@ class PlannerHandler extends BaseHandler {
       ? Math.min(totalWeeks + 1, 4) // Limit to 4 weeks in preview
       : totalWeeks + 1;
 
-    const moduleDoc = await PDFDocument.create();
+    // Split the duplicated weeks into batches small enough for the grayscale
+    // API. Every week clones the template's resources, so the template size is
+    // a reliable per-week upper bound. Only the real API path needs batching;
+    // the preview rasterizer and plain copy work on a single document.
+    const usesGrayscaleApi = isGrayscale && !previewMode;
+    const weeksPerBatch = usesGrayscaleApi
+      ? Math.max(
+          1,
+          Math.floor(
+            GRAYSCALE_BATCH_TARGET_BYTES / Math.max(1, templateBytes.byteLength),
+          ),
+        )
+      : Number.POSITIVE_INFINITY;
+
+    const batchDocs: PDFDocument[] = [];
+    let currentBatch: PDFDocument | undefined;
+    let weeksInCurrentBatch = 0;
     let workingPageCount = finalPdf.getPageCount();
 
     for (let weekIndex = 0; weekIndex < weeksToProcess; weekIndex++) {
+      if (!currentBatch || weeksInCurrentBatch >= weeksPerBatch) {
+        currentBatch = await PDFDocument.create();
+        batchDocs.push(currentBatch);
+        weeksInCurrentBatch = 0;
+      }
+
       // Add alignment page if needed (planner spreads should start on odd pages)
       if (workingPageCount % 2 === 0) {
         const { width, height } = getA4WithBleeding();
-        moduleDoc.addPage([width, height]);
+        currentBatch.addPage([width, height]);
         workingPageCount++;
       }
 
@@ -187,30 +220,49 @@ class PlannerHandler extends BaseHandler {
       this.fillTags(form, weekContext);
       form.flatten();
 
-      // Copy pages to final PDF
-      const pages = await moduleDoc.copyPages(weekDoc, weekDoc.getPageIndices());
-      pages.forEach((page) => moduleDoc.addPage(page));
+      // Copy pages to the current batch
+      const pages = await currentBatch.copyPages(
+        weekDoc,
+        weekDoc.getPageIndices(),
+      );
+      pages.forEach((page) => currentBatch!.addPage(page));
       workingPageCount += pages.length;
+      weeksInCurrentBatch++;
     }
 
-    let outputDoc = moduleDoc;
+    let outputDocs = batchDocs;
     if (isGrayscale) {
-      const moduleBytes = await moduleDoc.save();
-      const grayscaleBytes = previewMode
-        ? await convertPdfToPreviewGrayscale(moduleBytes)
-        : await convertPdfToGrayscale(moduleBytes, {
-          apiKey: grayscaleApiKey,
-        });
-      outputDoc = await PDFDocument.load(grayscaleBytes);
+      const moduleLabel = context.moduleItem.name ?? context.moduleItem.type;
+      outputDocs = await Promise.all(
+        batchDocs.map(async (batchDoc, batchIndex) => {
+          const batchBytes = await batchDoc.save();
+          const grayscaleBytes = previewMode
+            ? await convertPdfToPreviewGrayscale(batchBytes)
+            : await convertPdfToGrayscale(batchBytes, {
+                apiKey: grayscaleApiKey,
+                // The converter prefixes errors with the module name; only
+                // the batch position needs extra context here.
+                label:
+                  batchDocs.length > 1
+                    ? `${moduleLabel}, part ${batchIndex + 1}/${batchDocs.length}`
+                    : undefined,
+              });
+          return PDFDocument.load(grayscaleBytes);
+        }),
+      );
     }
 
-    const pages = await finalPdf.copyPages(
-      outputDoc,
-      outputDoc.getPageIndices(),
-    );
-    pages.forEach((page) => finalPdf.addPage(page));
+    let pagesAdded = 0;
+    for (const outputDoc of outputDocs) {
+      const pages = await finalPdf.copyPages(
+        outputDoc,
+        outputDoc.getPageIndices(),
+      );
+      pages.forEach((page) => finalPdf.addPage(page));
+      pagesAdded += pages.length;
+    }
 
-    return { pagesAdded: pages.length };
+    return { pagesAdded };
   }
 
   /**

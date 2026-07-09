@@ -688,6 +688,7 @@ export default function BookConfig(props: {
       contentModules.push({
         idx,
         id: moduleId,
+        name: moduleItem.name,
         type: moduleItem.type.toLowerCase(),
         pdfUrl: moduleItem.url,
       });
@@ -697,6 +698,7 @@ export default function BookConfig(props: {
       ...contentModules,
       {
         id: coverModule.id,
+        name: coverModule.name,
         idx: 12345,
         type: FILTER_TYPES.COVER,
         pdfUrl: coverModule.url,

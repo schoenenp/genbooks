@@ -60,68 +60,70 @@ export async function convertPdfToPreviewGrayscale(
   });
 
   const rendered = await loadingTask.promise;
-  const rebuiltDoc = await PDFDocument.create();
+  try {
+    const rebuiltDoc = await PDFDocument.create();
 
-  for (let index = 0; index < rendered.numPages; index += 1) {
-    const page = await rendered.getPage(index + 1);
-    const viewport = page.getViewport({ scale: PREVIEW_RASTER_SCALE });
+    for (let index = 0; index < rendered.numPages; index += 1) {
+      const page = await rendered.getPage(index + 1);
+      const viewport = page.getViewport({ scale: PREVIEW_RASTER_SCALE });
 
-    const sourceCanvas = document.createElement("canvas");
-    sourceCanvas.width = Math.max(1, Math.floor(viewport.width));
-    sourceCanvas.height = Math.max(1, Math.floor(viewport.height));
-    const sourceCtx = sourceCanvas.getContext("2d");
-    if (!sourceCtx) {
-      throw new Error("Failed to create preview raster context");
+      const sourceCanvas = document.createElement("canvas");
+      sourceCanvas.width = Math.max(1, Math.floor(viewport.width));
+      sourceCanvas.height = Math.max(1, Math.floor(viewport.height));
+      const sourceCtx = sourceCanvas.getContext("2d");
+      if (!sourceCtx) {
+        throw new Error("Failed to create preview raster context");
+      }
+
+      await page.render({
+        canvasContext: sourceCtx,
+        viewport,
+        canvas: sourceCanvas,
+      }).promise;
+
+      const filteredCanvas = document.createElement("canvas");
+      filteredCanvas.width = sourceCanvas.width;
+      filteredCanvas.height = sourceCanvas.height;
+      const filteredCtx = filteredCanvas.getContext("2d");
+      if (!filteredCtx) {
+        throw new Error("Failed to create filtered preview context");
+      }
+
+      filteredCtx.filter = PREVIEW_FILTER;
+      filteredCtx.drawImage(sourceCanvas, 0, 0);
+
+      const imageBytes = await canvasToJpegBytes(filteredCanvas, PREVIEW_JPEG_QUALITY);
+      const image = await rebuiltDoc.embedJpg(imageBytes);
+
+      const targetPage = rebuiltDoc.addPage([
+        Math.max(1, viewport.width),
+        Math.max(1, viewport.height),
+      ]);
+      targetPage.drawImage(image, {
+        x: 0,
+        y: 0,
+        width: targetPage.getWidth(),
+        height: targetPage.getHeight(),
+      });
+
+      page.cleanup();
     }
 
-    await page.render({
-      canvasContext: sourceCtx,
-      viewport,
-      canvas: sourceCanvas,
-    }).promise;
-
-    const filteredCanvas = document.createElement("canvas");
-    filteredCanvas.width = sourceCanvas.width;
-    filteredCanvas.height = sourceCanvas.height;
-    const filteredCtx = filteredCanvas.getContext("2d");
-    if (!filteredCtx) {
-      throw new Error("Failed to create filtered preview context");
-    }
-
-    filteredCtx.filter = PREVIEW_FILTER;
-    filteredCtx.drawImage(sourceCanvas, 0, 0);
-
-    const imageBytes = await canvasToJpegBytes(filteredCanvas, PREVIEW_JPEG_QUALITY);
-    const image = await rebuiltDoc.embedJpg(imageBytes);
-
-    const targetPage = rebuiltDoc.addPage([
-      Math.max(1, viewport.width),
-      Math.max(1, viewport.height),
-    ]);
-    targetPage.drawImage(image, {
-      x: 0,
-      y: 0,
-      width: targetPage.getWidth(),
-      height: targetPage.getHeight(),
+    return rebuiltDoc.save({
+      useObjectStreams: true,
+      addDefaultPage: false,
+      objectsPerTick: 50,
     });
-
-    page.cleanup();
+  } finally {
+    try {
+      await rendered.cleanup();
+    } catch {
+      // no-op cleanup safeguard
+    }
+    try {
+      await loadingTask.destroy();
+    } catch {
+      // no-op cleanup safeguard
+    }
   }
-
-  try {
-    await rendered.cleanup();
-  } catch {
-    // no-op cleanup safeguard
-  }
-  try {
-    await rendered.destroy();
-  } catch {
-    // no-op cleanup safeguard
-  }
-
-  return rebuiltDoc.save({
-    useObjectStreams: true,
-    addDefaultPage: false,
-    objectsPerTick: 50,
-  });
 }

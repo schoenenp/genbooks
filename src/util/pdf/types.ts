@@ -12,6 +12,8 @@ export interface PDFModule {
   idx: number;
   pdfUrl: string;
   coverImageUrl?: string;
+  /** Display name used to point at the failing module in error messages. */
+  name?: string;
 }
 
 export type BookFormat = "DIN A4" | "DIN A5";

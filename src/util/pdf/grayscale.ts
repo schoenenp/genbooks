@@ -7,8 +7,17 @@ const MAX_CONCURRENT_GRAYSCALE_REQUESTS = 3;
 const MIN_BYTES_FOR_TRANSPORT_COMPRESSION = 1_000_000;
 const TARGET_TRANSPORT_COMPRESSION_RATIO = 0.5;
 
+/** Hard upload limit enforced by the ghost-api (rejects anything above 20 MiB). */
+export const GRAYSCALE_UPLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
+
+export function formatMegabytes(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 type GrayscaleOptions = {
   apiKey?: string;
+  /** Human-readable source (e.g. module name / batch part) included in error messages. */
+  label?: string;
 };
 
 const grayscaleCache = new Map<string, Promise<Uint8Array>>();
@@ -197,6 +206,14 @@ export async function convertPdfToGrayscale(
     const requestStartAt = nowMs();
     const prepared = await prepareTransportPdfBytes(pdfBytes);
 
+    if (prepared.payload.byteLength > GRAYSCALE_UPLOAD_LIMIT_BYTES) {
+      const source = options.label ? ` for ${options.label}` : "";
+      throw new Error(
+        `Grayscale PDF${source} is ${formatMegabytes(prepared.payload.byteLength)}, ` +
+          `limit is ${formatMegabytes(GRAYSCALE_UPLOAD_LIMIT_BYTES)}`,
+      );
+    }
+
     const result = await runWithGrayscaleSlot(async () => {
       const formData = new FormData();
       const pdfBlob = new Blob([prepared.payload.slice().buffer], {
@@ -245,9 +262,14 @@ export async function convertPdfToGrayscale(
         } catch {
           detail = "";
         }
-        const message = detail.trim()
-          ? `Grayscale conversion failed: ${detail}`
-          : "Grayscale conversion failed";
+        // The local proxy already prefixes upstream errors; avoid doubling it.
+        const trimmedDetail = detail
+          .trim()
+          .replace(/^Grayscale conversion failed:\s*/, "");
+        const source = options.label ? ` (${options.label})` : "";
+        const message = trimmedDetail
+          ? `Grayscale conversion failed${source}: ${trimmedDetail}`
+          : `Grayscale conversion failed${source}`;
         throw new Error(message);
       }
 

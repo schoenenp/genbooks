@@ -54,16 +54,13 @@ function getModuleThumbnailSrc(
 
 export const moduleRouter = createTRPCRouter({
   initPage: protectedProcedure.query(({ ctx }) => {
-    const isPrivileged =
-      ctx.session.user.role === "ADMIN" ||
-      ctx.session.user.role === "STAFF" ||
-      ctx.session.user.role === "MODERATOR";
-
+    // Everyone only handles their own modules here; the full catalog is
+    // managed in the staff panel.
     const modules =
       ctx.db.module.findMany({
         where: {
           deletedAt: null,
-          ...(isPrivileged ? {} : { createdById: ctx.session.user.id }),
+          createdById: ctx.session.user.id,
         },
         include: {
           type: true,
@@ -196,12 +193,7 @@ export const moduleRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Module not found" });
       }
 
-      const isPrivileged =
-        ctx.session.user.role === "ADMIN" ||
-        ctx.session.user.role === "STAFF" ||
-        ctx.session.user.role === "MODERATOR";
-
-      if (!isPrivileged && existingModule.createdById !== ctx.session.user.id) {
+      if (existingModule.createdById !== ctx.session.user.id) {
         throw new TRPCError({ code: "UNAUTHORIZED" });
       }
 
@@ -288,38 +280,33 @@ export const moduleRouter = createTRPCRouter({
   getUserModules: protectedProcedure.query(async ({ ctx }) => {
     const { db, session } = ctx;
 
-    const currentUser = await db.user.findUnique({
+    // Everyone only handles their own modules here; the full catalog is
+    // managed in the staff panel.
+    const foundModules = await db.module.findMany({
       where: {
-        id: session.user.id,
+        deletedAt: null,
+        createdById: session.user.id,
       },
       include: {
-        modules: {
-          include: {
-            type: true,
-            files: true,
-          },
-          orderBy: {
-            createdAt: "desc",
-          },
-        },
+        type: true,
+        files: true,
+      },
+      orderBy: {
+        createdAt: "desc",
       },
     });
-    if (!currentUser) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
-    }
 
-    return currentUser.modules
-      .filter((m) => m.deletedAt === null)
-      .map((moduleItem) => {
-        return {
-          id: moduleItem.id,
-          name: moduleItem.name,
-          type: moduleItem.type.name,
-          theme: moduleItem.theme,
-          part: moduleItem.part,
-          thumbnail: getModuleThumbnailSrc(moduleItem.files),
-        };
-      });
+    return foundModules.map((moduleItem) => {
+      return {
+        id: moduleItem.id,
+        name: moduleItem.name,
+        type: moduleItem.type.name,
+        theme: moduleItem.theme,
+        part: moduleItem.part,
+        thumbnail: getModuleThumbnailSrc(moduleItem.files),
+        visible: moduleItem.visible,
+      };
+    });
   }),
   getPreview: publicProcedure
     .input(
@@ -417,12 +404,7 @@ export const moduleRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Module not found" });
       }
 
-      const isPrivileged =
-        ctx.session.user.role === "ADMIN" ||
-        ctx.session.user.role === "STAFF" ||
-        ctx.session.user.role === "MODERATOR";
-
-      if (!isPrivileged && existingModule.createdById !== ctx.session.user.id) {
+      if (existingModule.createdById !== ctx.session.user.id) {
         throw new TRPCError({ code: "UNAUTHORIZED" });
       }
 

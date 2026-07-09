@@ -146,15 +146,17 @@ class PDFProcessor {
       };
 
       // Process cover first and capture back cover doc
-      const coverBytes = await fetchPdfBytes(coverModule.pdfUrl);
       const coverHandler = registry.get("umschlag");
       if (!coverHandler) {
         throw new Error("Cover handler not found");
       }
-      const coverResult = await coverHandler.process(
-        { ...context, moduleItem: coverModule },
-        coverBytes,
-      );
+      const coverResult = await this.runModuleStep(coverModule, async () => {
+        const coverBytes = await fetchPdfBytes(coverModule.pdfUrl);
+        return coverHandler.process(
+          { ...context, moduleItem: coverModule },
+          coverBytes,
+        );
+      });
 
       // Store backCoverDoc from cover handler result
       const backCoverDoc = coverResult.backCoverDoc;
@@ -174,13 +176,15 @@ class PDFProcessor {
       // Process content modules
       for (const moduleItem of sortedModules) {
         const handler = registry.getOrDefault(moduleItem.type);
-        const templateBytes = await fetchPdfBytes(moduleItem.pdfUrl);
         const isGrayscale = colorMap.get(moduleItem.id) === 1;
 
-        const result = await handler.process(
-          { ...context, moduleItem, isGrayscale },
-          templateBytes,
-        );
+        const result = await this.runModuleStep(moduleItem, async () => {
+          const templateBytes = await fetchPdfBytes(moduleItem.pdfUrl);
+          return handler.process(
+            { ...context, moduleItem, isGrayscale },
+            templateBytes,
+          );
+        });
 
         fullPageCount += result.pagesAdded;
         if (isGrayscale) {
@@ -219,6 +223,25 @@ class PDFProcessor {
       return result;
     } finally {
       this.cleanup();
+    }
+  }
+
+  /**
+   * Runs one module's fetch/process step and rethrows failures with the
+   * module's name so users can see which module broke the generation.
+   */
+  private async runModuleStep<T>(
+    moduleItem: PDFModule,
+    step: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await step();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const moduleRef = moduleItem.name
+        ? `"${moduleItem.name}"`
+        : `of type "${moduleItem.type}"`;
+      throw new Error(`Module ${moduleRef}: ${reason}`, { cause: error });
     }
   }
 
