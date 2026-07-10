@@ -115,6 +115,10 @@ model File {
   size    Int      @default(15)
   src     String
   type    FileType @default(PDF)
+  /// PDF page count captured at upload; null for images and legacy rows.
+  pageCount Int?
+  /// CDN src of the print-quality grayscale variant generated at upload.
+  srcGrayscale String?
   modules Module[]
 
   @@unique([id, name])

@@ -26,6 +26,8 @@ const uploadedFileInput = z.object({
   src: z.string(),
   type: z.enum(["PDF", "IMAGE_PNG", "IMAGE_JPEG"]),
   size: z.number().int().nonnegative(),
+  pageCount: z.number().int().nonnegative().nullish(),
+  srcGrayscale: z.string().nullish(),
 });
 
 type UploadedFileInput = z.infer<typeof uploadedFileInput>;

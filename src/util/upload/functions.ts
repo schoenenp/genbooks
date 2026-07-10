@@ -6,6 +6,10 @@ export interface FileItem {
   src: string;
   type: FileType;
   size: number;
+  /** PDF page count captured at upload; absent for images. */
+  pageCount?: number;
+  /** CDN src of the print-quality grayscale variant, when one was created. */
+  srcGrayscale?: string;
 }
 
 type FileType = "PDF" | "IMAGE_PNG" | "IMAGE_JPEG";

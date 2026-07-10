@@ -2761,6 +2761,8 @@ export const partnerRouter = createTRPCRouter({
                           name: true,
                           src: true,
                           type: true,
+                          pageCount: true,
+                          srcGrayscale: true,
                         },
                       },
                       type: {
@@ -2817,6 +2819,12 @@ export const partnerRouter = createTRPCRouter({
               },
               modulePdfUrl,
               coverImageUrl,
+              modulePageCount: pickedFile?.pageCount ?? null,
+              moduleGrayscalePdfUrl: pickedFile?.srcGrayscale
+                ? /^https?:\/\//i.test(pickedFile.srcGrayscale)
+                  ? pickedFile.srcGrayscale
+                  : `${env.NEXT_PUBLIC_CDN_SERVER_URL}${pickedFile.srcGrayscale}`
+                : null,
             };
           }),
         },

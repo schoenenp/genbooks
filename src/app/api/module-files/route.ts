@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { PDFDocument } from "pdf-lib";
 
+import { createGrayscaleVariant } from "@/util/pdf/grayscale-variant";
 import { env } from "@/env";
 import { auth } from "@/server/auth";
 import { Naming } from "@/util/naming";
@@ -15,7 +17,7 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type UploadRole = "file" | "thumbnail";
+type UploadRole = "file" | "thumbnail" | "grayscale";
 type UploadItem = {
   role: UploadRole;
   data: Buffer;
@@ -154,10 +156,12 @@ export async function POST(req: Request) {
     );
   }
 
+  const bookPart = handleBookPart(typeof type === "string" ? type : "");
+  let filePageCount: number | undefined;
+
   if (file && !isImageBasedCover) {
     const fileItem = uploadItems.find((item) => item.role === "file");
-    const bookPart = handleBookPart(typeof type === "string" ? type : "");
-    const { valid, message } = await validatePDFUpload(
+    const { valid, message, pageCount } = await validatePDFUpload(
       fileItem?.data ?? Buffer.from(await file.arrayBuffer()),
       bookPart,
     );
@@ -168,19 +172,69 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+    filePageCount = pageCount;
+  } else if (isImageBasedCover) {
+    // The generated cover PDF was not validated above; count it directly so
+    // the stored page count stays complete. Missing counts only cost a
+    // fallback download during price estimation, so failures are tolerable.
+    const fileItem = uploadItems.find((item) => item.role === "file");
+    if (fileItem) {
+      try {
+        const coverDoc = await PDFDocument.load(new Uint8Array(fileItem.data));
+        filePageCount = coverDoc.getPageCount();
+      } catch {
+        filePageCount = undefined;
+      }
+    }
+  }
+
+  // Print-quality grayscale variant, converted once at upload so book
+  // generation can skip the grayscale API entirely. Cover modules are
+  // re-filled with text at generation time and bindings carry no pages, so
+  // only content modules get a stored variant.
+  const wantsGrayscaleVariant =
+    Boolean(file) &&
+    !isImageBasedCover &&
+    (bookPart === "DEFAULT" || bookPart === "PLANNER");
+  if (wantsGrayscaleVariant) {
+    const fileItem = uploadItems.find((item) => item.role === "file");
+    if (fileItem) {
+      const grayscaleBytes = await createGrayscaleVariant(
+        new Uint8Array(fileItem.data),
+      );
+      if (grayscaleBytes) {
+        uploadItems.push({
+          role: "grayscale",
+          data: Buffer.from(grayscaleBytes),
+          name: `gray_${fileItem.name}`,
+        });
+      }
+    }
   }
 
   try {
     const uploadedFiles = await uploadData(uploadItems);
     const response: { file?: FileItem; thumbnail?: FileItem } = {};
+    let grayscaleSrc: string | undefined;
 
     uploadItems.forEach((item, index) => {
+      const uploaded = uploadedFiles[index];
+      if (!uploaded) return;
       if (item.role === "file") {
-        response.file = uploadedFiles[index];
+        response.file =
+          filePageCount !== undefined
+            ? { ...uploaded, pageCount: filePageCount }
+            : uploaded;
+      } else if (item.role === "grayscale") {
+        grayscaleSrc = uploaded.src;
       } else {
-        response.thumbnail = uploadedFiles[index];
+        response.thumbnail = uploaded;
       }
     });
+
+    if (response.file && grayscaleSrc) {
+      response.file = { ...response.file, srcGrayscale: grayscaleSrc };
+    }
 
     return NextResponse.json(response);
   } catch (error) {

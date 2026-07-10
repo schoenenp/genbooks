@@ -1,5 +1,5 @@
 import { PDFDocument } from "pdf-lib";
-import { getA4WithBleeding } from "./helpers";
+import { getA4WithBleeding } from "pdf-pipeline";
 
 const COVER_IMAGE_FIELD_NAMES = [
   "COVER_IMAGE",

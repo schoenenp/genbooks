@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "@/trpc/react";
 import { DashboardSkeleton } from "@/app/dashboard/_components/dashboard-states";
 import { AlertCircle, CheckCircle2, Eye } from "lucide-react";
-import { processPdfModulesPreview } from "@/util/pdf/converter";
+import { processPdfModulesPreview } from "@/util/pdf";
 import type { ColorCode, ModuleId } from "@/app/_components/module-changer";
 import Link from "next/link";
 
@@ -83,6 +83,8 @@ export default function PartnerPlannerPreview(props: { partnerOrderId: string })
         type: moduleItem.module.type.name,
         pdfUrl: moduleItem.modulePdfUrl,
         coverImageUrl: moduleItem.coverImageUrl ?? undefined,
+        pageCount: moduleItem.modulePageCount ?? null,
+        grayscalePdfUrl: moduleItem.moduleGrayscalePdfUrl ?? null,
       })),
     [modules],
   );

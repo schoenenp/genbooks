@@ -59,35 +59,38 @@ export async function validatePDFUpload(
   part: BookPart
 ): Promise<{
   valid: boolean,
-  message?: string
+  message?: string,
+  /** Parsed page count so callers can persist it without re-parsing. */
+  pageCount?: number
  }>{
 
   try {
     const bookPart = part.toLocaleUpperCase()
     const tempDoc = await PDFDocument.load(file);
+    const pageCount = tempDoc.getPageCount();
     switch (bookPart) {
       case "COVER":
-        if (tempDoc.getPageCount() !== 4) {
+        if (pageCount !== 4) {
           return { valid: false, message: "Der Umschlag muss 4 Seiten haben" };
         }
         break;
       case "PLANNER":
-        if (tempDoc.getPageCount() < 2 || tempDoc.getPageCount() > 92) {
+        if (pageCount < 2 || pageCount > 92) {
           return { valid: false, message: "Der Planer muss zwischen 2 und 92 Seiten haben" };
         }
         break;
       case "BINDING":
-        if (tempDoc.getPageCount() >= 1) {
+        if (pageCount >= 1) {
           return { valid: false, message: "Der Einband darf keine Seiten enthalten." };
         }
         break;
       default:
-        if (tempDoc.getPageCount() < 1 || tempDoc.getPageCount() > 100) {
+        if (pageCount < 1 || pageCount > 100) {
           return { valid: false, message: "Das Dokument muss mindestens 1 und höchstens 100 Seiten haben." };
         }
     }
 
-    return { valid: true };
+    return { valid: true, pageCount };
   } catch (error) {
     logger.error("failed_to_process_pdf_upload", { error });
     return { valid: false, message: "Failed to process PDF file" };

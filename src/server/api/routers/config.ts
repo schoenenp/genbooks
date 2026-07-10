@@ -5,7 +5,7 @@ import { env } from "@/env";
 import prices from "@/util/prices";
 import type Stripe from "stripe";
 import { createTRPCRouter, publicProcedure } from "@/server/api/trpc";
-import { calculatePdfPageCounts } from "@/util/pdf/converter";
+import { calculatePdfPageCounts } from "@/util/pdf";
 import type { ColorCode, ModuleId } from "@/app/_components/module-changer";
 import { calculatePrintCost } from "@/util/pdf/calculator";
 import { encryptPayload } from "@/util/crypto";
@@ -265,16 +265,20 @@ export const configRouter = createTRPCRouter({
             theme: string | null;
             part: string;
             type: { name: string };
-            files: Array<{ name: string | null; src: string; type: string }>;
+            files: Array<{
+              name: string | null;
+              src: string;
+              type: string;
+              pageCount?: number | null;
+            }>;
           };
         }>;
       }) => {
         const moduleColorMap = new Map<ModuleId, ColorCode>();
         const pdfModules = bookForCost.modules.map((moduleItem) => {
           const type = moduleItem.module.type.name;
-          const rawPdfUrl =
-            pickModulePdfFile(moduleItem.module.files)?.src ??
-            "/storage/notizen.pdf";
+          const pdfFile = pickModulePdfFile(moduleItem.module.files);
+          const rawPdfUrl = pdfFile?.src ?? "/storage/notizen.pdf";
           const coverImageFile = pickCoverImageFile(moduleItem.module.files);
           const coverImageUrl = coverImageFile
             ? /^https?:\/\//i.test(coverImageFile.src)
@@ -296,6 +300,7 @@ export const configRouter = createTRPCRouter({
             type,
             pdfUrl,
             coverImageUrl,
+            pageCount: pdfFile?.pageCount ?? null,
           };
         });
 
@@ -1138,6 +1143,12 @@ export const configRouter = createTRPCRouter({
           coverImageFile && !/^https?:\/\//i.test(coverImageFile.src)
             ? `https://cdn.pirrot.de${coverImageFile.src}`
             : (coverImageFile?.src ?? null);
+        const grayscaleSrc = moduleFile?.srcGrayscale ?? null;
+        const grayscalePdfUrl = grayscaleSrc
+          ? /^https?:\/\//i.test(grayscaleSrc)
+            ? grayscaleSrc
+            : `https://cdn.pirrot.de${grayscaleSrc}`
+          : null;
 
         return {
           id,
@@ -1148,6 +1159,8 @@ export const configRouter = createTRPCRouter({
           thumbnail,
           url,
           coverImageUrl,
+          pageCount: moduleFile?.pageCount ?? null,
+          grayscalePdfUrl,
           createdAt,
           booksCount: moduleItem._count.books,
         };

@@ -5,7 +5,7 @@ import { createPartnerCheckoutToken } from "@/util/partner-link";
 let notificationCreates = 0;
 let transitionCreates = 0;
 
-mock.module("@/util/pdf/converter", () => ({
+mock.module("@/util/pdf", () => ({
   calculatePdfPageCounts: async () => ({
     bPages: 0,
     cPages: 120,

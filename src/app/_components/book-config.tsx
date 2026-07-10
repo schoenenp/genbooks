@@ -35,7 +35,7 @@ import {
   processPdfModulesPreview,
   type BookDetails,
   type PDFModule,
-} from "@/util/pdf/converter";
+} from "@/util/pdf";
 import Link from "next/link";
 
 import { useModuleState } from "@/hooks/use-module-state";
@@ -89,6 +89,10 @@ type AvailableModule = ModulePickerItem & {
   booksCount?: number;
   theme: string | null;
   part: string;
+  /** Stored PDF page count; lets price estimation skip fetching the PDF. */
+  pageCount?: number | null;
+  /** Print-quality grayscale variant created at upload, when available. */
+  grayscalePdfUrl?: string | null;
 };
 
 type CalculationSnapshot = {
@@ -691,6 +695,8 @@ export default function BookConfig(props: {
         name: moduleItem.name,
         type: moduleItem.type.toLowerCase(),
         pdfUrl: moduleItem.url,
+        pageCount: moduleItem.pageCount ?? null,
+        grayscalePdfUrl: moduleItem.grayscalePdfUrl ?? null,
       });
     }
 
@@ -703,6 +709,7 @@ export default function BookConfig(props: {
         type: FILTER_TYPES.COVER,
         pdfUrl: coverModule.url,
         coverImageUrl: coverModule.coverImageUrl ?? undefined,
+        pageCount: coverModule.pageCount ?? null,
       },
     ];
   }, [moduleLookupById, pickedModules]);
@@ -1214,7 +1221,6 @@ export default function BookConfig(props: {
     }
 
     const options = {
-      compressionLevel: "high" as const,
       format: pickedFormat,
       colorMap: moduleColorMap,
       ...(usePreviewMode ? {} : { addWatermark: true }),

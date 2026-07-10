@@ -1,56 +1,16 @@
 /**
- * PDF Processing Module
+ * App wrapper around the shared pdf-pipeline package.
  *
- * This module provides a plugin-based architecture for processing PDF modules.
- *
- * Main exports:
- * - processPdfModules: Generate production PDFs
- * - processPdfModulesPreview: Generate preview PDFs with accurate page counts
- *
- * Handler system:
- * - registry: Access to the handler registry
- * - BaseHandler: Base class for creating new handlers
- *
- * To add a new handler:
- * 1. Create handlers/your-type.handler.ts extending BaseHandler
- * 2. Import and add to handlers/index.ts allHandlers array
+ * Wires the pipeline to this app's structured logger and holiday lookup,
+ * then re-exports the full pipeline surface. Always import the pipeline
+ * through this module (not from "pdf-pipeline" directly) so the providers
+ * are guaranteed to be configured.
  */
+import { setHolidayProvider, setPdfPipelineLogger } from "pdf-pipeline";
+import { logger } from "@/util/logger";
+import { getHolidays } from "@/util/book/functions";
 
-// Main processing functions (backwards compatible)
-export { processPdfModules, processPdfModulesPreview } from "./converter";
+setPdfPipelineLogger(logger);
+setHolidayProvider(getHolidays);
 
-// Types
-export type {
-  BookDetails,
-  BookFormat,
-  PDFModule,
-  ProcessingOptions,
-  Result,
-  DetailsItem,
-  TagContext,
-  TagDefinition,
-  ModuleHandler,
-  HandlerResult,
-  PageNumberOptions,
-} from "./types";
-
-// Handler system for advanced usage
-export { registry, BaseHandler } from "./handlers";
-
-// Utilities (for use in custom handlers)
-export {
-  formatDate,
-  normalizeDate,
-  generateWeekDates,
-  fetchPdfBytes,
-  getBlankPagePdfBytes,
-  getPageSizeWithBleed,
-  getA4WithBleeding,
-  PAGE_DIMENSIONS,
-} from "./helpers";
-
-// Individual utilities (for advanced customization)
-export { addPageNumbers, addPageNumberToPage } from "./pagination";
-export { addWatermark } from "./watermark";
-export { configureCompression } from "./compression";
-export { finalizeDocument, addAlignmentPageIfNeeded } from "./alignment";
+export * from "pdf-pipeline";
